@@ -265,9 +265,36 @@ final class ListeningBadgeTests: XCTestCase {
         )
         XCTAssertEqual(layout.stopButtonFrame.minY, 7)
         XCTAssertEqual(layout.sendButtonFrame.minY, 6)
-        XCTAssertEqual(layout.limitTrackFrame.minX, 12)
-        XCTAssertEqual(layout.size.width - layout.limitTrackFrame.maxX, 12)
+        XCTAssertEqual(layout.limitTrackFrame.minX, 16)
+        XCTAssertEqual(layout.size.width - layout.limitTrackFrame.maxX, 16)
+        XCTAssertEqual(layout.limitTrackFrame.minY, 5)
         XCTAssertEqual(layout.limitTrackFrame.height, 1.5)
+    }
+
+    @MainActor
+    func testBadgeUsesBorderlessFlatVisualStyleEvenDuringWarning() {
+        let controller = CaretBadgeController()
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        controller.updateListening(
+            elapsed: 295,
+            limit: 300,
+            level: 0.5
+        )
+
+        XCTAssertEqual(
+            controller.visualStyleForTesting,
+            BadgeVisualStyleSnapshot(
+                borderWidth: 0,
+                hasGradientLayer: false,
+                hasShadow: true,
+                usesContinuousCorners: true
+            )
+        )
+        controller.hide()
     }
 
     func testEveryBadgeLabelIsGeometricallyCenteredWithMargins() {

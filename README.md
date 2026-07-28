@@ -21,7 +21,9 @@ caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
 Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
 and then presses Return. The badge continuously shows elapsed/limit time and a
 thin progress track, making its automatic stopping point visible throughout the
-recording. In the final 30 seconds it pulses orange toward deep red. Its timer
+recording. The badge uses a borderless flat surface with a restrained system
+shadow and no gradients. In the final 30 seconds one solid warning color pulses
+and deepens from orange toward red. Its timer
 and two circular controls sit directly beside the waveform.
 
 ## Quick start

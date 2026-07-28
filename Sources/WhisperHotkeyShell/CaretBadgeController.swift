@@ -232,6 +232,25 @@ public final class CaretBadgeController {
         panel.frame
     }
 
+    var visualStyleForTesting: BadgeVisualStyleSnapshot {
+        BadgeVisualStyleSnapshot(
+            borderWidth: badgeView.layer?.borderWidth ?? -1,
+            hasGradientLayer: Self.hasGradientLayer(badgeView.layer),
+            hasShadow: panel.hasShadow,
+            usesContinuousCorners: badgeView.layer?.cornerCurve == .continuous
+        )
+    }
+
+    private static func hasGradientLayer(_ layer: CALayer?) -> Bool {
+        guard let layer else {
+            return false
+        }
+        if layer is CAGradientLayer {
+            return true
+        }
+        return layer.sublayers?.contains(where: hasGradientLayer) ?? false
+    }
+
     private func screen(containing frame: CGRect?) -> NSScreen? {
         let screens = NSScreen.screens
         guard let index = BadgeScreenResolver.index(
@@ -242,6 +261,13 @@ public final class CaretBadgeController {
         }
         return screens[index]
     }
+}
+
+struct BadgeVisualStyleSnapshot: Equatable {
+    let borderWidth: CGFloat
+    let hasGradientLayer: Bool
+    let hasShadow: Bool
+    let usesContinuousCorners: Bool
 }
 
 struct BadgePanelVisibility: Equatable {
@@ -282,10 +308,8 @@ private final class BadgeView: NSView {
     private let waveformView = AudioWaveformView()
     private let stopButton = BadgeActionButton()
     private let sendButton = BadgeActionButton()
-    private let warningLayer = CAGradientLayer()
     private let limitTrackLayer = CALayer()
     private let limitProgressLayer = CALayer()
-    private var listeningIsWarning = false
     private var listeningProgress: CGFloat = 0
 
     var presentation: BadgePresentation = .hidden {
@@ -308,16 +332,11 @@ private final class BadgeView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
-        layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
-        warningLayer.isHidden = true
-        warningLayer.startPoint = CGPoint(x: 0, y: 0.5)
-        warningLayer.endPoint = CGPoint(x: 1, y: 0.5)
-        layer?.insertSublayer(warningLayer, at: 0)
 
         limitTrackLayer.backgroundColor = NSColor.white
-            .withAlphaComponent(0.10)
+            .withAlphaComponent(0.08)
             .cgColor
         limitTrackLayer.cornerRadius = 0.75
         limitTrackLayer.isHidden = true
@@ -404,8 +423,6 @@ private final class BadgeView: NSView {
 
     override func layout() {
         super.layout()
-        warningLayer.frame = bounds
-        warningLayer.cornerRadius = layer?.cornerRadius ?? 0
         statusLabel.frame = BadgeTextLayout.centeredFrame(
             in: bounds,
             horizontalInset: StatusBadgeLayout.horizontalMargin,
@@ -441,7 +458,6 @@ private final class BadgeView: NSView {
             elapsed: elapsed,
             limit: limit
         )
-        listeningIsWarning = metrics.isWarning
         listeningProgress = CGFloat(metrics.progress)
         timeLabel.stringValue = metrics.timeText
         timeLabel.font = .monospacedDigitSystemFont(
@@ -453,7 +469,6 @@ private final class BadgeView: NSView {
         needsLayout = true
 
         guard metrics.isWarning else {
-            warningLayer.isHidden = true
             layer?.backgroundColor = normalBackground.cgColor
             limitProgressLayer.backgroundColor = waveformColor.cgColor
             return
@@ -464,20 +479,23 @@ private final class BadgeView: NSView {
             1,
             metrics.warningProgress * 0.75 + pulse * 0.25
         )
-        let orange = NSColor.systemOrange.blended(
-            withFraction: intensity * 0.28,
-            of: .systemRed
-        ) ?? .systemOrange
-        let red = NSColor.systemRed.blended(
-            withFraction: 0.18 + intensity * 0.32,
-            of: NSColor(calibratedRed: 0.35, green: 0.01, blue: 0.03, alpha: 1)
-        ) ?? .systemRed
-        layer?.backgroundColor = NSColor.clear.cgColor
-        warningLayer.colors = [
-            orange.withAlphaComponent(0.96).cgColor,
-            red.withAlphaComponent(0.97).cgColor,
-        ]
-        warningLayer.isHidden = false
+        let orange = NSColor(
+            calibratedRed: 0.88,
+            green: 0.31,
+            blue: 0.08,
+            alpha: 0.96
+        )
+        let deepRed = NSColor(
+            calibratedRed: 0.38,
+            green: 0.02,
+            blue: 0.04,
+            alpha: 0.97
+        )
+        let warningColor = orange.blended(
+            withFraction: intensity,
+            of: deepRed
+        ) ?? deepRed
+        layer?.backgroundColor = warningColor.cgColor
         limitProgressLayer.backgroundColor = NSColor.white
             .withAlphaComponent(0.88)
             .cgColor
@@ -490,13 +508,11 @@ private final class BadgeView: NSView {
         stopButton.isHidden = presentation != .listening
         sendButton.isHidden = presentation != .listening
         limitTrackLayer.isHidden = presentation != .listening
-        warningLayer.isHidden = true
         layer?.backgroundColor = normalBackground.cgColor
 
         switch presentation {
         case .listening:
             statusLabel.stringValue = ""
-            listeningIsWarning = false
             listeningProgress = 0
             waveformView.reset()
             updateListening(elapsed: 0, limit: 600, level: 0)
@@ -609,9 +625,9 @@ struct ListeningBadgeLayout: Equatable {
             height: height
         )
         limitTrackFrame = CGRect(
-            x: horizontalMargin,
-            y: 3,
-            width: size.width - horizontalMargin * 2,
+            x: horizontalMargin + 4,
+            y: 5,
+            width: size.width - (horizontalMargin + 4) * 2,
             height: 1.5
         )
     }

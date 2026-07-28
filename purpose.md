@@ -62,7 +62,9 @@ and limit timer, a thin duration-progress track, a Stop and Insert button, and a
 Send button. Stop and Insert has the same result as hotkey release. Send inserts
 successfully before posting an unmodified Return. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord
-cancellation. During the last 30 seconds it pulses from orange toward deep red.
+cancellation. The badge has no outline or gradient; a restrained system shadow
+separates it from the destination. During the last 30 seconds one solid warning
+color pulses and deepens from orange toward red.
 The update task exists only while recording. The panel joins every application,
 Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
