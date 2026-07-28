@@ -8,6 +8,119 @@ public enum MacVirtualKey {
     public static let x: Int64 = 7
     public static let escape: Int64 = 53
     public static let rightCommand: Int64 = 54
+    public static let leftCommand: Int64 = 55
+    public static let leftShift: Int64 = 56
+    public static let capsLock: Int64 = 57
+    public static let leftOption: Int64 = 58
+    public static let leftControl: Int64 = 59
+    public static let rightShift: Int64 = 60
+    public static let rightOption: Int64 = 61
+    public static let rightControl: Int64 = 62
+    public static let function: Int64 = 63
+}
+
+public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Sendable {
+    case rightCommand
+    case leftCommand
+    case rightShift
+    case leftShift
+    case rightOption
+    case leftOption
+    case rightControl
+    case leftControl
+    case capsLock
+    case escape
+    case function
+
+    public var displayName: String {
+        switch self {
+        case .rightCommand:
+            "Right Command"
+        case .leftCommand:
+            "Left Command"
+        case .rightShift:
+            "Right Shift"
+        case .leftShift:
+            "Left Shift"
+        case .rightOption:
+            "Right Option"
+        case .leftOption:
+            "Left Option"
+        case .rightControl:
+            "Right Control"
+        case .leftControl:
+            "Left Control"
+        case .capsLock:
+            "Caps Lock"
+        case .escape:
+            "Escape"
+        case .function:
+            "Fn / Globe"
+        }
+    }
+
+    public var virtualKeyCode: Int64 {
+        switch self {
+        case .rightCommand:
+            MacVirtualKey.rightCommand
+        case .leftCommand:
+            MacVirtualKey.leftCommand
+        case .rightShift:
+            MacVirtualKey.rightShift
+        case .leftShift:
+            MacVirtualKey.leftShift
+        case .rightOption:
+            MacVirtualKey.rightOption
+        case .leftOption:
+            MacVirtualKey.leftOption
+        case .rightControl:
+            MacVirtualKey.rightControl
+        case .leftControl:
+            MacVirtualKey.leftControl
+        case .capsLock:
+            MacVirtualKey.capsLock
+        case .escape:
+            MacVirtualKey.escape
+        case .function:
+            MacVirtualKey.function
+        }
+    }
+
+    /// Caps Lock exposes a toggled state rather than a momentary press/release
+    /// pair through the macOS flags-changed stream.
+    public var requiresToggleMode: Bool {
+        self == .capsLock
+    }
+
+    var consumesKeyEvents: Bool {
+        self == .escape
+    }
+
+    func modifierIsDown(in flags: CGEventFlags) -> Bool {
+        guard let modifierFlag else {
+            return false
+        }
+        return flags.contains(modifierFlag)
+    }
+
+    private var modifierFlag: CGEventFlags? {
+        switch self {
+        case .rightCommand, .leftCommand:
+            .maskCommand
+        case .rightShift, .leftShift:
+            .maskShift
+        case .rightOption, .leftOption:
+            .maskAlternate
+        case .rightControl, .leftControl:
+            .maskControl
+        case .capsLock:
+            .maskAlphaShift
+        case .function:
+            .maskSecondaryFn
+        case .escape:
+            nil
+        }
+    }
 }
 
 public enum GlobalKeyEventKind: Equatable, Sendable {
@@ -24,18 +137,18 @@ public enum HotkeyActivationMode: String, Codable, Equatable, Sendable {
 public struct GlobalKeyEvent: Equatable, Sendable {
     public let kind: GlobalKeyEventKind
     public let keyCode: Int64
-    public let commandIsDown: Bool
+    public let selectedModifierIsDown: Bool
     public let isAutoRepeat: Bool
 
     public init(
         kind: GlobalKeyEventKind,
         keyCode: Int64,
-        commandIsDown: Bool,
+        selectedModifierIsDown: Bool,
         isAutoRepeat: Bool = false
     ) {
         self.kind = kind
         self.keyCode = keyCode
-        self.commandIsDown = commandIsDown
+        self.selectedModifierIsDown = selectedModifierIsDown
         self.isAutoRepeat = isAutoRepeat
     }
 }
@@ -56,19 +169,27 @@ public struct GlobalInputRouting: Equatable, Sendable {
     }
 }
 
-/// A deterministic state reducer used by the event tap. Right Command modifier
-/// events do not auto-repeat, so once a press has been observed, the next
-/// Right Command flags change is its release even when Left Command remains down.
+/// A deterministic state reducer used by the event tap. Modifier events do not
+/// auto-repeat, so once a selected-side press has been observed, the next
+/// flags change for that key is its release even when the opposite side remains
+/// down.
 public struct GlobalInputReducer: Sendable {
-    public private(set) var rightCommandIsDown = false
+    public private(set) var hotkey: HotkeyKey
+    public private(set) var hotkeyIsDown = false
     public private(set) var escapeIsBeingConsumed = false
     public private(set) var activationMode: HotkeyActivationMode
-    private var bareCommandCandidate = false
-    private var hotkeyIsActive = false
+    private var bareHotkeyCandidate = false
+    private var dictationHoldIsActive = false
     private var toggleSessionIsActive = false
 
-    public init(activationMode: HotkeyActivationMode = .hold) {
-        self.activationMode = activationMode
+    public init(
+        activationMode: HotkeyActivationMode = .hold,
+        hotkey: HotkeyKey = .rightCommand
+    ) {
+        self.hotkey = hotkey
+        self.activationMode = hotkey.requiresToggleMode
+            ? .toggle
+            : activationMode
     }
 
     /// Reconfiguring the gesture is a cancellation boundary. This avoids
@@ -77,16 +198,36 @@ public struct GlobalInputReducer: Sendable {
     public mutating func setActivationMode(
         _ mode: HotkeyActivationMode
     ) -> HotkeyAction? {
-        guard activationMode != mode else {
+        let effectiveMode: HotkeyActivationMode =
+            hotkey.requiresToggleMode ? .toggle : mode
+        guard activationMode != effectiveMode else {
             return nil
         }
         let action: HotkeyAction? =
-            hotkeyIsActive || toggleSessionIsActive ? .cancel : nil
-        activationMode = mode
-        rightCommandIsDown = false
-        bareCommandCandidate = false
+            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        activationMode = effectiveMode
+        hotkeyIsDown = false
+        bareHotkeyCandidate = false
         escapeIsBeingConsumed = false
-        hotkeyIsActive = false
+        dictationHoldIsActive = false
+        toggleSessionIsActive = false
+        return action
+    }
+
+    public mutating func setHotkey(_ newHotkey: HotkeyKey) -> HotkeyAction? {
+        guard hotkey != newHotkey else {
+            return nil
+        }
+        let action: HotkeyAction? =
+            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        hotkey = newHotkey
+        if newHotkey.requiresToggleMode {
+            activationMode = .toggle
+        }
+        hotkeyIsDown = false
+        bareHotkeyCandidate = false
+        escapeIsBeingConsumed = false
+        dictationHoldIsActive = false
         toggleSessionIsActive = false
         return action
     }
@@ -101,32 +242,35 @@ public struct GlobalInputReducer: Sendable {
     }
 
     public mutating func route(_ event: GlobalKeyEvent) -> GlobalInputRouting {
-        if event.keyCode == MacVirtualKey.rightCommand {
-            return routeRightCommand(event)
+        if event.keyCode == hotkey.virtualKeyCode {
+            if hotkey == .capsLock {
+                return routeCapsLock(event)
+            }
+            return routeSelectedHotkey(event)
         }
 
-        if event.keyCode == MacVirtualKey.escape {
+        if hotkey != .escape, event.keyCode == MacVirtualKey.escape {
             return routeEscape(event)
         }
 
         var actions: [GlobalInputAction] = []
-        if rightCommandIsDown,
+        if hotkeyIsDown,
            event.kind == .keyDown || event.kind == .flagsChanged
         {
-            actions.append(contentsOf: cancelBareCommandCandidate())
+            actions.append(contentsOf: cancelBareHotkeyCandidate())
         }
         return GlobalInputRouting(consume: false, actions: actions)
     }
 
-    /// Mouse clicks while Right Command is down are ordinary Command-click
-    /// gestures, never dictation gestures.
+    /// Mouse clicks while the selected modifier is down remain ordinary
+    /// modifier-click gestures, never dictation gestures.
     public mutating func routePointerDown() -> GlobalInputRouting {
-        guard rightCommandIsDown else {
+        guard hotkeyIsDown else {
             return GlobalInputRouting(consume: false)
         }
         return GlobalInputRouting(
             consume: false,
-            actions: cancelBareCommandCandidate()
+            actions: cancelBareHotkeyCandidate()
         )
     }
 
@@ -134,13 +278,13 @@ public struct GlobalInputReducer: Sendable {
     /// started until this confirms the key is still a bare hold.
     public mutating func holdActivationFired() -> HotkeyAction? {
         guard activationMode == .hold,
-              rightCommandIsDown,
-              bareCommandCandidate,
-              !hotkeyIsActive
+              hotkeyIsDown,
+              bareHotkeyCandidate,
+              !dictationHoldIsActive
         else {
             return nil
         }
-        hotkeyIsActive = true
+        dictationHoldIsActive = true
         return .pressed
     }
 
@@ -148,108 +292,128 @@ public struct GlobalInputReducer: Sendable {
     /// becomes exactly one cancellation.
     public mutating func reset() -> HotkeyAction? {
         let action: HotkeyAction? =
-            hotkeyIsActive || toggleSessionIsActive ? .cancel : nil
-        rightCommandIsDown = false
-        bareCommandCandidate = false
-        hotkeyIsActive = false
+            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        hotkeyIsDown = false
+        bareHotkeyCandidate = false
+        dictationHoldIsActive = false
         toggleSessionIsActive = false
         escapeIsBeingConsumed = false
         return action
     }
 
-    private mutating func routeRightCommand(
+    private mutating func routeSelectedHotkey(
         _ event: GlobalKeyEvent
     ) -> GlobalInputRouting {
         switch activationMode {
         case .hold:
-            routeHoldRightCommand(event)
+            routeHoldHotkey(event)
         case .toggle:
-            routeToggleRightCommand(event)
+            routeToggleHotkey(event)
         }
     }
 
-    private mutating func routeHoldRightCommand(
+    private mutating func routeHoldHotkey(
         _ event: GlobalKeyEvent
     ) -> GlobalInputRouting {
         switch event.kind {
         case .flagsChanged:
-            if rightCommandIsDown {
-                return releaseHoldCommand()
+            if hotkeyIsDown {
+                return releaseHoldHotkey()
             }
-            guard event.commandIsDown else {
+            guard event.selectedModifierIsDown else {
                 return GlobalInputRouting(consume: false)
             }
-            return armHoldCommand()
+            return armHoldHotkey()
 
         case .keyDown:
-            guard !rightCommandIsDown, !event.isAutoRepeat else {
-                return GlobalInputRouting(consume: false)
+            guard !hotkeyIsDown, !event.isAutoRepeat else {
+                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
             }
-            return armHoldCommand()
+            return armHoldHotkey()
 
         case .keyUp:
-            guard rightCommandIsDown else {
-                return GlobalInputRouting(consume: false)
+            guard hotkeyIsDown else {
+                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
             }
-            return releaseHoldCommand()
+            return releaseHoldHotkey()
         }
     }
 
-    private mutating func armHoldCommand() -> GlobalInputRouting {
-        rightCommandIsDown = true
-        bareCommandCandidate = true
-        return GlobalInputRouting(consume: false, actions: [.armHold])
+    private mutating func armHoldHotkey() -> GlobalInputRouting {
+        hotkeyIsDown = true
+        bareHotkeyCandidate = true
+        return GlobalInputRouting(
+            consume: hotkey.consumesKeyEvents,
+            actions: [.armHold]
+        )
     }
 
-    private mutating func releaseHoldCommand() -> GlobalInputRouting {
-        rightCommandIsDown = false
-        bareCommandCandidate = false
+    private mutating func releaseHoldHotkey() -> GlobalInputRouting {
+        hotkeyIsDown = false
+        bareHotkeyCandidate = false
         var actions: [GlobalInputAction] = [.disarmHold]
-        if hotkeyIsActive {
+        if dictationHoldIsActive {
             actions.append(.hotkey(.released))
         }
-        hotkeyIsActive = false
-        return GlobalInputRouting(consume: false, actions: actions)
+        dictationHoldIsActive = false
+        return GlobalInputRouting(
+            consume: hotkey.consumesKeyEvents,
+            actions: actions
+        )
     }
 
-    private mutating func routeToggleRightCommand(
+    private mutating func routeToggleHotkey(
         _ event: GlobalKeyEvent
     ) -> GlobalInputRouting {
         switch event.kind {
         case .flagsChanged:
-            if rightCommandIsDown {
-                return releaseToggleCommand()
+            if hotkeyIsDown {
+                return releaseToggleHotkey()
             }
-            guard event.commandIsDown else {
+            guard event.selectedModifierIsDown else {
                 return GlobalInputRouting(consume: false)
             }
-            return armToggleCommand()
+            return armToggleHotkey()
 
         case .keyDown:
-            guard !rightCommandIsDown, !event.isAutoRepeat else {
-                return GlobalInputRouting(consume: false)
+            guard !hotkeyIsDown, !event.isAutoRepeat else {
+                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
             }
-            return armToggleCommand()
+            return armToggleHotkey()
 
         case .keyUp:
-            guard rightCommandIsDown else {
-                return GlobalInputRouting(consume: false)
+            guard hotkeyIsDown else {
+                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
             }
-            return releaseToggleCommand()
+            return releaseToggleHotkey()
         }
     }
 
-    private mutating func armToggleCommand() -> GlobalInputRouting {
-        rightCommandIsDown = true
-        bareCommandCandidate = true
-        return GlobalInputRouting(consume: false)
+    private mutating func armToggleHotkey() -> GlobalInputRouting {
+        hotkeyIsDown = true
+        bareHotkeyCandidate = true
+        return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
     }
 
-    private mutating func releaseToggleCommand() -> GlobalInputRouting {
-        rightCommandIsDown = false
-        let shouldToggle = bareCommandCandidate
-        bareCommandCandidate = false
+    private mutating func releaseToggleHotkey() -> GlobalInputRouting {
+        hotkeyIsDown = false
+        let shouldToggle = bareHotkeyCandidate
+        bareHotkeyCandidate = false
         guard shouldToggle else {
+            return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+        }
+        let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
+        toggleSessionIsActive.toggle()
+        return GlobalInputRouting(
+            consume: hotkey.consumesKeyEvents,
+            actions: [.hotkey(action)]
+        )
+    }
+
+    private mutating func routeCapsLock(
+        _ event: GlobalKeyEvent
+    ) -> GlobalInputRouting {
+        guard event.kind == .flagsChanged else {
             return GlobalInputRouting(consume: false)
         }
         let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
@@ -263,19 +427,19 @@ public struct GlobalInputReducer: Sendable {
             if escapeIsBeingConsumed {
                 return GlobalInputRouting(consume: true)
             }
-            if rightCommandIsDown, !hotkeyIsActive {
+            if hotkeyIsDown, !dictationHoldIsActive {
                 return GlobalInputRouting(
                     consume: false,
-                    actions: cancelBareCommandCandidate()
+                    actions: cancelBareHotkeyCandidate()
                 )
             }
-            guard hotkeyIsActive || toggleSessionIsActive else {
+            guard dictationHoldIsActive || toggleSessionIsActive else {
                 return GlobalInputRouting(consume: false)
             }
             escapeIsBeingConsumed = true
-            bareCommandCandidate = false
-            let shouldDisarmHold = hotkeyIsActive
-            hotkeyIsActive = false
+            bareHotkeyCandidate = false
+            let shouldDisarmHold = dictationHoldIsActive
+            dictationHoldIsActive = false
             toggleSessionIsActive = false
             var actions: [GlobalInputAction] = []
             if shouldDisarmHold {
@@ -296,16 +460,16 @@ public struct GlobalInputReducer: Sendable {
         }
     }
 
-    private mutating func cancelBareCommandCandidate() -> [GlobalInputAction] {
-        guard bareCommandCandidate else {
+    private mutating func cancelBareHotkeyCandidate() -> [GlobalInputAction] {
+        guard bareHotkeyCandidate else {
             return []
         }
-        bareCommandCandidate = false
+        bareHotkeyCandidate = false
         var actions: [GlobalInputAction] = []
         if activationMode == .hold {
             actions.append(.disarmHold)
-            if hotkeyIsActive {
-                hotkeyIsActive = false
+            if dictationHoldIsActive {
+                dictationHoldIsActive = false
                 actions.append(.hotkey(.cancel))
             }
         }
@@ -435,6 +599,16 @@ public final class GlobalHotkeyMonitor {
         }
     }
 
+    public func setHotkey(_ hotkey: HotkeyKey) {
+        cancelHoldActivation()
+        if let action = reducer.setHotkey(hotkey) {
+            enqueue(
+                actions: [.hotkey(action)],
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
+        }
+    }
+
     public func synchronizeToggleSession(isActive: Bool) {
         reducer.synchronizeToggleSession(isActive: isActive)
     }
@@ -475,7 +649,9 @@ public final class GlobalHotkeyMonitor {
         let rawEvent = GlobalKeyEvent(
             kind: kind,
             keyCode: event.getIntegerValueField(.keyboardEventKeycode),
-            commandIsDown: event.flags.contains(.maskCommand),
+            selectedModifierIsDown: reducer.hotkey.modifierIsDown(
+                in: event.flags
+            ),
             isAutoRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         )
         let routing = reducer.route(rawEvent)

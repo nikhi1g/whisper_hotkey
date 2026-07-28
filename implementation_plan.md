@@ -7,12 +7,15 @@ Build `/Applications/whisper_hotkey.app`, a headless arm64 agent, plus a
 the MVP artifact is intentionally host-local to this Mac's installed
 Whisper/GGML libraries.
 
-- Hold bare Right Command to listen; release to transcribe and insert. Right
-  Command plus any key or click remains a normal shortcut. A persistent checked
-  menu option switches the bare gesture to tap-to-start/tap-to-finish.
+- Default to bare Right Command, with persisted selection of either side of
+  Command, Shift, Option, or Control, plus Caps Lock, Escape, and Fn/Globe.
+  Selected modifiers remain ordinary shortcut modifiers. A persistent checked
+  menu option switches the gesture to tap-to-start/tap-to-finish; Caps Lock is
+  inherently toggle-only.
 - In hold mode, use one cancellable 150 ms dwell timer and begin audio capture
   and Base English model loading only when it fires.
-- Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
+- Discard holds shorter than 250 ms; Escape cancels unless selected as the
+  dedicated trigger; ten minutes auto-finalizes.
 - Show a caret-attached Listening/Transcribing/Busy/Error badge, with a
   pointer-position snapshot when exact caret geometry is unavailable, and an
   event-driven menu-bar state icon with setup, cancel, and quit controls.
@@ -32,7 +35,7 @@ Whisper/GGML libraries.
    per-dictation whisper.cpp helper. The helper preloads on press, transcribes
    once on release, and exits. Stock `whisper-cli` provides the Metal then
    Metal-specific CPU fallback.
-3. `WhisperHotkeySystem` owns the intercepting Right Command event tap, exact
+3. `WhisperHotkeySystem` owns the configurable bare-key event tap, exact
    Accessibility caret geometry, bounded one-character context spacing,
    unconditional temporary paste, and permanent explicit copy. It has no
    target validation or one-paste lease.
@@ -56,14 +59,15 @@ Whisper/GGML libraries.
 ## Acceptance
 
 - Automated Swift tests cover the lifecycle reducer, capture cleanup,
-  helper/CLI recognition fallback, bare-key/chord disambiguation, spacing,
-  temporary clipboard restoration, permanent last-dictation copy,
-  caret-preferred pointer fallback, control socket, and Login Item policy.
+  helper/CLI recognition fallback, every selectable hotkey, bare-key/chord
+  disambiguation, spacing, temporary clipboard restoration, permanent
+  last-dictation copy, caret-preferred pointer fallback, control socket, and
+  Login Item policy.
 - The release build must pass strict deep code-signature verification and the
   installed main executable and controller must hash-match their built copies.
 - Installed verification must cover setup readiness, Login Item registration,
   terminal status/stop/start/restart, absence of an idle Whisper helper, and
   idle CPU/RAM sampling.
 - Final application insertion remains a manual acceptance check because it
-  requires real microphone input and a physical Right Command hold in each
+  requires real microphone input and a physical selected-key gesture in each
   destination class.

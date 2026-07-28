@@ -42,6 +42,8 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
     public var loginItemEnabled: Bool
     public var helperAvailable: Bool
     public var modelAvailable: Bool
+    public var hotkey: String?
+    public var hotkeyMode: String?
     public var lastError: String?
 
     public init(
@@ -53,6 +55,8 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         loginItemEnabled: Bool,
         helperAvailable: Bool,
         modelAvailable: Bool,
+        hotkey: String? = nil,
+        hotkeyMode: String? = nil,
         lastError: String? = nil
     ) {
         self.running = running
@@ -63,6 +67,8 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.loginItemEnabled = loginItemEnabled
         self.helperAvailable = helperAvailable
         self.modelAvailable = modelAvailable
+        self.hotkey = hotkey
+        self.hotkeyMode = hotkeyMode
         self.lastError = lastError
     }
 }

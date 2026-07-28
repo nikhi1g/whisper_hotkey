@@ -10,21 +10,26 @@ LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time setup window
 handles Microphone, Accessibility, and Input Monitoring permissions.
 
-Right Command remains a usable Command modifier. A bare Right Command gesture
-controls dictation, while Right Command combined with another key or a mouse
-click passes through as an ordinary macOS shortcut and does not trigger
-dictation. Hold-to-talk is the default: a one-shot 150 ms dwell arms capture
-without polling, after which the microphone starts and the installed Base
-English whisper.cpp model loads asynchronously. Releasing after at least 250
-milliseconds transcribes once, pastes at the current focus, and unloads the
-model. A faster tap does nothing.
+The menu's **Dictation Key** submenu selects Right/Left Command, Shift, Option,
+or Control, Caps Lock, Escape, or Fn/Globe and persists that choice. Right
+Command is the default. A selected modifier remains usable in ordinary
+shortcuts: combining it with another key or a mouse click passes through and
+does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
+arms capture without polling, after which the microphone starts and the
+installed Base English whisper.cpp model loads asynchronously. Releasing after
+at least 250 milliseconds transcribes once, pastes at the current focus, and
+unloads the model. A faster tap does nothing.
 
-The menu-bar option **Right Command Toggles Dictation** changes the bare gesture
-to tap-to-start and tap-again-to-finish, persists across launches, and is visibly
-checked while selected. The toggle is decided on bare-key release so Command
-shortcuts remain available in this mode too. Escape cancels either mode. A
-session lasting ten minutes finalizes automatically. Bare gestures are ignored
-while a previous dictation is finishing.
+The dynamically named **[Key] Toggles Dictation** option changes the bare
+gesture to tap-to-start and tap-again-to-finish, persists across launches, and
+is visibly checked while selected. Caps Lock always uses toggle mode because
+macOS exposes its lock-state changes rather than a momentary hold/release pair;
+its normal lock state is otherwise left to macOS. Escape is a dedicated,
+consumed trigger when selected, so cancellation remains available from the menu
+instead of the same key. For every other selection, Escape cancels either mode.
+Changing the selected key cancels an active dictation cleanly. A session lasting
+ten minutes finalizes automatically. Bare gestures are ignored while a previous
+dictation is finishing.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a

@@ -274,6 +274,105 @@ final class HotkeyTests: XCTestCase {
         )
     }
 
+    func testEverySelectableHotkeyHasUniqueCodeAndVisibleName() {
+        XCTAssertEqual(
+            Set(HotkeyKey.allCases.map(\.virtualKeyCode)).count,
+            HotkeyKey.allCases.count
+        )
+        for hotkey in HotkeyKey.allCases {
+            XCTAssertFalse(hotkey.displayName.isEmpty)
+        }
+    }
+
+    func testRightShiftCanDriveAFullHoldWhileOppositeShiftRemainsDown() {
+        var reducer = GlobalInputReducer(hotkey: .rightShift)
+
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightShift, command: true)),
+            GlobalInputRouting(consume: false, actions: [.armHold])
+        )
+        XCTAssertEqual(reducer.holdActivationFired(), .pressed)
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightShift, command: true)),
+            GlobalInputRouting(
+                consume: false,
+                actions: [.disarmHold, .hotkey(.released)]
+            )
+        )
+    }
+
+    func testSelectedModifierChordPassesThroughAndCancelsBareCandidate() {
+        var reducer = GlobalInputReducer(hotkey: .leftOption)
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.leftOption, command: true))
+
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
+            GlobalInputRouting(consume: false, actions: [.disarmHold])
+        )
+        XCTAssertNil(reducer.holdActivationFired())
+    }
+
+    func testEscapeCanBeDedicatedHoldKey() {
+        var reducer = GlobalInputReducer(hotkey: .escape)
+
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.escape, command: false)),
+            GlobalInputRouting(consume: true, actions: [.armHold])
+        )
+        XCTAssertEqual(reducer.holdActivationFired(), .pressed)
+        XCTAssertEqual(
+            reducer.route(key(.keyUp, MacVirtualKey.escape, command: false)),
+            GlobalInputRouting(
+                consume: true,
+                actions: [.disarmHold, .hotkey(.released)]
+            )
+        )
+    }
+
+    func testCapsLockAlwaysUsesSuccessiveToggleEvents() {
+        var reducer = GlobalInputReducer(
+            activationMode: .hold,
+            hotkey: .capsLock
+        )
+
+        XCTAssertEqual(reducer.activationMode, .toggle)
+        XCTAssertNil(reducer.setActivationMode(.hold))
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.capsLock, command: true)),
+            GlobalInputRouting(consume: false, actions: [.hotkey(.pressed)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.capsLock, command: false)),
+            GlobalInputRouting(consume: false, actions: [.hotkey(.released)])
+        )
+    }
+
+    func testFunctionKeyCanDriveToggleMode() {
+        var reducer = GlobalInputReducer(
+            activationMode: .toggle,
+            hotkey: .function
+        )
+
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.function, command: true)),
+            GlobalInputRouting(consume: false)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.function, command: false)),
+            GlobalInputRouting(consume: false, actions: [.hotkey(.pressed)])
+        )
+    }
+
+    func testChangingSelectedHotkeyCancelsActiveSessionOnce() {
+        var reducer = GlobalInputReducer(hotkey: .rightControl)
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightControl, command: true))
+        _ = reducer.holdActivationFired()
+
+        XCTAssertEqual(reducer.setHotkey(.leftControl), .cancel)
+        XCTAssertEqual(reducer.hotkey, .leftControl)
+        XCTAssertNil(reducer.reset())
+    }
+
     private func key(
         _ kind: GlobalKeyEventKind,
         _ keyCode: Int64,
@@ -283,7 +382,7 @@ final class HotkeyTests: XCTestCase {
         GlobalKeyEvent(
             kind: kind,
             keyCode: keyCode,
-            commandIsDown: command,
+            selectedModifierIsDown: command,
             isAutoRepeat: isAutoRepeat
         )
     }
@@ -479,6 +578,32 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
 
         await fulfillment(of: [unexpectedDelivery], timeout: 0.08)
         XCTAssertTrue(deliveries.isEmpty)
+    }
+
+    func testMonitorUsesSelectedModifierFlag() async {
+        var deliveries: [HotkeyAction] = []
+        let started = expectation(description: "right shift hold starts")
+        let monitor = GlobalHotkeyMonitor(
+            captureInsertionContext: { nil },
+            holdActivationDelay: .milliseconds(1)
+        ) { action, _, _ in
+            deliveries.append(action)
+            started.fulfill()
+        }
+        monitor.setHotkey(.rightShift)
+        let press = CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: CGKeyCode(MacVirtualKey.rightShift),
+            keyDown: true
+        )!
+        press.flags = .maskShift
+        press.timestamp = 5_000
+
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertEqual(deliveries, [.pressed])
     }
 
     private func event(

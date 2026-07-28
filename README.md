@@ -2,17 +2,19 @@
 
 `whisper_hotkey` is a private, background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
-English Whisper transcription at the current selection. Right Command remains a
-normal modifier whenever it is combined with another key or a mouse click. A
-hold shorter than 250 ms is discarded, Escape cancels, and a ten-minute session
-finalizes automatically.
+English Whisper transcription at the current selection. The menu can instead
+select either side of Command, Shift, Option, or Control, plus Caps Lock,
+Escape, or Fn/Globe. A selected modifier remains normal when combined with
+another key or a mouse click. A hold shorter than 250 ms is discarded, Escape
+cancels unless it is the selected trigger, and a ten-minute session finalizes
+automatically.
 
 The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
 and error states. Its menu offers Cancel Dictation, Open Setup, Quit, and the
-persistent checked option **Right Command Toggles Dictation**. A non-activating
-Listening/Transcribing/Busy/Error badge also appears beside the destination
-caret.
+persistent checked **[Key] Toggles Dictation** option and **Dictation Key**
+submenu. A non-activating Listening/Transcribing/Busy/Error badge also appears
+beside the destination caret.
 
 ## Use
 
@@ -20,17 +22,23 @@ caret.
 2. Hold bare Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
 
-To dictate without holding the key, enable **Right Command Toggles Dictation**
-in the menu-bar menu. Tap and release bare Right Command once to start, speak
-while the caret-attached badge says Listening, then tap and release it again to
-transcribe and insert. Ordinary typing and Right Command shortcuts remain
-available between the two taps; Escape cancels.
+Choose a trigger from **Dictation Key**. To dictate without holding it, enable
+the dynamically named **[Key] Toggles Dictation** item. Tap and release the
+selected key once to start, speak while the badge says Listening, then tap and
+release it again to transcribe and insert. Ordinary typing and selected-modifier
+shortcuts remain available between the two taps.
+
+Caps Lock always uses toggle mode because macOS reports lock-state changes
+rather than a normal hold/release pair; its normal capitalization state remains
+under macOS control. Selecting Escape makes it a dedicated consumed trigger, so
+use **Cancel Dictation** in the menu to cancel. For every other trigger, Escape
+continues to cancel.
 
 In hold mode, a single cancellable 150 ms timer distinguishes a deliberate bare
 hold from a shortcut. The microphone and model do not start during that dwell.
-Pressing another key or clicking while Right Command is down cancels the pending
-dictation gesture and passes the shortcut through normally. There is no polling
-worker for this decision.
+Pressing another key or clicking while a selected modifier is down cancels the
+pending dictation gesture and passes the shortcut through normally. There is no
+polling worker for this decision.
 
 The transcript is always pasted once into whatever application is focused when
 delivery occurs. In normal text controls this replaces the current selection.
@@ -63,9 +71,9 @@ whisper_hotkey setup
 
 The signed app requests three local macOS permissions:
 
-- **Microphone** records only after an accepted bare Right Command gesture.
-- **Input Monitoring** distinguishes bare Right Command gestures from ordinary
-  Right Command shortcuts and observes Escape while dictating.
+- **Microphone** records only after an accepted bare dictation-key gesture.
+- **Input Monitoring** distinguishes bare trigger gestures from ordinary
+  modifier shortcuts and observes Escape while dictating.
 - **Accessibility** reads exact caret geometry and at most one neighboring
   character on each side, permits the intercepting event tap that preserves
   bare-key semantics, and posts one local Command-V. It performs no target

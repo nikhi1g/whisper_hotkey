@@ -192,6 +192,10 @@ private struct Controller {
             "Model: \(available(status.modelAvailable))",
             "Helper: \(available(status.helperAvailable))",
         ]
+        if let hotkey = status.hotkey, !hotkey.isEmpty {
+            let mode = status.hotkeyMode.map { " (\($0))" } ?? ""
+            lines.append("Hotkey: \(hotkey)\(mode)")
+        }
         if let lastError = status.lastError, !lastError.isEmpty {
             lines.append("Last error: \(lastError)")
         }
