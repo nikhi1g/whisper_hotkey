@@ -83,4 +83,24 @@ final class BadgePlacementTests: XCTestCase {
 
         XCTAssertEqual(frame, CGRect(x: 292, y: 58, width: 100, height: 30))
     }
+
+    func testPreservedOriginSurvivesBadgeSizeChanges() {
+        let frame = BadgePlacement.frame(
+            preservingOrigin: CGPoint(x: 110, y: 195),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 180, height: 38)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 110, y: 195, width: 180, height: 38))
+    }
+
+    func testPreservedOriginClampsLargerBadgeInsideScreen() {
+        let frame = BadgePlacement.frame(
+            preservingOrigin: CGPoint(x: 850, y: 770),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 180, height: 38)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 812, y: 754, width: 180, height: 38))
+    }
 }

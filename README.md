@@ -90,8 +90,9 @@ dictation and discarded when the app quits.
 The badge uses both standard macOS selection ranges and Chromium/Electron text
 markers. Exact caret placement is not universally available: if an editor
 exposes neither representation, the badge snapshots the current pointer
-position for that state instead. It does not poll or track pointer movement,
-and this visual fallback has no effect on where Command-V is posted. The badge
+position once when recording begins. It keeps that exact initial origin through
+listening and later status states, does not poll or track pointer movement, and
+this visual fallback has no effect on where Command-V is posted. The badge
 joins every application, Space, and full-screen set. If AppKit orders it out or
 leaves it on an inactive Space or Stage Manager set, the active recording update
 repairs its membership and periodically keeps it frontmost until recording ends.

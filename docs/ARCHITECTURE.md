@@ -52,7 +52,9 @@ presses. Effects are serialized through the main-actor state machine, and a
 generation number rejects stale recognition results.
 
 The badge prefers Accessibility caret geometry, including Chromium text
-markers, and otherwise anchors to the pointer. It is non-activating, so Stop and
+markers, and otherwise anchors to the pointer. It snapshots that geometry once
+at recording start and preserves the initial panel origin across later states.
+It is non-activating, so Stop and
 Send do not steal destination focus. Stop and hotkey release post Command-V.
 Send inserts successfully, then posts an unmodified Return. Its recording panel
 joins all applications, Spaces, and full-screen sets; periodic recording updates

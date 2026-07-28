@@ -69,6 +69,37 @@ public enum BadgePlacement {
         return CGRect(origin: origin, size: size)
     }
 
+    /// Reuses a session's initial panel origin while adapting to a new badge
+    /// size. Clamping is retained so a status-size change cannot cross the
+    /// visible screen bounds.
+    public static func frame(
+        preservingOrigin origin: CGPoint,
+        screenFrame: CGRect,
+        badgeSize: CGSize,
+        screenInset: CGFloat = 8
+    ) -> CGRect {
+        let visibleFrame = screenFrame.standardized
+        let size = CGSize(
+            width: min(max(0, badgeSize.width), max(0, visibleFrame.width - (screenInset * 2))),
+            height: min(max(0, badgeSize.height), max(0, visibleFrame.height - (screenInset * 2)))
+        )
+
+        guard size.width > 0, size.height > 0 else {
+            return CGRect(origin: visibleFrame.origin, size: .zero)
+        }
+
+        let minimumX = visibleFrame.minX + screenInset
+        let maximumX = max(minimumX, visibleFrame.maxX - screenInset - size.width)
+        let minimumY = visibleFrame.minY + screenInset
+        let maximumY = max(minimumY, visibleFrame.maxY - screenInset - size.height)
+        return CGRect(
+            x: min(max(origin.x, minimumX), maximumX),
+            y: min(max(origin.y, minimumY), maximumY),
+            width: size.width,
+            height: size.height
+        )
+    }
+
     private static func usable(_ frame: CGRect?) -> CGRect? {
         guard let frame, !frame.isNull, !frame.isInfinite, frame.width >= 0, frame.height >= 0 else {
             return nil

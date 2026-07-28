@@ -35,6 +35,7 @@ public final class CaretBadgeController {
     private var lastCaretFrame: CGRect?
     private var lastFieldFrame: CGRect?
     private var lastScreenFrame: CGRect?
+    private var sessionPanelOrigin: CGPoint?
     private var lastVisibilityAssertion = TimeInterval.zero
 
     public init(actions: CaretBadgeActions = .none) {
@@ -73,8 +74,9 @@ public final class CaretBadgeController {
     }
 
     /// Presents a non-activating badge without changing the active application
-    /// or key window. Runtime states prefer exact Accessibility geometry and
-    /// snapshot the pointer when the destination does not expose a caret.
+    /// or key window. A new listening session snapshots exact Accessibility
+    /// geometry or the pointer fallback once, then keeps that origin for every
+    /// state until the badge is hidden.
     public func present(
         _ presentation: BadgePresentation,
         caretFrame: CGRect? = nil,
@@ -92,18 +94,29 @@ public final class CaretBadgeController {
             // reporting it visible while it belongs to an inactive set.
             panel.orderOut(nil)
             panel = Self.makePanel(contentView: badgeView)
+            lastCaretFrame = nil
+            lastFieldFrame = nil
+            lastScreenFrame = nil
+            sessionPanelOrigin = nil
         }
 
-        let runtimeAnchor: CGRect?
-        switch presentation {
-        case .listening, .transcribing, .busy:
-            runtimeAnchor = BadgePlacement.runtimeAnchor(
+        if lastScreenFrame == nil {
+            let runtimeAnchor = BadgePlacement.runtimeAnchor(
                 caretFrame: caretFrame,
                 fieldFrame: fieldFrame,
                 pointerLocation: NSEvent.mouseLocation
             )
-        case .error, .hidden:
-            runtimeAnchor = nil
+            let visibleFrame = screenFrame
+                ?? screen(containing: runtimeAnchor)?.visibleFrame
+                ?? NSScreen.main?.visibleFrame
+
+            guard let visibleFrame else {
+                panel.orderOut(nil)
+                return
+            }
+            lastCaretFrame = runtimeAnchor
+            lastFieldFrame = nil
+            lastScreenFrame = visibleFrame
         }
 
         if previousPresentation != presentation {
@@ -114,20 +127,6 @@ public final class CaretBadgeController {
         badgeView.frame = CGRect(origin: .zero, size: size)
         badgeView.layoutSubtreeIfNeeded()
         panel.setContentSize(size)
-        let resolvedCaretFrame = runtimeAnchor ?? caretFrame
-        let resolvedFieldFrame = runtimeAnchor == nil ? fieldFrame : nil
-        let anchor = resolvedCaretFrame ?? resolvedFieldFrame
-        let visibleFrame = screenFrame
-            ?? screen(containing: anchor)?.visibleFrame
-            ?? NSScreen.main?.visibleFrame
-
-        guard let visibleFrame else {
-            panel.orderOut(nil)
-            return
-        }
-        lastCaretFrame = resolvedCaretFrame
-        lastFieldFrame = resolvedFieldFrame
-        lastScreenFrame = visibleFrame
 
         placePanel(size: size, display: true)
         panel.orderFrontRegardless()
@@ -138,15 +137,23 @@ public final class CaretBadgeController {
         guard let visibleFrame = lastScreenFrame else {
             return
         }
-        panel.setFrame(
-            BadgePlacement.frame(
+        let frame: CGRect
+        if let sessionPanelOrigin {
+            frame = BadgePlacement.frame(
+                preservingOrigin: sessionPanelOrigin,
+                screenFrame: visibleFrame,
+                badgeSize: size
+            )
+        } else {
+            frame = BadgePlacement.frame(
                 caretFrame: lastCaretFrame,
                 fieldFrame: lastFieldFrame,
                 screenFrame: visibleFrame,
                 badgeSize: size
-            ),
-            display: display
-        )
+            )
+            sessionPanelOrigin = frame.origin
+        }
+        panel.setFrame(frame, display: display)
     }
 
     public func hide() {
@@ -156,6 +163,7 @@ public final class CaretBadgeController {
         lastCaretFrame = nil
         lastFieldFrame = nil
         lastScreenFrame = nil
+        sessionPanelOrigin = nil
     }
 
     public func updateListening(
@@ -211,6 +219,17 @@ public final class CaretBadgeController {
 
     func invokeSendAndSubmitForTesting() {
         badgeView.invokeSendAndSubmit()
+    }
+
+    func clickBadgeForTesting(at point: CGPoint) {
+        guard let button = badgeView.hitTest(point) as? NSButton else {
+            return
+        }
+        button.performClick(nil)
+    }
+
+    var panelFrameForTesting: CGRect {
+        panel.frame
     }
 
     private func screen(containing frame: CGRect?) -> NSScreen? {
@@ -288,7 +307,7 @@ private final class BadgeView: NSView {
         self.actions = actions
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 12
+        layer?.cornerRadius = 14
         layer?.masksToBounds = true
         layer?.borderWidth = 0.5
         layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
@@ -332,7 +351,7 @@ private final class BadgeView: NSView {
             accessibilityLabel: "Stop and insert dictation",
             background: NSColor.white.withAlphaComponent(0.07),
             foreground: NSColor.white.withAlphaComponent(0.86),
-            size: 32
+            size: 34
         )
         stopButton.target = self
         stopButton.action = #selector(stopAndInsert)
@@ -354,7 +373,7 @@ private final class BadgeView: NSView {
                 blue: 0.15,
                 alpha: 1
             ),
-            size: 34
+            size: 36
         )
         sendButton.target = self
         sendButton.action = #selector(sendAndSubmit)
@@ -547,15 +566,15 @@ struct ListeningBadgeLayout: Equatable {
     let limitTrackFrame: CGRect
 
     init() {
-        let height: CGFloat = 42
-        let horizontalMargin: CGFloat = 10
-        let waveformWidth: CGFloat = 100
+        let height: CGFloat = 48
+        let horizontalMargin: CGFloat = 12
+        let waveformWidth: CGFloat = 88
         let waveformHeight: CGFloat = 24
-        let timeWidth: CGFloat = 108
+        let timeWidth: CGFloat = 90
         let stopDiameter: CGFloat = 34
         let sendDiameter: CGFloat = 36
-        let contentGap: CGFloat = 4
-        let buttonGap: CGFloat = 4
+        let contentGap: CGFloat = 3
+        let buttonGap: CGFloat = 3
 
         var x = horizontalMargin
         waveformFrame = CGRect(
@@ -591,7 +610,7 @@ struct ListeningBadgeLayout: Equatable {
         )
         limitTrackFrame = CGRect(
             x: horizontalMargin,
-            y: 2,
+            y: 3,
             width: size.width - horizontalMargin * 2,
             height: 1.5
         )
@@ -599,10 +618,10 @@ struct ListeningBadgeLayout: Equatable {
 }
 
 enum StatusBadgeLayout {
-    static let horizontalMargin: CGFloat = 14
+    static let horizontalMargin: CGFloat = 15
     static let minimumWidth: CGFloat = 116
-    static let maximumWidth: CGFloat = 320
-    static let height: CGFloat = 34
+    static let maximumWidth: CGFloat = ListeningBadgeLayout().size.width
+    static let height: CGFloat = 38
 
     static func size(contentWidth: CGFloat) -> CGSize {
         CGSize(
