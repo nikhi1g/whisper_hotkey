@@ -404,33 +404,11 @@ public struct BadgeAnchorGeometry: Equatable, Sendable {
 }
 
 enum BadgeAnchorResolver {
-    static func resolve(
-        caretRect: CGRect?,
-        fieldRect: CGRect?,
-        pointerLocation: CGPoint
-    ) -> BadgeAnchorGeometry {
+    static func resolve(caretRect: CGRect?) -> BadgeAnchorGeometry {
         if let caret = usable(caretRect) {
-            return BadgeAnchorGeometry(caretRect: caret, fieldRect: usable(fieldRect))
+            return BadgeAnchorGeometry(caretRect: caret, fieldRect: nil)
         }
-
-        if let field = usable(fieldRect) {
-            if field.insetBy(dx: -8, dy: -8).contains(pointerLocation) {
-                return BadgeAnchorGeometry(
-                    caretRect: pointerCaret(at: pointerLocation),
-                    fieldRect: field
-                )
-            }
-            return BadgeAnchorGeometry(caretRect: nil, fieldRect: field)
-        }
-
-        return BadgeAnchorGeometry(
-            caretRect: pointerCaret(at: pointerLocation),
-            fieldRect: nil
-        )
-    }
-
-    private static func pointerCaret(at location: CGPoint) -> CGRect {
-        CGRect(x: location.x, y: location.y - 9, width: 2, height: 18)
+        return BadgeAnchorGeometry(caretRect: nil, fieldRect: nil)
     }
 
     private static func usable(_ rect: CGRect?) -> CGRect? {
@@ -454,14 +432,11 @@ public final class AccessibilityTargetProvider {
     /// Returns current caret and field geometry without retaining a
     /// cross-process accessibility object. Chromium-family editors commonly
     /// expose caret bounds through text markers rather than AXSelectedTextRange,
-    /// so both representations are tried before the pointer fallback.
+    /// so both representations are tried. No approximate field, pointer, or
+    /// screen-corner anchor is returned.
     public func currentBadgeAnchor() -> BadgeAnchorGeometry {
         guard let element = focusedElement() else {
-            return BadgeAnchorResolver.resolve(
-                caretRect: nil,
-                fieldRect: nil,
-                pointerLocation: NSEvent.mouseLocation
-            )
+            return BadgeAnchorResolver.resolve(caretRect: nil)
         }
         AXUIElementSetMessagingTimeout(element, 0.15)
         let selection = copyRange(
@@ -472,12 +447,7 @@ public final class AccessibilityTargetProvider {
             element,
             selectionRange: selection
         ).flatMap(appKitScreenRect)
-        let fieldRect = copyElementRect(element).flatMap(appKitScreenRect)
-        return BadgeAnchorResolver.resolve(
-            caretRect: caretRect,
-            fieldRect: fieldRect,
-            pointerLocation: NSEvent.mouseLocation
-        )
+        return BadgeAnchorResolver.resolve(caretRect: caretRect)
     }
 
     public func captureFocusedTarget() -> ReleaseTarget? {

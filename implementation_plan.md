@@ -7,9 +7,11 @@ Build `/Applications/whisper_hotkey.app`, a headless arm64 agent, plus a
 the MVP artifact is intentionally host-local to this Mac's installed
 Whisper/GGML libraries.
 
-- Hold dedicated Right Command to listen; release to transcribe and insert.
-  A persistent checked menu option switches to press-to-start/press-to-finish.
-- Begin audio capture and Base English model loading together on key-down.
+- Hold bare Right Command to listen; release to transcribe and insert. Right
+  Command plus any key or click remains a normal shortcut. A persistent checked
+  menu option switches the bare gesture to tap-to-start/tap-to-finish.
+- In hold mode, use one cancellable 150 ms dwell timer and begin audio capture
+  and Base English model loading only when it fires.
 - Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
 - Show a caret-attached Listening/Transcribing/Busy/Error badge and an
   event-driven menu-bar state icon with setup, cancel, and quit controls.
@@ -27,9 +29,9 @@ Whisper/GGML libraries.
    per-dictation whisper.cpp helper. The helper preloads on press, transcribes
    once on release, and exits. Stock `whisper-cli` provides the Metal then
    Metal-specific CPU fallback.
-3. `WhisperHotkeySystem` owns the Right Command event tap, release-time
-   Accessibility target, caret geometry, context spacing, temporary paste, and
-   one-paste clipboard leases.
+3. `WhisperHotkeySystem` owns the non-consuming Right Command event tap,
+   exact Accessibility caret geometry, opportunistic context spacing, and
+   unconditional temporary paste.
 4. `WhisperHotkeyShell` owns the caret-attached badge, persistent mode
    checkmark, menu-bar state UI, first-run permission UI, one-shot login
    launcher registration, and private local control socket.
@@ -50,9 +52,9 @@ Whisper/GGML libraries.
 ## Acceptance
 
 - Automated Swift tests cover the lifecycle reducer, capture cleanup,
-  helper/CLI recognition fallback, physical hotkey suppression, target
-  validation, spacing, clipboard restoration, badge placement, control socket,
-  and Login Item policy.
+  helper/CLI recognition fallback, bare-key/chord disambiguation, spacing,
+  clipboard restoration, exact-caret policy, control socket, and Login Item
+  policy.
 - The release build must pass strict deep code-signature verification and the
   installed main executable and controller must hash-match their built copies.
 - Installed verification must cover setup readiness, Login Item registration,

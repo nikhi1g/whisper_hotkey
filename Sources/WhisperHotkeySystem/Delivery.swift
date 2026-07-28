@@ -80,10 +80,6 @@ public final class CGCommandPastePoster: CommandPastePosting {
 
         for event in [keyDown, keyUp] {
             event.flags = .maskCommand
-            event.setIntegerValueField(
-                .eventSourceUserData,
-                value: GlobalHotkeyMonitor.syntheticEventMarker
-            )
             event.post(tap: .cghidEventTap)
         }
         return true
@@ -92,17 +88,13 @@ public final class CGCommandPastePoster: CommandPastePosting {
 
 public enum SystemDeliveryResult: Equatable, Sendable {
     case inserted
-    case clipboardLease(TargetInvalidReason)
-    case clipboardLeaseAfterPasteFailure
-    case clipboardUnavailable(TargetInvalidReason?)
+    case clipboardUnavailable
     case emptyTranscript
 
     public var disposition: DeliveryDisposition? {
         switch self {
         case .inserted:
             .inserted
-        case .clipboardLease, .clipboardLeaseAfterPasteFailure:
-            .clipboardLease
         case .clipboardUnavailable, .emptyTranscript:
             nil
         }
@@ -111,16 +103,13 @@ public enum SystemDeliveryResult: Equatable, Sendable {
 
 @MainActor
 public final class TextDeliveryService {
-    private let targetProvider: AccessibilityTargetProvider
     private let clipboard: ClipboardTransactionController
     private let pastePoster: CommandPastePosting
 
     public init(
-        targetProvider: AccessibilityTargetProvider,
         clipboard: ClipboardTransactionController,
         pastePoster: CommandPastePosting = CGCommandPastePoster()
     ) {
-        self.targetProvider = targetProvider
         self.clipboard = clipboard
         self.pastePoster = pastePoster
     }
@@ -133,51 +122,21 @@ public final class TextDeliveryService {
         guard !plainTranscript.isEmpty else {
             return .emptyTranscript
         }
-        guard let target else {
-            return clipboard.installLease(plainTranscript)
-                ? .clipboardLease(.missing)
-                : .clipboardUnavailable(.missing)
-        }
-
-        let validation = targetProvider.validate(target)
-        guard validation == .valid else {
-            let reason: TargetInvalidReason
-            if case let .invalid(invalidReason) = validation {
-                reason = invalidReason
-            } else {
-                reason = .missing
-            }
-            return clipboard.installLease(plainTranscript)
-                ? .clipboardLease(reason)
-                : .clipboardUnavailable(reason)
-        }
 
         let insertion = TextInsertionFormatter.insertionText(
             transcript: plainTranscript,
-            surroundingText: target.state.surroundingText
+            surroundingText: target?.state.surroundingText
         )
         guard !insertion.isEmpty else {
             return .emptyTranscript
         }
-        var validationBeforePost: TargetValidationResult = .valid
         guard clipboard.pasteTemporarily(
             insertion,
             postingPasteWith: {
-                validationBeforePost = targetProvider.validate(target)
-                guard validationBeforePost == .valid else {
-                    return false
-                }
                 return pastePoster.postCommandV()
             }
         ) else {
-            if case let .invalid(reason) = validationBeforePost {
-                return clipboard.installLease(plainTranscript)
-                    ? .clipboardLease(reason)
-                    : .clipboardUnavailable(reason)
-            }
-            return clipboard.installLease(plainTranscript)
-                ? .clipboardLeaseAfterPasteFailure
-                : .clipboardUnavailable(nil)
+            return .clipboardUnavailable
         }
         return .inserted
     }

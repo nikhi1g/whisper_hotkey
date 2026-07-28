@@ -50,6 +50,15 @@ public final class CaretBadgeController {
             hide()
             return
         }
+        switch presentation {
+        case .listening, .transcribing, .busy:
+            guard caretFrame != nil else {
+                hide()
+                return
+            }
+        case .error, .hidden:
+            break
+        }
 
         badgeView.presentation = presentation
         let size = badgeView.preferredSize

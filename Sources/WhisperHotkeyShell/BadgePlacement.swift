@@ -3,8 +3,9 @@ import CoreGraphics
 public enum BadgePlacement {
     public static let defaultSize = CGSize(width: 132, height: 34)
 
-    /// Places the badge next to the caret, then the focused field, while keeping
-    /// the entire badge inside the supplied visible screen frame.
+    /// Computes placement for an available anchor while keeping the badge
+    /// inside the supplied visible screen frame. Runtime status presentations
+    /// call this only when exact caret geometry is available.
     public static func frame(
         caretFrame: CGRect?,
         fieldFrame: CGRect?,

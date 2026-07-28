@@ -32,13 +32,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         forKey: "toggleDictationEnabled"
     )
 
-    private lazy var delivery = TextDeliveryService(
-        targetProvider: targetProvider,
-        clipboard: clipboard
-    )
+    private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
-        targetProvider: targetProvider,
-        clipboard: clipboard
+        targetProvider: targetProvider
     ) { [weak self] action, releaseTarget, timestampNanoseconds in
         self?.handleHotkey(
             action,
@@ -561,18 +557,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch result {
         case .inserted:
             logger.info("Dictation inserted")
-            process(.deliveryFinished)
-            return true
-
-        case .clipboardLease(let reason):
-            logger.info(
-                "Dictation held in one-paste clipboard lease: \(reason.rawValue, privacy: .public)"
-            )
-            process(.deliveryFinished)
-            return true
-
-        case .clipboardLeaseAfterPasteFailure:
-            logger.info("Dictation held after automatic paste failed")
             process(.deliveryFinished)
             return true
 

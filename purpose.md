@@ -10,32 +10,41 @@ LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time setup window
 handles Microphone, Accessibility, and Input Monitoring permissions.
 
-Right Command is reserved for dictation. Hold-to-talk is the default: pressing
-starts microphone capture and asynchronously loads the installed Base English
-whisper.cpp model, while releasing after at least 250 milliseconds transcribes
-once, inserts into the editable field focused at release, and unloads the model.
-The menu-bar option **Right Command Toggles Dictation** changes this to
-press-to-start and press-again-to-finish, persists across launches, and is
-visibly checked while selected. Escape cancels either mode. A session lasting
-ten minutes finalizes automatically. Right Command presses are ignored while a
-previous dictation is finishing.
+Right Command remains a usable Command modifier. A bare Right Command gesture
+controls dictation, while Right Command combined with another key or a mouse
+click passes through as an ordinary macOS shortcut and does not trigger
+dictation. Hold-to-talk is the default: a one-shot 150 ms dwell arms capture
+without polling, after which the microphone starts and the installed Base
+English whisper.cpp model loads asynchronously. Releasing after at least 250
+milliseconds transcribes once, pastes at the current focus, and unloads the
+model. A faster tap does nothing.
+
+The menu-bar option **Right Command Toggles Dictation** changes the bare gesture
+to tap-to-start and tap-again-to-finish, persists across launches, and is visibly
+checked while selected. The toggle is decided on bare-key release so Command
+shortcuts remain available in this mode too. Escape cancels either mode. A
+session lasting ten minutes finalizes automatically. Bare gestures are ignored
+while a previous dictation is finishing.
 
 Runtime UI consists of a non-activating badge beside the Accessibility caret
 and the persistent menu-bar state icon. Standard selection ranges and
-Chromium-style text markers are both used to locate the caret. When an app
-exposes neither caret nor focused-field geometry, the pointer location replaces
-the old screen-corner fallback. The badge shows Listening, Transcribing, Busy,
+Chromium-style text markers are both used to locate the caret. Exact caret
+geometry is feasible only when the destination app exposes one of those
+Accessibility representations. If it does not, no approximate pointer,
+focused-field, or screen-corner badge is shown; the menu-bar icon remains the
+authoritative state indicator. The badge shows Listening, Transcribing, Busy,
 or an actionable error. The menu icon distinguishes starting, ready, preparing,
 listening, transcribing, inserting, unavailable, and failed states. There is no
 live text preview or success confirmation.
 
-Insertion replaces the selected text and adds only contextually necessary
-boundary spacing. It uses a temporary pasteboard transaction for compatibility
-and restores prior clipboard contents when possible. If the release-time field
-is missing, secure, changed, or unsafe to target, the transcript becomes a
-one-paste clipboard lease: after the next manual paste, the previous clipboard is
-restored. A newer copy always wins.
+Insertion always posts one local Command-V to the currently focused application.
+This naturally replaces the current selection in normal text controls. When
+nearby text is exposed through Accessibility, contextually necessary boundary
+spacing is added; missing or opaque target information never blocks the paste.
+The user is responsible for keeping the intended destination focused. The
+pasteboard transaction restores prior clipboard contents when possible and
+does not retain a transcript for a later manual paste.
 
 The app is English-only for the MVP. It stores no history, performs no network
 requests, never downloads models, and removes audio/transcript state after use
-except while a one-paste lease is active. Logs contain state and errors only.
+without retaining a clipboard fallback. Logs contain state and errors only.

@@ -1,10 +1,11 @@
 # whisper_hotkey
 
 `whisper_hotkey` is a private, background macOS dictation utility. By default,
-hold the physical Right Command key, speak, and release to insert a local Base
-English Whisper transcription at the current selection. A hold shorter than
-250 ms is discarded, Escape cancels, and a ten-minute session finalizes
-automatically.
+hold the physical Right Command key, speak, and release to paste a local Base
+English Whisper transcription at the current selection. Right Command remains a
+normal modifier whenever it is combined with another key or a mouse click. A
+hold shorter than 250 ms is discarded, Escape cancels, and a ten-minute session
+finalizes automatically.
 
 The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
@@ -16,28 +17,31 @@ caret.
 ## Use
 
 1. Focus an editable field and place the caret or select text to replace.
-2. Hold Right Command while speaking.
+2. Hold bare Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
 
 To dictate without holding the key, enable **Right Command Toggles Dictation**
-in the menu-bar menu. Press Right Command once to start, speak while the
-caret-attached badge says Listening, then press it again to transcribe and
-insert. Ordinary typing remains available between the two presses; Escape
-cancels.
+in the menu-bar menu. Tap and release bare Right Command once to start, speak
+while the caret-attached badge says Listening, then tap and release it again to
+transcribe and insert. Ordinary typing and Right Command shortcuts remain
+available between the two taps; Escape cancels.
 
-The transcript replaces the release-time selection and adds boundary spaces
-only when the neighboring text needs them. If the destination becomes unsafe or
-unavailable while transcription runs, the transcript is placed on a one-paste
-clipboard lease. Paste once with Command-V; the previous clipboard is then
-restored when it is still safe to do so. A newer copy or cut always wins.
+In hold mode, a single cancellable 150 ms timer distinguishes a deliberate bare
+hold from a shortcut. The microphone and model do not start during that dwell.
+Pressing another key or clicking while Right Command is down cancels the pending
+dictation gesture and passes the shortcut through normally. There is no polling
+worker for this decision.
 
-Password fields and macOS secure-input contexts fail closed. Some applications
-that do not expose a stable editable Accessibility element may use the
-one-paste fallback instead of automatic insertion.
+The transcript is always pasted once into whatever application is focused when
+delivery occurs. In normal text controls this replaces the current selection.
+Boundary spaces are added when Accessibility exposes enough surrounding text;
+missing or opaque target information never blocks delivery. There is no delayed
+clipboard fallback, so keep the intended text field focused until insertion.
 
 The badge uses both standard macOS selection ranges and Chromium/Electron text
-markers. If an editor exposes neither caret nor field geometry, it anchors near
-the current pointer rather than falling back to a screen corner.
+markers. Exact caret placement is not universally available: if an editor
+exposes neither representation, the app intentionally shows no approximate
+pointer/field/corner badge. The changing menu-bar icon still reports state.
 
 ## Setup and permissions
 
@@ -51,11 +55,11 @@ whisper_hotkey setup
 
 The signed app requests three local macOS permissions:
 
-- **Microphone** records only during an accepted Right Command hold.
-- **Input Monitoring** observes and reserves the physical Right Command key,
-  Escape while dictating, and clipboard shortcuts needed for safe restoration.
-- **Accessibility** reads the focused editable element, selection, nearby text,
-  and caret geometry, then posts one local Command-V for insertion.
+- **Microphone** records only after an accepted bare Right Command gesture.
+- **Input Monitoring** distinguishes bare Right Command gestures from ordinary
+  Right Command shortcuts and observes Escape while dictating.
+- **Accessibility** reads caret geometry and optional nearby text, then posts one
+  local Command-V for insertion. It does not gate delivery on a detected field.
 
 macOS describes Accessibility as permission to “control this computer” because
 it offers no narrower per-API grant. `whisper_hotkey` does not request Screen
@@ -96,11 +100,13 @@ This build uses the already-installed local stack:
 - `/opt/homebrew/opt/ggml/`
 - `~/.cache/whisper/ggml-base.en.bin`
 
-Audio capture and model preload begin together on key-down. The model helper is
-owned only for that dictation and is terminated after insertion, cancellation,
-or failure. Idle operation is event-driven; no Whisper model, transcription
-helper, polling worker, audio, or transcript history remains resident. The
-menu-bar icon is updated only by state transitions.
+In hold mode, audio capture and model preload begin together only after the
+150 ms bare-key dwell. In toggle mode they begin after the first bare-key
+release. The model helper is owned only for that dictation and is terminated
+after insertion, cancellation, or failure. Idle operation is event-driven; no
+Whisper model, transcription helper, polling worker, audio, or transcript
+history remains resident. The menu-bar icon is updated only by state
+transitions.
 
 Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or
