@@ -53,9 +53,13 @@ let package = Package(
             linkerSettings: [
                 .unsafeFlags([
                     "-L/opt/homebrew/opt/whisper-cpp/lib",
+                    "-L/opt/homebrew/opt/ggml/lib",
                     "-lwhisper",
+                    "-lggml",
                     "-Xlinker", "-rpath",
                     "-Xlinker", "/opt/homebrew/opt/whisper-cpp/lib",
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "/opt/homebrew/opt/ggml/lib",
                 ]),
             ]
         ),
