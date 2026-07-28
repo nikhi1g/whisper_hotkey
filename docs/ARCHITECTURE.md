@@ -54,7 +54,9 @@ generation number rejects stale recognition results.
 The badge prefers Accessibility caret geometry, including Chromium text
 markers, and otherwise anchors to the pointer. It is non-activating, so Stop and
 Send do not steal destination focus. Stop and hotkey release post Command-V.
-Send inserts successfully, then posts an unmodified Return.
+Send inserts successfully, then posts an unmodified Return. Its recording panel
+joins all applications, Spaces, and full-screen sets; periodic recording updates
+repair inactive-Space or unexpectedly ordered-out panel state.
 
 ## Privacy and ownership
 

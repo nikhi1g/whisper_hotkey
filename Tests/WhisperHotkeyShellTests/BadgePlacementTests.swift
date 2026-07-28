@@ -27,6 +27,18 @@ final class BadgePlacementTests: XCTestCase {
         XCTAssertEqual(anchor, caret)
     }
 
+    func testZeroWidthCaretResolvesToSecondaryDisplay() {
+        let index = BadgeScreenResolver.index(
+            containing: CGRect(x: 1_800, y: 300, width: 0, height: 18),
+            screenFrames: [
+                CGRect(x: 0, y: 0, width: 1_440, height: 900),
+                CGRect(x: 1_440, y: 0, width: 1_920, height: 1_080),
+            ]
+        )
+
+        XCTAssertEqual(index, 1)
+    }
+
     func testPlacesBadgeBesideCaret() {
         let frame = BadgePlacement.frame(
             caretFrame: CGRect(x: 100, y: 200, width: 2, height: 20),

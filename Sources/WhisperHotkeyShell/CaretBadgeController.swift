@@ -22,7 +22,15 @@ public struct CaretBadgeActions {
 
 @MainActor
 public final class CaretBadgeController {
-    private let panel: NonactivatingBadgePanel
+    static let overlayCollectionBehavior: NSWindow.CollectionBehavior = [
+        .canJoinAllSpaces,
+        .canJoinAllApplications,
+        .fullScreenAuxiliary,
+        .ignoresCycle,
+        .transient,
+    ]
+
+    private var panel: NonactivatingBadgePanel
     private let badgeView: BadgeView
     private var lastCaretFrame: CGRect?
     private var lastFieldFrame: CGRect?
@@ -34,14 +42,19 @@ public final class CaretBadgeController {
             frame: CGRect(origin: .zero, size: BadgePlacement.defaultSize),
             actions: actions
         )
-        panel = NonactivatingBadgePanel(
-            contentRect: badgeView.frame,
+        panel = Self.makePanel(contentView: badgeView)
+    }
+
+    private static func makePanel(
+        contentView: BadgeView
+    ) -> NonactivatingBadgePanel {
+        let panel = NonactivatingBadgePanel(
+            contentRect: contentView.frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-
-        panel.contentView = badgeView
+        panel.contentView = contentView
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -50,13 +63,9 @@ public final class CaretBadgeController {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [
-            .canJoinAllSpaces,
-            .fullScreenAuxiliary,
-            .ignoresCycle,
-            .transient,
-        ]
+        panel.collectionBehavior = overlayCollectionBehavior
         panel.isReleasedWhenClosed = false
+        return panel
     }
 
     public var isVisible: Bool {
@@ -76,9 +85,14 @@ public final class CaretBadgeController {
             hide()
             return
         }
-        lastCaretFrame = caretFrame
-        lastFieldFrame = fieldFrame
-        lastScreenFrame = screenFrame
+        let previousPresentation = badgeView.presentation
+        if presentation == .listening, previousPresentation != .listening {
+            // A fresh panel obtains current Space/Stage Manager membership.
+            // Reusing an ordered-out panel indefinitely can leave AppKit
+            // reporting it visible while it belongs to an inactive set.
+            panel.orderOut(nil)
+            panel = Self.makePanel(contentView: badgeView)
+        }
 
         let runtimeAnchor: CGRect?
         switch presentation {
@@ -92,10 +106,13 @@ public final class CaretBadgeController {
             runtimeAnchor = nil
         }
 
-        badgeView.presentation = presentation
+        if previousPresentation != presentation {
+            badgeView.presentation = presentation
+        }
         panel.ignoresMouseEvents = presentation != .listening
         let size = badgeView.preferredSize
         badgeView.frame = CGRect(origin: .zero, size: size)
+        badgeView.layoutSubtreeIfNeeded()
         panel.setContentSize(size)
         let resolvedCaretFrame = runtimeAnchor ?? caretFrame
         let resolvedFieldFrame = runtimeAnchor == nil ? fieldFrame : nil
@@ -108,18 +125,28 @@ public final class CaretBadgeController {
             panel.orderOut(nil)
             return
         }
+        lastCaretFrame = resolvedCaretFrame
+        lastFieldFrame = resolvedFieldFrame
+        lastScreenFrame = visibleFrame
 
+        placePanel(size: size, display: true)
+        panel.orderFrontRegardless()
+        lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
+    }
+
+    private func placePanel(size: CGSize, display: Bool) {
+        guard let visibleFrame = lastScreenFrame else {
+            return
+        }
         panel.setFrame(
             BadgePlacement.frame(
-                caretFrame: resolvedCaretFrame,
-                fieldFrame: resolvedFieldFrame,
+                caretFrame: lastCaretFrame,
+                fieldFrame: lastFieldFrame,
                 screenFrame: visibleFrame,
                 badgeSize: size
             ),
-            display: true
+            display: display
         )
-        panel.orderFrontRegardless()
-        lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
     }
 
     public func hide() {
@@ -144,20 +171,24 @@ public final class CaretBadgeController {
             limit: limit,
             level: level
         )
+        let size = badgeView.preferredSize
+        if badgeView.frame.size != size {
+            badgeView.frame = CGRect(origin: .zero, size: size)
+            badgeView.layoutSubtreeIfNeeded()
+            panel.setContentSize(size)
+            placePanel(size: size, display: true)
+        }
 
         let now = ProcessInfo.processInfo.systemUptime
-        if !panel.isVisible {
-            present(
-                .listening,
-                caretFrame: lastCaretFrame,
-                fieldFrame: lastFieldFrame,
-                screenFrame: lastScreenFrame
-            )
-        } else if now - lastVisibilityAssertion >= 0.5 {
-            // AppKit can retain `isVisible == true` while moving a
-            // non-activating utility panel behind the current Space. A bounded
-            // assertion while recording keeps the controller discoverable
-            // without any background polling while idle.
+        let visibility = BadgePanelVisibility(
+            isVisible: panel.isVisible,
+            isOnActiveSpace: panel.isOnActiveSpace
+        )
+        if now - lastVisibilityAssertion >= 0.5 {
+            if visibility.requiresRecovery {
+                panel.collectionBehavior = Self.overlayCollectionBehavior
+                placePanel(size: size, display: true)
+            }
             panel.orderFrontRegardless()
             lastVisibilityAssertion = now
         }
@@ -171,6 +202,7 @@ public final class CaretBadgeController {
 
     func orderOutWithoutEndingPresentationForTesting() {
         panel.orderOut(nil)
+        lastVisibilityAssertion = .zero
     }
 
     func invokeStopAndInsertForTesting() {
@@ -182,10 +214,39 @@ public final class CaretBadgeController {
     }
 
     private func screen(containing frame: CGRect?) -> NSScreen? {
-        guard let frame else {
+        let screens = NSScreen.screens
+        guard let index = BadgeScreenResolver.index(
+            containing: frame,
+            screenFrames: screens.map(\.frame)
+        ) else {
             return nil
         }
-        return NSScreen.screens.first(where: { $0.frame.intersects(frame) })
+        return screens[index]
+    }
+}
+
+struct BadgePanelVisibility: Equatable {
+    let isVisible: Bool
+    let isOnActiveSpace: Bool
+
+    var requiresRecovery: Bool {
+        !isVisible || !isOnActiveSpace
+    }
+}
+
+enum BadgeScreenResolver {
+    static func index(
+        containing frame: CGRect?,
+        screenFrames: [CGRect]
+    ) -> Int? {
+        guard let frame, !frame.isNull, !frame.isInfinite else {
+            return nil
+        }
+        let midpoint = CGPoint(x: frame.midX, y: frame.midY)
+        return screenFrames.firstIndex {
+            $0.contains(midpoint)
+                || (frame.width > 0 && frame.height > 0 && $0.intersects(frame))
+        }
     }
 }
 
@@ -203,6 +264,7 @@ private final class BadgeView: NSView {
     private let stopButton = BadgeActionButton()
     private let sendButton = BadgeActionButton()
     private let warningLayer = CAGradientLayer()
+    private var listeningIsWarning = false
 
     var presentation: BadgePresentation = .hidden {
         didSet {
@@ -212,7 +274,9 @@ private final class BadgeView: NSView {
 
     var preferredSize: CGSize {
         if presentation == .listening {
-            return CGSize(width: 300, height: 40)
+            return ListeningBadgeLayout(
+                isWarning: listeningIsWarning
+            ).size
         }
         let measuredWidth = ceil(statusLabel.intrinsicContentSize.width)
         return CGSize(width: min(max(116, measuredWidth + 34), 320), height: 34)
@@ -222,7 +286,7 @@ private final class BadgeView: NSView {
         self.actions = actions
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 11
+        layer?.cornerRadius = 12
         layer?.masksToBounds = true
         layer?.borderWidth = 0.5
         layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
@@ -235,10 +299,8 @@ private final class BadgeView: NSView {
         statusLabel.textColor = .white
         statusLabel.alignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(statusLabel)
 
-        waveformView.translatesAutoresizingMaskIntoConstraints = false
         waveformView.isHidden = true
         addSubview(waveformView)
 
@@ -248,7 +310,6 @@ private final class BadgeView: NSView {
         )
         timeLabel.textColor = .white
         timeLabel.alignment = .right
-        timeLabel.translatesAutoresizingMaskIntoConstraints = false
         timeLabel.isHidden = true
         addSubview(timeLabel)
 
@@ -286,39 +347,6 @@ private final class BadgeView: NSView {
         sendButton.action = #selector(sendAndSubmit)
         addSubview(sendButton)
 
-        NSLayoutConstraint.activate([
-            statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            statusLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            waveformView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
-            waveformView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            waveformView.widthAnchor.constraint(equalToConstant: 104),
-            waveformView.heightAnchor.constraint(equalToConstant: 24),
-            timeLabel.leadingAnchor.constraint(
-                equalTo: waveformView.trailingAnchor,
-                constant: 6
-            ),
-            timeLabel.widthAnchor.constraint(equalToConstant: 86),
-            timeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stopButton.leadingAnchor.constraint(
-                equalTo: timeLabel.trailingAnchor,
-                constant: 7
-            ),
-            stopButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stopButton.widthAnchor.constraint(equalToConstant: 32),
-            stopButton.heightAnchor.constraint(equalToConstant: 32),
-            sendButton.leadingAnchor.constraint(
-                equalTo: stopButton.trailingAnchor,
-                constant: 7
-            ),
-            sendButton.trailingAnchor.constraint(
-                equalTo: trailingAnchor,
-                constant: -8
-            ),
-            sendButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            sendButton.widthAnchor.constraint(equalToConstant: 34),
-            sendButton.heightAnchor.constraint(equalToConstant: 34),
-        ])
         updatePresentation()
     }
 
@@ -346,6 +374,14 @@ private final class BadgeView: NSView {
         super.layout()
         warningLayer.frame = bounds
         warningLayer.cornerRadius = layer?.cornerRadius ?? 0
+        statusLabel.frame = bounds.insetBy(dx: 12, dy: 0)
+        let listeningLayout = ListeningBadgeLayout(
+            isWarning: listeningIsWarning
+        )
+        waveformView.frame = listeningLayout.waveformFrame
+        timeLabel.frame = listeningLayout.timeFrame
+        stopButton.frame = listeningLayout.stopButtonFrame
+        sendButton.frame = listeningLayout.sendButtonFrame
     }
 
     func updateListening(
@@ -360,6 +396,7 @@ private final class BadgeView: NSView {
             elapsed: elapsed,
             limit: limit
         )
+        listeningIsWarning = metrics.isWarning
         timeLabel.stringValue = metrics.timeText
         timeLabel.font = .monospacedDigitSystemFont(
             ofSize: metrics.isWarning ? 10.5 : 12.5,
@@ -407,6 +444,7 @@ private final class BadgeView: NSView {
         switch presentation {
         case .listening:
             statusLabel.stringValue = ""
+            listeningIsWarning = false
             waveformView.reset()
             updateListening(elapsed: 0, limit: 600, level: 0)
         case .transcribing:
@@ -449,10 +487,64 @@ private final class BadgeView: NSView {
         button.contentTintColor = foreground
         button.toolTip = accessibilityLabel
         button.setAccessibilityLabel(accessibilityLabel)
-        button.translatesAutoresizingMaskIntoConstraints = false
         button.wantsLayer = true
         button.layer?.backgroundColor = background.cgColor
         button.layer?.cornerRadius = size / 2
+        button.layer?.masksToBounds = true
+    }
+}
+
+struct ListeningBadgeLayout: Equatable {
+    let size: CGSize
+    let waveformFrame: CGRect
+    let timeFrame: CGRect
+    let stopButtonFrame: CGRect
+    let sendButtonFrame: CGRect
+
+    init(isWarning: Bool) {
+        let height: CGFloat = 42
+        let leftInset: CGFloat = 8
+        let rightInset: CGFloat = 8
+        let waveformWidth: CGFloat = 104
+        let waveformHeight: CGFloat = 24
+        let timeWidth: CGFloat = isWarning ? 92 : 46
+        let stopDiameter: CGFloat = 34
+        let sendDiameter: CGFloat = 36
+        let contentGap: CGFloat = 3
+        let buttonGap: CGFloat = 4
+
+        var x = leftInset
+        waveformFrame = CGRect(
+            x: x,
+            y: (height - waveformHeight) / 2,
+            width: waveformWidth,
+            height: waveformHeight
+        )
+        x = waveformFrame.maxX + contentGap
+        timeFrame = CGRect(
+            x: x,
+            y: 0,
+            width: timeWidth,
+            height: height
+        )
+        x = timeFrame.maxX + contentGap
+        stopButtonFrame = CGRect(
+            x: x,
+            y: (height - stopDiameter) / 2,
+            width: stopDiameter,
+            height: stopDiameter
+        )
+        x = stopButtonFrame.maxX + buttonGap
+        sendButtonFrame = CGRect(
+            x: x,
+            y: (height - sendDiameter) / 2,
+            width: sendDiameter,
+            height: sendDiameter
+        )
+        size = CGSize(
+            width: sendButtonFrame.maxX + rightInset,
+            height: height
+        )
     }
 }
 
@@ -519,6 +611,12 @@ struct AudioWaveformHistory: Equatable {
 
 private final class BadgeActionButton: NSButton {
     override var acceptsFirstResponder: Bool { false }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+        layer?.masksToBounds = true
+    }
 }
 
 @MainActor

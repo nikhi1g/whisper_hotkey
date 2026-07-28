@@ -97,4 +97,56 @@ final class ListeningBadgeTests: XCTestCase {
         XCTAssertEqual(history.samples.last, 1)
         XCTAssertGreaterThan(history.samples[2], history.samples[1])
     }
+
+    func testVisiblePanelOnInactiveSpaceRequiresRecovery() {
+        XCTAssertTrue(
+            BadgePanelVisibility(
+                isVisible: true,
+                isOnActiveSpace: false
+            ).requiresRecovery
+        )
+        XCTAssertFalse(
+            BadgePanelVisibility(
+                isVisible: true,
+                isOnActiveSpace: true
+            ).requiresRecovery
+        )
+    }
+
+    @MainActor
+    func testOverlayJoinsSpacesApplicationsAndFullScreen() {
+        let behavior = CaretBadgeController.overlayCollectionBehavior
+        XCTAssertTrue(behavior.contains(.canJoinAllSpaces))
+        XCTAssertTrue(behavior.contains(.canJoinAllApplications))
+        XCTAssertTrue(behavior.contains(.fullScreenAuxiliary))
+    }
+
+    func testCompactListeningLayoutHasTightSquareControls() {
+        let layout = ListeningBadgeLayout(isWarning: false)
+        XCTAssertEqual(layout.size, CGSize(width: 246, height: 42))
+        XCTAssertEqual(
+            layout.timeFrame.minX - layout.waveformFrame.maxX,
+            3
+        )
+        XCTAssertEqual(
+            layout.stopButtonFrame.minX - layout.timeFrame.maxX,
+            3
+        )
+        XCTAssertEqual(
+            layout.sendButtonFrame.minX - layout.stopButtonFrame.maxX,
+            4
+        )
+        XCTAssertEqual(
+            layout.stopButtonFrame.width,
+            layout.stopButtonFrame.height
+        )
+        XCTAssertEqual(
+            layout.sendButtonFrame.width,
+            layout.sendButtonFrame.height
+        )
+        XCTAssertGreaterThan(
+            ListeningBadgeLayout(isWarning: true).size.width,
+            layout.size.width
+        )
+    }
 }

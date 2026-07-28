@@ -58,8 +58,10 @@ result as hotkey release. Send inserts successfully before posting an unmodified
 Return. The panel remains non-activating, and controller clicks are excluded
 from modifier-chord cancellation. During the last 30 seconds it shows
 elapsed/limit and pulses from orange toward deep red. The update task exists only
-while recording and restores the panel if AppKit orders it out. Other badge
-states show Transcribing, Busy, or an actionable error. The menu icon
+while recording. The panel joins every application, Space, and full-screen set;
+the update task restores it if AppKit orders it out or leaves it on an inactive
+Space or Stage Manager set. Other badge states show Transcribing, Busy, or an
+actionable error. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. There is no live text preview or success
 confirmation.

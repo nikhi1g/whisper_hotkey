@@ -20,7 +20,8 @@ dictation key, local Whisper model, and recording limit. While recording, the
 caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
 Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
 and then presses Return. In the final 30 seconds the badge switches to
-elapsed/limit and pulses orange toward deep red.
+elapsed/limit and pulses orange toward deep red. The normal recording badge is
+compact; its timer and two circular controls sit directly beside the waveform.
 
 ## Quick start
 
@@ -89,9 +90,10 @@ The badge uses both standard macOS selection ranges and Chromium/Electron text
 markers. Exact caret placement is not universally available: if an editor
 exposes neither representation, the badge snapshots the current pointer
 position for that state instead. It does not poll or track pointer movement,
-and this visual fallback has no effect on where Command-V is posted. If AppKit
-orders the panel out during a Space or window transition, the active recording
-update restores it and periodically keeps it frontmost until recording ends.
+and this visual fallback has no effect on where Command-V is posted. The badge
+joins every application, Space, and full-screen set. If AppKit orders it out or
+leaves it on an inactive Space or Stage Manager set, the active recording update
+repairs its membership and periodically keeps it frontmost until recording ends.
 
 ## Setup and permissions
 
