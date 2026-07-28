@@ -83,7 +83,7 @@ public struct MenuBarActions {
     public var showSetup: () -> Void
     public var cancelDictation: () -> Void
     public var copyLastDictation: () -> Void
-    public var toggleDictationMode: () -> Void
+    public var selectDictationMode: (HotkeyActivationMode) -> Void
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
@@ -94,7 +94,7 @@ public struct MenuBarActions {
         showSetup: @escaping () -> Void,
         cancelDictation: @escaping () -> Void,
         copyLastDictation: @escaping () -> Void,
-        toggleDictationMode: @escaping () -> Void,
+        selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
@@ -104,7 +104,7 @@ public struct MenuBarActions {
         self.showSetup = showSetup
         self.cancelDictation = cancelDictation
         self.copyLastDictation = copyLastDictation
-        self.toggleDictationMode = toggleDictationMode
+        self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectRecordingLimit = selectRecordingLimit
@@ -132,11 +132,13 @@ public final class MenuBarController: NSObject {
         action: #selector(copyLastDictation),
         keyEquivalent: ""
     )
-    private let toggleModeItem = NSMenuItem(
-        title: "Right Command Toggles Dictation",
-        action: #selector(toggleDictationMode),
+    private let dictationModeMenu = NSMenu(title: "Dictation Mode")
+    private let dictationModeItem = NSMenuItem(
+        title: "Dictation Mode",
+        action: nil,
         keyEquivalent: ""
     )
+    private var dictationModeItems: [HotkeyActivationMode: NSMenuItem] = [:]
     private let hotkeyMenu = NSMenu(title: "Dictation Key")
     private var hotkeyItems: [HotkeyKey: NSMenuItem] = [:]
     private let modelMenu = NSMenu(title: "Whisper Model")
@@ -181,9 +183,19 @@ public final class MenuBarController: NSObject {
         copyLastDictationItem.isEnabled = hasLastDictation
         menu.addItem(copyLastDictationItem)
 
-        toggleModeItem.target = self
-        toggleModeItem.state = toggleDictationEnabled ? .on : .off
-        menu.addItem(toggleModeItem)
+        dictationModeItem.submenu = dictationModeMenu
+        for mode in [HotkeyActivationMode.hold, .toggle] {
+            let item = NSMenuItem(
+                title: DictationModeMenuPresentation.optionTitle(for: mode),
+                action: #selector(selectDictationMode(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = mode.rawValue
+            dictationModeMenu.addItem(item)
+            dictationModeItems[mode] = item
+        }
+        menu.addItem(dictationModeItem)
 
         let hotkeyItem = NSMenuItem(
             title: "Dictation Key",
@@ -289,9 +301,17 @@ public final class MenuBarController: NSObject {
         stateItem.title = stateTitle
         cancelItem.isEnabled = state.canCancel
         copyLastDictationItem.isEnabled = hasLastDictation
-        toggleModeItem.state = toggleDictationEnabled ? .on : .off
-        toggleModeItem.title = "\(selectedHotkey.displayName) Toggles Dictation"
-        toggleModeItem.isEnabled = !selectedHotkey.requiresToggleMode
+        let selectedMode: HotkeyActivationMode =
+            selectedHotkey.requiresToggleMode || toggleDictationEnabled
+                ? .toggle
+                : .hold
+        dictationModeItem.title = DictationModeMenuPresentation.title(
+            for: selectedMode
+        )
+        for (mode, item) in dictationModeItems {
+            item.state = mode == selectedMode ? .on : .off
+            item.isEnabled = mode != .hold || !selectedHotkey.requiresToggleMode
+        }
         for (hotkey, item) in hotkeyItems {
             item.state = hotkey == selectedHotkey ? .on : .off
         }
@@ -341,8 +361,13 @@ public final class MenuBarController: NSObject {
         actions.copyLastDictation()
     }
 
-    @objc private func toggleDictationMode() {
-        actions.toggleDictationMode()
+    @objc private func selectDictationMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let mode = HotkeyActivationMode(rawValue: rawValue)
+        else {
+            return
+        }
+        actions.selectDictationMode(mode)
     }
 
     @objc private func selectHotkey(_ sender: NSMenuItem) {
@@ -392,6 +417,42 @@ public final class MenuBarController: NSObject {
             return
         }
         menu.performActionForItem(at: index)
+    }
+
+    func activateDictationModeForTesting(_ mode: HotkeyActivationMode) {
+        guard let item = dictationModeItems[mode],
+              let index = dictationModeMenu.items.firstIndex(of: item)
+        else {
+            return
+        }
+        dictationModeMenu.performActionForItem(at: index)
+    }
+
+    func dictationModeStateForTesting(
+        _ mode: HotkeyActivationMode
+    ) -> NSControl.StateValue? {
+        dictationModeItems[mode]?.state
+    }
+
+    func dictationModeIsEnabledForTesting(
+        _ mode: HotkeyActivationMode
+    ) -> Bool? {
+        dictationModeItems[mode]?.isEnabled
+    }
+}
+
+enum DictationModeMenuPresentation {
+    static func title(for mode: HotkeyActivationMode) -> String {
+        "Dictation Mode: \(optionTitle(for: mode))"
+    }
+
+    static func optionTitle(for mode: HotkeyActivationMode) -> String {
+        switch mode {
+        case .hold:
+            "Press and Hold"
+        case .toggle:
+            "Toggle"
+        }
     }
 }
 

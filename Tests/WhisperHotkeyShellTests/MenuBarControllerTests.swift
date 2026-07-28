@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import WhisperHotkeyShell
+import WhisperHotkeySystem
 
 final class MenuBarControllerTests: XCTestCase {
     func testEveryStateHasVisibleSymbolAndTitle() {
@@ -63,6 +64,17 @@ final class MenuBarControllerTests: XCTestCase {
         )
     }
 
+    func testDictationModeTitlesAreExplicit() {
+        XCTAssertEqual(
+            DictationModeMenuPresentation.title(for: .hold),
+            "Dictation Mode: Press and Hold"
+        )
+        XCTAssertEqual(
+            DictationModeMenuPresentation.title(for: .toggle),
+            "Dictation Mode: Toggle"
+        )
+    }
+
     @MainActor
     func testSystemSymbolsExistOnSupportedMacOS() {
         let states: [MenuBarState] = [
@@ -102,7 +114,7 @@ final class MenuBarControllerTests: XCTestCase {
                 showSetup: {},
                 cancelDictation: {},
                 copyLastDictation: {},
-                toggleDictationMode: {},
+                selectDictationMode: { _ in },
                 selectHotkey: { _ in },
                 selectModel: { _ in },
                 selectRecordingLimit: { _ in },
@@ -120,5 +132,77 @@ final class MenuBarControllerTests: XCTestCase {
             titled: "Restart whisper_hotkey"
         )
         XCTAssertEqual(restartCount, 1)
+    }
+
+    @MainActor
+    func testDictationModeOffersExplicitHoldAndToggleChoices() {
+        var selectedModes: [HotkeyActivationMode] = []
+        let controller = MenuBarController(
+            toggleDictationEnabled: true,
+            selectedHotkey: .rightOption,
+            selectedModel: .baseEnglish,
+            recordingLimit: .minutes5,
+            availableModels: [.baseEnglish],
+            hasLastDictation: false,
+            actions: MenuBarActions(
+                showSetup: {},
+                cancelDictation: {},
+                copyLastDictation: {},
+                selectDictationMode: { selectedModes.append($0) },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                restart: {},
+                quit: {}
+            )
+        )
+
+        XCTAssertEqual(
+            controller.dictationModeStateForTesting(.hold),
+            .off
+        )
+        XCTAssertEqual(
+            controller.dictationModeStateForTesting(.toggle),
+            .on
+        )
+        controller.activateDictationModeForTesting(.hold)
+        controller.activateDictationModeForTesting(.toggle)
+        XCTAssertEqual(selectedModes, [.hold, .toggle])
+    }
+
+    @MainActor
+    func testCapsLockForcesToggleAndDisablesHoldChoice() {
+        let controller = MenuBarController(
+            toggleDictationEnabled: false,
+            selectedHotkey: .capsLock,
+            selectedModel: .baseEnglish,
+            recordingLimit: .minutes5,
+            availableModels: [.baseEnglish],
+            hasLastDictation: false,
+            actions: MenuBarActions(
+                showSetup: {},
+                cancelDictation: {},
+                copyLastDictation: {},
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                restart: {},
+                quit: {}
+            )
+        )
+
+        XCTAssertEqual(
+            controller.dictationModeStateForTesting(.toggle),
+            .on
+        )
+        XCTAssertEqual(
+            controller.dictationModeIsEnabledForTesting(.hold),
+            false
+        )
+        XCTAssertEqual(
+            controller.dictationModeIsEnabledForTesting(.toggle),
+            true
+        )
     }
 }

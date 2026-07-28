@@ -130,7 +130,7 @@ public enum GlobalKeyEventKind: Equatable, Sendable {
     case keyUp
 }
 
-public enum HotkeyActivationMode: String, Codable, Equatable, Sendable {
+public enum HotkeyActivationMode: String, Codable, Hashable, Sendable {
     case hold
     case toggle
 }

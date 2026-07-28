@@ -111,8 +111,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             copyLastDictation: { [weak self] in
                 self?.copyLastDictation()
             },
-            toggleDictationMode: { [weak self] in
-                self?.toggleDictationMode()
+            selectDictationMode: { [weak self] mode in
+                self?.selectDictationMode(mode)
             },
             selectHotkey: { [weak self] hotkey in
                 self?.selectHotkey(hotkey)
@@ -879,11 +879,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         effectiveToggleDictationEnabled ? .toggle : .hold
     }
 
-    private func toggleDictationMode() {
-        guard !selectedHotkey.requiresToggleMode else {
+    private func selectDictationMode(_ mode: HotkeyActivationMode) {
+        guard mode != .hold || !selectedHotkey.requiresToggleMode else {
             return
         }
-        toggleDictationEnabled.toggle()
+        let enabled = mode == .toggle
+        guard toggleDictationEnabled != enabled else {
+            return
+        }
+        toggleDictationEnabled = enabled
         UserDefaults.standard.set(
             toggleDictationEnabled,
             forKey: "toggleDictationEnabled"

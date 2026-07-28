@@ -23,10 +23,11 @@ installed Base English whisper.cpp model loads asynchronously. Releasing after
 at least 250 milliseconds transcribes once, pastes at the current focus, and
 unloads the model. A faster tap does nothing.
 
-The dynamically named **[Key] Toggles Dictation** option changes the bare
-gesture to tap-to-start and tap-again-to-finish, persists across launches, and
-is visibly checked while selected. Caps Lock always uses toggle mode because
-macOS exposes its lock-state changes rather than a momentary hold/release pair;
+The checked **Dictation Mode** submenu offers explicit **Press and Hold** and
+**Toggle** choices. The selected mode persists across launches. Toggle changes
+the bare gesture to tap-to-start and tap-again-to-finish. Caps Lock always uses
+toggle mode because macOS exposes its lock-state changes rather than a
+momentary hold/release pair;
 its normal lock state is otherwise left to macOS. Escape is a dedicated,
 consumed trigger when selected, so cancellation remains available from the menu
 instead of the same key. For every other selection, Escape cancels either mode.

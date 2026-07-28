@@ -51,11 +51,12 @@ Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
 2. Hold bare Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
 
-Choose a trigger from **Dictation Key**. To dictate without holding it, enable
-the dynamically named **[Key] Toggles Dictation** item. Tap and release the
-selected key once to start, speak while the badge waveform is active, then tap
-and release it again to transcribe and insert. The badge's square button is an
-equivalent stop-and-insert action; its arrow button additionally presses Return
+Choose a trigger from **Dictation Key**, then choose **Press and Hold** or
+**Toggle** from the checked **Dictation Mode** submenu. In Toggle mode, tap and
+release the selected key once to start, speak while the badge waveform is
+active, then tap and release it again to transcribe and insert. The badge's
+square button is an equivalent stop-and-insert action; its arrow button
+additionally presses Return
 after the paste succeeds. Ordinary typing and selected-modifier shortcuts remain
 available between the two taps.
 
