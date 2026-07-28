@@ -138,9 +138,7 @@ private final class BadgeView: NSView {
 
     var preferredSize: CGSize {
         if presentation == .listening {
-            // Wide enough for the longest warning form ("59:35 / 1:00:00")
-            // without truncation while remaining a compact caret badge.
-            return CGSize(width: 214, height: 38)
+            return CGSize(width: 176, height: 32)
         }
         let measuredWidth = ceil(statusLabel.intrinsicContentSize.width)
         return CGSize(width: min(max(116, measuredWidth + 34), 320), height: 34)
@@ -149,7 +147,7 @@ private final class BadgeView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 8
         layer?.masksToBounds = true
         layer?.borderWidth = 0.5
         layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
@@ -185,15 +183,15 @@ private final class BadgeView: NSView {
             statusLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             waveformView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 13),
             waveformView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            waveformView.widthAnchor.constraint(equalToConstant: 45),
-            waveformView.heightAnchor.constraint(equalToConstant: 22),
+            waveformView.widthAnchor.constraint(equalToConstant: 36),
+            waveformView.heightAnchor.constraint(equalToConstant: 18),
             timeLabel.leadingAnchor.constraint(
                 equalTo: waveformView.trailingAnchor,
-                constant: 10
+                constant: 8
             ),
             timeLabel.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
-                constant: -13
+                constant: -12
             ),
             timeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -223,6 +221,10 @@ private final class BadgeView: NSView {
             limit: limit
         )
         timeLabel.stringValue = metrics.timeText
+        timeLabel.font = .monospacedDigitSystemFont(
+            ofSize: metrics.isWarning ? 10.5 : 12.5,
+            weight: .semibold
+        )
         waveformView.level = CGFloat(min(1, max(0, level)))
         setAccessibilityLabel("Recording \(metrics.accessibilityText)")
 
@@ -337,8 +339,8 @@ private final class AudioWaveformView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let weights: [CGFloat] = [0.45, 0.72, 1, 0.72, 0.45]
-        let barWidth: CGFloat = 4
-        let gap: CGFloat = 4
+        let barWidth: CGFloat = 3.5
+        let gap: CGFloat = 3
         let totalWidth = CGFloat(weights.count) * barWidth
             + CGFloat(weights.count - 1) * gap
         var x = (bounds.width - totalWidth) / 2
