@@ -15,7 +15,6 @@ DIST = ROOT / "dist"
 APP = DIST / "whisper_hotkey.app"
 CONTENTS = APP / "Contents"
 MACOS = CONTENTS / "MacOS"
-HELPERS = CONTENTS / "Helpers"
 RESOURCES = CONTENTS / "Resources"
 FRAMEWORKS = CONTENTS / "Frameworks"
 BUNDLE_ID = "local.whisperhotkey.app"
@@ -61,11 +60,12 @@ def write_info_plist() -> None:
 def bundle(products: Path) -> None:
     if APP.exists():
         shutil.rmtree(APP)
-    for directory in (MACOS, HELPERS, RESOURCES, FRAMEWORKS):
+    for directory in (MACOS, RESOURCES, FRAMEWORKS):
         directory.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(products / "WhisperHotkeyApp", MACOS / "WhisperHotkeyApp")
-    shutil.copy2(products / "WhisperModelHelper", HELPERS / "WhisperModelHelper")
+    # CFBundleCopyAuxiliaryExecutableURL searches Contents/MacOS.
+    shutil.copy2(products / "WhisperModelHelper", MACOS / "WhisperModelHelper")
     shutil.copy2(products / "whisper_hotkey", DIST / "whisper_hotkey")
     shutil.copy2(ROOT / "purpose.md", RESOURCES / "purpose.md")
     write_info_plist()
@@ -94,7 +94,7 @@ def signing_identity() -> str:
 
 def sign(identity: str) -> None:
     targets = [
-        HELPERS / "WhisperModelHelper",
+        MACOS / "WhisperModelHelper",
         DIST / "whisper_hotkey",
         APP,
     ]
