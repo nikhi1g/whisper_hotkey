@@ -116,11 +116,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         let pendingWork = stopSynchronousServices()
 
-        Task { @MainActor [weak self] in
-            guard let self else {
-                sender.reply(toApplicationShouldTerminate: true)
-                return
-            }
+        let recognizer = recognizer
+        let logger = logger
+        Task.detached(priority: .userInitiated) {
             if let precedingCleanup = pendingWork.precedingCleanup {
                 await precedingCleanup.value
             }
@@ -135,7 +133,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             // the final process-group sweep.
             await recognizer.shutdown()
             logger.info("Agent stopped")
-            sender.reply(toApplicationShouldTerminate: true)
+            RunLoop.main.perform(inModes: [.modalPanel]) {
+                MainActor.assumeIsolated {
+                    NSApp.reply(toApplicationShouldTerminate: true)
+                }
+            }
         }
         return .terminateLater
     }
@@ -292,7 +294,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func controlResponseDidFlush(_ request: ControlRequest) {
         switch request.command {
         case .stop, .restart:
-            NSApp.terminate(nil)
+            // Return from the response-flush Swift task before entering
+            // AppKit's synchronous termination loop. This leaves the main
+            // actor available for the terminate-later reply.
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
         case .status, .cancel, .setup, .enableLogin, .disableLogin:
             break
         }
