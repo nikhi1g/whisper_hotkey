@@ -278,8 +278,9 @@ private final class BadgeView: NSView {
                 isWarning: listeningIsWarning
             ).size
         }
-        let measuredWidth = ceil(statusLabel.intrinsicContentSize.width)
-        return CGSize(width: min(max(116, measuredWidth + 34), 320), height: 34)
+        return StatusBadgeLayout.size(
+            contentWidth: statusLabel.intrinsicContentSize.width
+        )
     }
 
     init(frame frameRect: NSRect, actions: CaretBadgeActions) {
@@ -309,7 +310,7 @@ private final class BadgeView: NSView {
             weight: .semibold
         )
         timeLabel.textColor = .white
-        timeLabel.alignment = .right
+        timeLabel.alignment = .center
         timeLabel.isHidden = true
         addSubview(timeLabel)
 
@@ -374,12 +375,19 @@ private final class BadgeView: NSView {
         super.layout()
         warningLayer.frame = bounds
         warningLayer.cornerRadius = layer?.cornerRadius ?? 0
-        statusLabel.frame = bounds.insetBy(dx: 12, dy: 0)
+        statusLabel.frame = BadgeTextLayout.centeredFrame(
+            in: bounds,
+            horizontalInset: StatusBadgeLayout.horizontalMargin,
+            contentHeight: statusLabel.intrinsicContentSize.height
+        )
         let listeningLayout = ListeningBadgeLayout(
             isWarning: listeningIsWarning
         )
         waveformView.frame = listeningLayout.waveformFrame
-        timeLabel.frame = listeningLayout.timeFrame
+        timeLabel.frame = BadgeTextLayout.centeredFrame(
+            in: listeningLayout.timeFrame,
+            contentHeight: timeLabel.intrinsicContentSize.height
+        )
         stopButton.frame = listeningLayout.stopButtonFrame
         sendButton.frame = listeningLayout.sendButtonFrame
     }
@@ -404,6 +412,7 @@ private final class BadgeView: NSView {
         )
         waveformView.level = CGFloat(min(1, max(0, level)))
         setAccessibilityLabel("Recording \(metrics.accessibilityText)")
+        needsLayout = true
 
         guard metrics.isWarning else {
             warningLayer.isHidden = true
@@ -460,6 +469,7 @@ private final class BadgeView: NSView {
             layer?.backgroundColor = NSColor.clear.cgColor
         }
         invalidateIntrinsicContentSize()
+        needsLayout = true
     }
 
     private var normalBackground: NSColor {
@@ -503,17 +513,16 @@ struct ListeningBadgeLayout: Equatable {
 
     init(isWarning: Bool) {
         let height: CGFloat = 42
-        let leftInset: CGFloat = 8
-        let rightInset: CGFloat = 8
-        let waveformWidth: CGFloat = 104
+        let horizontalMargin: CGFloat = 10
+        let waveformWidth: CGFloat = 100
         let waveformHeight: CGFloat = 24
-        let timeWidth: CGFloat = isWarning ? 92 : 46
+        let timeWidth: CGFloat = isWarning ? 92 : 42
         let stopDiameter: CGFloat = 34
         let sendDiameter: CGFloat = 36
-        let contentGap: CGFloat = 3
+        let contentGap: CGFloat = 4
         let buttonGap: CGFloat = 4
 
-        var x = leftInset
+        var x = horizontalMargin
         waveformFrame = CGRect(
             x: x,
             y: (height - waveformHeight) / 2,
@@ -542,7 +551,44 @@ struct ListeningBadgeLayout: Equatable {
             height: sendDiameter
         )
         size = CGSize(
-            width: sendButtonFrame.maxX + rightInset,
+            width: sendButtonFrame.maxX + horizontalMargin,
+            height: height
+        )
+    }
+}
+
+enum StatusBadgeLayout {
+    static let horizontalMargin: CGFloat = 14
+    static let minimumWidth: CGFloat = 116
+    static let maximumWidth: CGFloat = 320
+    static let height: CGFloat = 34
+
+    static func size(contentWidth: CGFloat) -> CGSize {
+        CGSize(
+            width: min(
+                max(
+                    minimumWidth,
+                    ceil(contentWidth) + horizontalMargin * 2
+                ),
+                maximumWidth
+            ),
+            height: height
+        )
+    }
+}
+
+enum BadgeTextLayout {
+    static func centeredFrame(
+        in container: CGRect,
+        horizontalInset: CGFloat = 0,
+        contentHeight: CGFloat
+    ) -> CGRect {
+        let inset = max(0, horizontalInset)
+        let height = min(container.height, ceil(max(0, contentHeight)))
+        return CGRect(
+            x: container.minX + inset,
+            y: container.midY - height / 2,
+            width: max(0, container.width - inset * 2),
             height: height
         )
     }
@@ -639,8 +685,11 @@ private final class AudioWaveformView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let barWidth: CGFloat = 2.4
-        let gap: CGFloat = 2
+        let barWidth = AudioWaveformStyle.barWidth
+        let gap = AudioWaveformStyle.gap(
+            availableWidth: bounds.width,
+            sampleCount: history.samples.count
+        )
         let totalWidth = CGFloat(history.samples.count) * barWidth
             + CGFloat(history.samples.count - 1) * gap
         var x = (bounds.width - totalWidth) / 2
@@ -673,5 +722,25 @@ private final class AudioWaveformView: NSView {
             ).fill()
             x += barWidth + gap
         }
+    }
+}
+
+enum AudioWaveformStyle {
+    static let barWidth: CGFloat = 1.6
+    static let horizontalInset: CGFloat = 4
+
+    static func gap(
+        availableWidth: CGFloat,
+        sampleCount: Int
+    ) -> CGFloat {
+        guard sampleCount > 1 else {
+            return 0
+        }
+        let usableWidth = max(
+            0,
+            availableWidth - horizontalInset * 2
+                - CGFloat(sampleCount) * barWidth
+        )
+        return usableWidth / CGFloat(sampleCount - 1)
     }
 }

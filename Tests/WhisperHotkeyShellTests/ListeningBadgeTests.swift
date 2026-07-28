@@ -123,14 +123,16 @@ final class ListeningBadgeTests: XCTestCase {
 
     func testCompactListeningLayoutHasTightSquareControls() {
         let layout = ListeningBadgeLayout(isWarning: false)
-        XCTAssertEqual(layout.size, CGSize(width: 246, height: 42))
+        XCTAssertEqual(layout.size, CGSize(width: 244, height: 42))
+        XCTAssertEqual(layout.waveformFrame.minX, 10)
+        XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 10)
         XCTAssertEqual(
             layout.timeFrame.minX - layout.waveformFrame.maxX,
-            3
+            4
         )
         XCTAssertEqual(
             layout.stopButtonFrame.minX - layout.timeFrame.maxX,
-            3
+            4
         )
         XCTAssertEqual(
             layout.sendButtonFrame.minX - layout.stopButtonFrame.maxX,
@@ -148,5 +150,49 @@ final class ListeningBadgeTests: XCTestCase {
             ListeningBadgeLayout(isWarning: true).size.width,
             layout.size.width
         )
+    }
+
+    func testEveryBadgeLabelIsGeometricallyCenteredWithMargins() {
+        let listening = ListeningBadgeLayout(isWarning: false)
+        let timerFrame = BadgeTextLayout.centeredFrame(
+            in: listening.timeFrame,
+            contentHeight: 15.2
+        )
+        XCTAssertEqual(timerFrame.midX, listening.timeFrame.midX)
+        XCTAssertEqual(timerFrame.midY, listening.timeFrame.midY)
+
+        let statusSize = StatusBadgeLayout.size(contentWidth: 80)
+        let statusBounds = CGRect(origin: .zero, size: statusSize)
+        let statusFrame = BadgeTextLayout.centeredFrame(
+            in: statusBounds,
+            horizontalInset: StatusBadgeLayout.horizontalMargin,
+            contentHeight: 16
+        )
+        XCTAssertEqual(statusFrame.midX, statusBounds.midX)
+        XCTAssertEqual(statusFrame.midY, statusBounds.midY)
+        XCTAssertEqual(statusFrame.minX, StatusBadgeLayout.horizontalMargin)
+        XCTAssertEqual(
+            statusBounds.width - statusFrame.maxX,
+            StatusBadgeLayout.horizontalMargin
+        )
+    }
+
+    func testWaveformBarsAreTwoThirdsOfPreviousThicknessAndCentered() {
+        XCTAssertEqual(AudioWaveformStyle.barWidth, 1.6)
+        let count = 23
+        let width: CGFloat = 100
+        let gap = AudioWaveformStyle.gap(
+            availableWidth: width,
+            sampleCount: count
+        )
+        let drawnWidth = CGFloat(count) * AudioWaveformStyle.barWidth
+            + CGFloat(count - 1) * gap
+
+        XCTAssertEqual(
+            drawnWidth,
+            width - AudioWaveformStyle.horizontalInset * 2,
+            accuracy: 0.001
+        )
+        XCTAssertEqual((width - drawnWidth) / 2, 4, accuracy: 0.001)
     }
 }
