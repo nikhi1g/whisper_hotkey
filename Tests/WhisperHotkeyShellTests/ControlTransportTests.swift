@@ -93,7 +93,7 @@ final class ControlTransportTests: XCTestCase {
         var server: ControlServer? = ControlServer(socketURL: socketURL) { _ in
             ControlResponse(ok: true, message: "unused")
         }
-        weak let weakServer = server
+        weak var weakServer = server
         defer {
             server?.stop()
             try? FileManager.default.removeItem(at: directory)
