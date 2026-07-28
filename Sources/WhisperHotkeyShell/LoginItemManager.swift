@@ -140,7 +140,7 @@ public final class LoginItemManager {
     }
 
     private func registerIfNeeded() throws -> LoginItemStatus {
-        if status == .notRegistered {
+        if status == .notRegistered || status == .notFound {
             try service.register()
         }
         return status

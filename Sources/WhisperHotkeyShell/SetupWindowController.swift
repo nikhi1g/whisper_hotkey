@@ -207,9 +207,6 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
         } else if loginStatus == .requiresApproval {
             detailLabel.stringValue = "Approve whisper_hotkey in Login Items to finish setup."
             detailLabel.textColor = .systemOrange
-        } else if loginStatus == .notFound, readiness.isReady {
-            detailLabel.stringValue = "Install and launch the signed application before enabling its Login Item."
-            detailLabel.textColor = .systemRed
         } else {
             detailLabel.stringValue = "Complete each item. No audio or transcript leaves this Mac."
             detailLabel.textColor = .secondaryLabelColor
@@ -253,11 +250,11 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private func performLoginItemAction() {
         do {
             switch loginItemManager.status {
-            case .requiresApproval, .notFound:
+            case .requiresApproval:
                 loginItemManager.openLoginItemsSettings()
             case .enabled:
                 break
-            case .notRegistered, .unknown:
+            case .notRegistered, .notFound, .unknown:
                 _ = try loginItemManager.register()
             }
         } catch {
@@ -268,7 +265,8 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
 
     private func automaticallyEnableLoginItemIfReady(_ readiness: SetupReadiness) {
         guard readiness.isReady,
-              loginItemManager.status == .notRegistered,
+              loginItemManager.status == .notRegistered
+                || loginItemManager.status == .notFound,
               !attemptedAutomaticLoginRegistration
         else {
             return
@@ -320,9 +318,9 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             controls.button.title = "Enable"
             controls.button.isHidden = false
         case .notFound:
-            controls.status.stringValue = "Installed app not found"
-            controls.status.textColor = .systemRed
-            controls.button.title = "Open Settings"
+            controls.status.stringValue = "Not enabled"
+            controls.status.textColor = .secondaryLabelColor
+            controls.button.title = "Enable"
             controls.button.isHidden = false
         case .unknown:
             controls.status.stringValue = "Status unavailable"

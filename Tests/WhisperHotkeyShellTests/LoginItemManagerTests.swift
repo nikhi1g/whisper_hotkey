@@ -28,6 +28,19 @@ final class LoginItemManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testFirstRegistrationTreatsNotFoundAsUnregistered() throws {
+        let service = FakeLoginItemService(state: .notFound)
+        let preferences = FakeLoginItemPreferenceStore()
+        let manager = LoginItemManager(
+            service: service,
+            preferenceStore: preferences
+        )
+
+        XCTAssertEqual(try manager.enableExplicitly(), .enabled)
+        XCTAssertEqual(service.registerCount, 1)
+    }
+
+    @MainActor
     func testUnregisterIsIdempotentAtManagerBoundary() throws {
         let service = FakeLoginItemService(state: .enabled)
         let preferences = FakeLoginItemPreferenceStore()
