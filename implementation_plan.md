@@ -13,7 +13,8 @@ Whisper/GGML libraries.
 - In hold mode, use one cancellable 150 ms dwell timer and begin audio capture
   and Base English model loading only when it fires.
 - Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
-- Show a caret-attached Listening/Transcribing/Busy/Error badge and an
+- Show a caret-attached Listening/Transcribing/Busy/Error badge, with a
+  pointer-position snapshot when exact caret geometry is unavailable, and an
   event-driven menu-bar state icon with setup, cancel, and quit controls.
 - Keep one latest transcript in memory and expose **Copy Last Dictation** as a
   permanent ordinary clipboard copy.
@@ -31,13 +32,13 @@ Whisper/GGML libraries.
    per-dictation whisper.cpp helper. The helper preloads on press, transcribes
    once on release, and exits. Stock `whisper-cli` provides the Metal then
    Metal-specific CPU fallback.
-3. `WhisperHotkeySystem` owns the non-consuming Right Command event tap,
-   exact Accessibility caret geometry, bounded one-character context spacing,
-   unconditional temporary paste, and permanent explicit copy. It has no target
-   validation or one-paste lease.
-4. `WhisperHotkeyShell` owns the caret-attached badge, persistent mode
-   checkmark, menu-bar state UI, first-run permission UI, one-shot login
-   launcher registration, and private local control socket.
+3. `WhisperHotkeySystem` owns the intercepting Right Command event tap, exact
+   Accessibility caret geometry, bounded one-character context spacing,
+   unconditional temporary paste, and permanent explicit copy. It has no
+   target validation or one-paste lease.
+4. `WhisperHotkeyShell` owns the caret-preferred, pointer-fallback badge,
+   persistent mode checkmark, menu-bar state UI, first-run permission UI,
+   one-shot login launcher registration, and private local control socket.
 5. `whisper_hotkey` exposes start, stop, restart, status, cancel, setup,
    enable-login, disable-login, and logs.
 
@@ -56,8 +57,8 @@ Whisper/GGML libraries.
 
 - Automated Swift tests cover the lifecycle reducer, capture cleanup,
   helper/CLI recognition fallback, bare-key/chord disambiguation, spacing,
-  temporary clipboard restoration, permanent last-dictation copy, exact-caret
-  policy, control socket, and Login Item policy.
+  temporary clipboard restoration, permanent last-dictation copy,
+  caret-preferred pointer fallback, control socket, and Login Item policy.
 - The release build must pass strict deep code-signature verification and the
   installed main executable and controller must hash-match their built copies.
 - Installed verification must cover setup readiness, Login Item registration,

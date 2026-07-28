@@ -38,8 +38,8 @@ public final class CaretBadgeController {
     }
 
     /// Presents a non-activating badge without changing the active application
-    /// or key window. `screenFrame` should be an `NSScreen.visibleFrame` when
-    /// the caller already knows which screen owns the Accessibility target.
+    /// or key window. Runtime states prefer exact Accessibility geometry and
+    /// snapshot the pointer when the destination does not expose a caret.
     public func present(
         _ presentation: BadgePresentation,
         caretFrame: CGRect? = nil,
@@ -50,19 +50,24 @@ public final class CaretBadgeController {
             hide()
             return
         }
+
+        let runtimeAnchor: CGRect?
         switch presentation {
         case .listening, .transcribing, .busy:
-            guard caretFrame != nil else {
-                hide()
-                return
-            }
+            runtimeAnchor = BadgePlacement.runtimeAnchor(
+                caretFrame: caretFrame,
+                fieldFrame: fieldFrame,
+                pointerLocation: NSEvent.mouseLocation
+            )
         case .error, .hidden:
-            break
+            runtimeAnchor = nil
         }
 
         badgeView.presentation = presentation
         let size = badgeView.preferredSize
-        let anchor = caretFrame ?? fieldFrame
+        let resolvedCaretFrame = runtimeAnchor ?? caretFrame
+        let resolvedFieldFrame = runtimeAnchor == nil ? fieldFrame : nil
+        let anchor = resolvedCaretFrame ?? resolvedFieldFrame
         let visibleFrame = screenFrame
             ?? screen(containing: anchor)?.visibleFrame
             ?? NSScreen.main?.visibleFrame
@@ -74,8 +79,8 @@ public final class CaretBadgeController {
 
         panel.setFrame(
             BadgePlacement.frame(
-                caretFrame: caretFrame,
-                fieldFrame: fieldFrame,
+                caretFrame: resolvedCaretFrame,
+                fieldFrame: resolvedFieldFrame,
                 screenFrame: visibleFrame,
                 badgeSize: size
             ),

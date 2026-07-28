@@ -47,8 +47,9 @@ dictation and discarded when the app quits.
 
 The badge uses both standard macOS selection ranges and Chromium/Electron text
 markers. Exact caret placement is not universally available: if an editor
-exposes neither representation, the app intentionally shows no approximate
-pointer/field/corner badge. The changing menu-bar icon still reports state.
+exposes neither representation, the badge snapshots the current pointer
+position for that state instead. It does not poll or track pointer movement,
+and this visual fallback has no effect on where Command-V is posted.
 
 ## Setup and permissions
 
@@ -66,13 +67,15 @@ The signed app requests three local macOS permissions:
 - **Input Monitoring** distinguishes bare Right Command gestures from ordinary
   Right Command shortcuts and observes Escape while dictating.
 - **Accessibility** reads exact caret geometry and at most one neighboring
-  character on each side, then posts one local Command-V. It performs no target
+  character on each side, permits the intercepting event tap that preserves
+  bare-key semantics, and posts one local Command-V. It performs no target
   validation and does not gate delivery on a detected field.
 
 macOS describes Accessibility as permission to “control this computer” because
 it offers no narrower per-API grant. `whisper_hotkey` does not request Screen
 Recording, Full Disk Access, or Automation permission, and it has no network
-code.
+code. All three requested permissions remain necessary for the current
+hold/toggle, local recording, context spacing, and unconditional paste behavior.
 
 The Login Item is a signed, bundled, one-shot LaunchAgent. It opens the main
 headless app at login and exits; it is not a second persistent worker. macOS

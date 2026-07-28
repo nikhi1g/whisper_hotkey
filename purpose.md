@@ -35,10 +35,11 @@ Runtime UI consists of a non-activating badge beside the Accessibility caret
 and the persistent menu-bar state icon. Standard selection ranges and
 Chromium-style text markers are both used to locate the caret. Exact caret
 geometry is feasible only when the destination app exposes one of those
-Accessibility representations. If it does not, no approximate pointer,
-focused-field, or screen-corner badge is shown; the menu-bar icon remains the
-authoritative state indicator. The badge shows Listening, Transcribing, Busy,
-or an actionable error. The menu icon distinguishes starting, ready, preparing,
+Accessibility representations. If it does not, the badge snapshots the current
+pointer position when each runtime state begins; it does not poll or follow the
+pointer. This fallback affects presentation only and never validates or changes
+the paste destination. The badge shows Listening, Transcribing, Busy, or an
+actionable error. The menu icon distinguishes starting, ready, preparing,
 listening, transcribing, inserting, unavailable, and failed states. There is no
 live text preview or success confirmation.
 

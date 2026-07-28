@@ -3,6 +3,30 @@ import XCTest
 @testable import WhisperHotkeyShell
 
 final class BadgePlacementTests: XCTestCase {
+    func testRuntimeAnchorFallsBackToPointer() {
+        let anchor = BadgePlacement.runtimeAnchor(
+            caretFrame: nil,
+            fieldFrame: nil,
+            pointerLocation: CGPoint(x: 420, y: 240)
+        )
+
+        XCTAssertEqual(
+            anchor,
+            CGRect(x: 420, y: 240, width: 1, height: 1)
+        )
+    }
+
+    func testRuntimeAnchorPrefersExactCaret() {
+        let caret = CGRect(x: 100, y: 200, width: 2, height: 20)
+        let anchor = BadgePlacement.runtimeAnchor(
+            caretFrame: caret,
+            fieldFrame: CGRect(x: 20, y: 30, width: 300, height: 40),
+            pointerLocation: CGPoint(x: 420, y: 240)
+        )
+
+        XCTAssertEqual(anchor, caret)
+    }
+
     func testPlacesBadgeBesideCaret() {
         let frame = BadgePlacement.frame(
             caretFrame: CGRect(x: 100, y: 200, width: 2, height: 20),

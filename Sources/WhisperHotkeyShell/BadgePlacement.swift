@@ -3,9 +3,25 @@ import CoreGraphics
 public enum BadgePlacement {
     public static let defaultSize = CGSize(width: 132, height: 34)
 
+    /// Prefers exact Accessibility geometry and otherwise snapshots the pointer
+    /// as a one-point anchor. The caller decides when pointer fallback is
+    /// appropriate; this function performs no polling or target validation.
+    public static func runtimeAnchor(
+        caretFrame: CGRect?,
+        fieldFrame: CGRect?,
+        pointerLocation: CGPoint
+    ) -> CGRect {
+        usable(caretFrame)
+            ?? usable(fieldFrame)
+            ?? CGRect(
+                origin: pointerLocation,
+                size: CGSize(width: 1, height: 1)
+            )
+    }
+
     /// Computes placement for an available anchor while keeping the badge
     /// inside the supplied visible screen frame. Runtime status presentations
-    /// call this only when exact caret geometry is available.
+    /// pass either exact caret geometry or a one-point pointer fallback.
     public static func frame(
         caretFrame: CGRect?,
         fieldFrame: CGRect?,
