@@ -90,15 +90,6 @@ public enum SystemDeliveryResult: Equatable, Sendable {
     case inserted
     case clipboardUnavailable
     case emptyTranscript
-
-    public var disposition: DeliveryDisposition? {
-        switch self {
-        case .inserted:
-            .inserted
-        case .clipboardUnavailable, .emptyTranscript:
-            nil
-        }
-    }
 }
 
 @MainActor
@@ -116,7 +107,7 @@ public final class TextDeliveryService {
 
     public func deliver(
         transcript: String,
-        to target: ReleaseTarget?
+        context: DictationInsertionContext?
     ) -> SystemDeliveryResult {
         let plainTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !plainTranscript.isEmpty else {
@@ -125,7 +116,7 @@ public final class TextDeliveryService {
 
         let insertion = TextInsertionFormatter.insertionText(
             transcript: plainTranscript,
-            surroundingText: target?.state.surroundingText
+            surroundingText: context?.surroundingText
         )
         guard !insertion.isEmpty else {
             return .emptyTranscript
@@ -141,11 +132,12 @@ public final class TextDeliveryService {
         return .inserted
     }
 
-    public var clipboardLeaseActive: Bool {
-        clipboard.isLeaseActive
-    }
-
-    public func cancelClipboardLease() {
-        clipboard.cancelLease()
+    @discardableResult
+    public func copyToClipboard(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return false
+        }
+        return clipboard.copy(trimmed)
     }
 }

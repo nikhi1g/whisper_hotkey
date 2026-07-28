@@ -24,7 +24,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     )
     private let recorder = WhisperAudioRecorder()
     private let recognizer = WhisperRecognizer()
-    private let targetProvider = AccessibilityTargetProvider()
+    private let contextProvider = AccessibilityContextProvider()
     private let clipboard = ClipboardTransactionController()
     private let badge = CaretBadgeController()
     private let loginItemManager = LoginItemManager()
@@ -34,11 +34,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
-        targetProvider: targetProvider
-    ) { [weak self] action, releaseTarget, timestampNanoseconds in
+        contextProvider: contextProvider
+    ) { [weak self] action, insertionContext, timestampNanoseconds in
         self?.handleHotkey(
             action,
-            releaseTarget: releaseTarget,
+            insertionContext: insertionContext,
             eventTime: TimeInterval(timestampNanoseconds) / 1_000_000_000
         )
     }
@@ -67,6 +67,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     )
     private lazy var menuBarController = MenuBarController(
         toggleDictationEnabled: toggleDictationEnabled,
+        hasLastDictation: false,
         actions: MenuBarActions(
             showSetup: { [weak self] in
                 guard let self else {
@@ -77,6 +78,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             },
             cancelDictation: { [weak self] in
                 self?.process(.cancel)
+            },
+            copyLastDictation: { [weak self] in
+                self?.copyLastDictation()
             },
             toggleDictationMode: { [weak self] in
                 self?.toggleDictationMode()
@@ -95,9 +99,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var errorPresentationTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
-    private var releaseTarget: ReleaseTarget?
+    private var insertionContext: DictationInsertionContext?
     private var badgeCaretRect: CGRect?
-    private var badgeFieldRect: CGRect?
+    private var lastDictation: String?
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
     private var startupBadgeVisible = false
@@ -118,7 +122,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         menuBarController.update(
             .starting,
-            toggleDictationEnabled: toggleDictationEnabled
+            toggleDictationEnabled: toggleDictationEnabled,
+            hasLastDictation: lastDictation != nil
         )
         reconcileRuntime(showSetupIfNeeded: true)
         logger.info("Agent started")
@@ -364,7 +369,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func handleHotkey(
         _ action: HotkeyAction,
-        releaseTarget suppliedTarget: ReleaseTarget?,
+        insertionContext suppliedContext: DictationInsertionContext?,
         eventTime: TimeInterval
     ) {
         guard !isTerminating, runtimeReadyForHotkey else {
@@ -374,16 +379,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .pressed:
             if !machine.phase.isBusy, machine.phase != .failed {
-                let anchor = targetProvider.currentBadgeAnchor()
+                let anchor = contextProvider.currentBadgeAnchor()
                 badgeCaretRect = anchor.caretRect
-                badgeFieldRect = anchor.fieldRect
-                releaseTarget = nil
+                insertionContext = nil
             }
             process(.hotkeyPressed(at: eventTime))
 
         case .released:
             if machine.phase == .preparing || machine.phase == .listening {
-                captureReleaseTarget(suppliedTarget)
+                captureInsertionContext(suppliedContext)
             }
             process(.hotkeyReleased(at: eventTime))
 
@@ -475,7 +479,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             else {
                 return
             }
-            captureReleaseTarget(targetProvider.captureFocusedTarget())
+            captureInsertionContext(contextProvider.captureInsertionContext())
             process(.maximumDurationReached)
         }
         return true
@@ -551,8 +555,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ transcript: String) -> Bool {
-        let result = delivery.deliver(transcript: transcript, to: releaseTarget)
-        releaseTarget = nil
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            lastDictation = trimmed
+        }
+        let result = delivery.deliver(
+            transcript: transcript,
+            context: insertionContext
+        )
+        insertionContext = nil
 
         switch result {
         case .inserted:
@@ -581,7 +592,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         cancelledRecognition?.cancel()
         recognitionTask = nil
         recorder.cancel()
-        releaseTarget = nil
+        insertionContext = nil
 
         let precedingCleanup = recognizerCleanupTask
         let recognizer = recognizer
@@ -624,21 +635,20 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         if presentation == .hidden {
             badge.hide()
             badgeCaretRect = nil
-            badgeFieldRect = nil
             return
         }
         badge.present(
             presentation,
-            caretFrame: badgeCaretRect,
-            fieldFrame: badgeFieldRect
+            caretFrame: badgeCaretRect
         )
     }
 
-    private func captureReleaseTarget(_ target: ReleaseTarget?) {
-        releaseTarget = target
-        if let target {
-            badgeCaretRect = target.caretRect
-            badgeFieldRect = target.fieldRect
+    private func captureInsertionContext(
+        _ context: DictationInsertionContext?
+    ) {
+        insertionContext = context
+        if let caretRect = context?.caretRect {
+            badgeCaretRect = caretRect
         }
     }
 
@@ -653,7 +663,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             sessionGeneration &+= 1
         }
         clipboard.completePendingRestoration()
-        clipboard.cancelLease()
         updateMenuBar()
     }
 
@@ -661,14 +670,16 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         if startupError != nil {
             menuBarController.update(
                 .failed,
-                toggleDictationEnabled: toggleDictationEnabled
+                toggleDictationEnabled: toggleDictationEnabled,
+                hasLastDictation: lastDictation != nil
             )
             return
         }
         guard runtimeReadyForHotkey else {
             menuBarController.update(
                 .unavailable,
-                toggleDictationEnabled: toggleDictationEnabled
+                toggleDictationEnabled: toggleDictationEnabled,
+                hasLastDictation: lastDictation != nil
             )
             return
         }
@@ -691,7 +702,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         menuBarController.update(
             state,
-            toggleDictationEnabled: toggleDictationEnabled
+            toggleDictationEnabled: toggleDictationEnabled,
+            hasLastDictation: lastDictation != nil
         )
     }
 
@@ -707,6 +719,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         hotkeyMonitor.setActivationMode(hotkeyActivationMode)
         updateMenuBar()
+    }
+
+    private func copyLastDictation() {
+        guard let lastDictation else {
+            return
+        }
+        if !delivery.copyToClipboard(lastDictation) {
+            fail("Clipboard unavailable — try again.")
+        }
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {
@@ -730,10 +751,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         recorder.cancel()
         badge.hide()
         clipboard.completePendingRestoration()
-        clipboard.cancelLease()
         controlServer?.stop()
         controlServer = nil
-        releaseTarget = nil
+        insertionContext = nil
         return pendingWork
     }
 
@@ -759,7 +779,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             loginItemEnabled: loginItemManager.status.isEnabled,
             helperAvailable: readiness.helperAvailable,
             modelAvailable: readiness.modelAvailable,
-            clipboardLeaseActive: delivery.clipboardLeaseActive,
             lastError: machine.lastError ?? startupError
         )
     }

@@ -293,12 +293,12 @@ final class HotkeyTests: XCTestCase {
 final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
     func testHotkeyDeliveryIsDeferredOrderedAndUsesPhysicalTimestamps() async {
         var deliveries: [(HotkeyAction, UInt64)] = []
-        var didCaptureReleaseTarget = false
+        var didCaptureInsertionContext = false
         let started = expectation(description: "hold started after dwell")
         let released = expectation(description: "hold released")
         let monitor = GlobalHotkeyMonitor(
-            captureReleaseTarget: {
-                didCaptureReleaseTarget = true
+            captureInsertionContext: {
+                didCaptureInsertionContext = true
                 return nil
             },
             holdActivationDelay: .milliseconds(1)
@@ -326,7 +326,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         )
         await fulfillment(of: [started], timeout: 1)
         XCTAssertEqual(deliveries.map(\.0), [.pressed])
-        XCTAssertFalse(didCaptureReleaseTarget)
+        XCTAssertFalse(didCaptureInsertionContext)
 
         XCTAssertFalse(
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
@@ -334,17 +334,17 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         await fulfillment(of: [released], timeout: 1)
         XCTAssertEqual(deliveries.map(\.0), [.pressed, .released])
         XCTAssertEqual(deliveries.map(\.1), [1_000, 1_250])
-        XCTAssertTrue(didCaptureReleaseTarget)
+        XCTAssertTrue(didCaptureInsertionContext)
     }
 
     func testToggleSecondPressCapturesInsertionTarget() async {
         var deliveries: [HotkeyAction] = []
-        var targetCaptureCount = 0
+        var contextCaptureCount = 0
         let delivered = expectation(description: "toggle start and finish")
         delivered.expectedFulfillmentCount = 2
         let monitor = GlobalHotkeyMonitor(
-            captureReleaseTarget: {
-                targetCaptureCount += 1
+            captureInsertionContext: {
+                contextCaptureCount += 1
                 return nil
             }
         ) { action, _, _ in
@@ -396,7 +396,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
 
         await fulfillment(of: [delivered], timeout: 1)
         XCTAssertEqual(deliveries, [.pressed, .released])
-        XCTAssertEqual(targetCaptureCount, 1)
+        XCTAssertEqual(contextCaptureCount, 1)
     }
 
     func testTapDisableCancellationUsesDisablingEventTimestamp() async {
@@ -404,7 +404,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         let started = expectation(description: "hold started")
         let cancelled = expectation(description: "hold cancelled")
         let monitor = GlobalHotkeyMonitor(
-            captureReleaseTarget: { nil },
+            captureInsertionContext: { nil },
             holdActivationDelay: .milliseconds(1)
         ) { action, _, timestampNanoseconds in
             deliveries.append((action, timestampNanoseconds))
@@ -445,7 +445,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         let unexpectedDelivery = expectation(description: "no dictation")
         unexpectedDelivery.isInverted = true
         let monitor = GlobalHotkeyMonitor(
-            captureReleaseTarget: { nil },
+            captureInsertionContext: { nil },
             holdActivationDelay: .milliseconds(20)
         ) { action, _, _ in
             deliveries.append(action)

@@ -16,8 +16,7 @@ final class ControlTransportTests: XCTestCase {
             inputMonitoringGranted: true,
             loginItemEnabled: true,
             helperAvailable: true,
-            modelAvailable: true,
-            clipboardLeaseActive: false
+            modelAvailable: true
         )
         let server = ControlServer(socketURL: socketURL) { request in
             XCTAssertEqual(request.command, .status)

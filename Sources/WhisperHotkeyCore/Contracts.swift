@@ -33,11 +33,6 @@ public enum BadgePresentation: Equatable, Sendable {
     case hidden
 }
 
-public enum DeliveryDisposition: String, Codable, Equatable, Sendable {
-    case inserted
-    case clipboardLease
-}
-
 public struct RuntimeStatus: Codable, Equatable, Sendable {
     public var running: Bool
     public var phase: DictationPhase
@@ -47,7 +42,6 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
     public var loginItemEnabled: Bool
     public var helperAvailable: Bool
     public var modelAvailable: Bool
-    public var clipboardLeaseActive: Bool
     public var lastError: String?
 
     public init(
@@ -59,7 +53,6 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         loginItemEnabled: Bool,
         helperAvailable: Bool,
         modelAvailable: Bool,
-        clipboardLeaseActive: Bool,
         lastError: String? = nil
     ) {
         self.running = running
@@ -70,7 +63,6 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.loginItemEnabled = loginItemEnabled
         self.helperAvailable = helperAvailable
         self.modelAvailable = modelAvailable
-        self.clipboardLeaseActive = clipboardLeaseActive
         self.lastError = lastError
     }
 }

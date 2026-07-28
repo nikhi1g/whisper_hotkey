@@ -77,17 +77,20 @@ public enum MenuBarState: Equatable, Sendable {
 public struct MenuBarActions {
     public var showSetup: () -> Void
     public var cancelDictation: () -> Void
+    public var copyLastDictation: () -> Void
     public var toggleDictationMode: () -> Void
     public var quit: () -> Void
 
     public init(
         showSetup: @escaping () -> Void,
         cancelDictation: @escaping () -> Void,
+        copyLastDictation: @escaping () -> Void,
         toggleDictationMode: @escaping () -> Void,
         quit: @escaping () -> Void
     ) {
         self.showSetup = showSetup
         self.cancelDictation = cancelDictation
+        self.copyLastDictation = copyLastDictation
         self.toggleDictationMode = toggleDictationMode
         self.quit = quit
     }
@@ -107,6 +110,11 @@ public final class MenuBarController: NSObject {
         action: #selector(cancelDictation),
         keyEquivalent: ""
     )
+    private let copyLastDictationItem = NSMenuItem(
+        title: "Copy Last Dictation",
+        action: #selector(copyLastDictation),
+        keyEquivalent: ""
+    )
     private let toggleModeItem = NSMenuItem(
         title: "Right Command Toggles Dictation",
         action: #selector(toggleDictationMode),
@@ -115,6 +123,7 @@ public final class MenuBarController: NSObject {
 
     public init(
         toggleDictationEnabled: Bool,
+        hasLastDictation: Bool,
         actions: MenuBarActions
     ) {
         self.actions = actions
@@ -128,6 +137,10 @@ public final class MenuBarController: NSObject {
 
         cancelItem.target = self
         menu.addItem(cancelItem)
+
+        copyLastDictationItem.target = self
+        copyLastDictationItem.isEnabled = hasLastDictation
+        menu.addItem(copyLastDictationItem)
 
         toggleModeItem.target = self
         toggleModeItem.state = toggleDictationEnabled ? .on : .off
@@ -151,18 +164,24 @@ public final class MenuBarController: NSObject {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
-        update(.starting, toggleDictationEnabled: toggleDictationEnabled)
+        update(
+            .starting,
+            toggleDictationEnabled: toggleDictationEnabled,
+            hasLastDictation: hasLastDictation
+        )
     }
 
     public func update(
         _ state: MenuBarState,
-        toggleDictationEnabled: Bool
+        toggleDictationEnabled: Bool,
+        hasLastDictation: Bool
     ) {
         let stateTitle = state.title(
             toggleDictationEnabled: toggleDictationEnabled
         )
         stateItem.title = stateTitle
         cancelItem.isEnabled = state.canCancel
+        copyLastDictationItem.isEnabled = hasLastDictation
         toggleModeItem.state = toggleDictationEnabled ? .on : .off
 
         guard let button = statusItem.button else {
@@ -189,6 +208,10 @@ public final class MenuBarController: NSObject {
 
     @objc private func cancelDictation() {
         actions.cancelDictation()
+    }
+
+    @objc private func copyLastDictation() {
+        actions.copyLastDictation()
     }
 
     @objc private func toggleDictationMode() {

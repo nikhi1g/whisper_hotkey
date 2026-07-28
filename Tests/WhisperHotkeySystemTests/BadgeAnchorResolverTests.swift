@@ -10,14 +10,14 @@ final class BadgeAnchorResolverTests: XCTestCase {
             BadgeAnchorResolver.resolve(
                 caretRect: caret
             ),
-            BadgeAnchorGeometry(caretRect: caret, fieldRect: nil)
+            BadgeAnchorGeometry(caretRect: caret)
         )
     }
 
     func testMissingCaretHasNoApproximateFallback() {
         XCTAssertEqual(
             BadgeAnchorResolver.resolve(caretRect: nil),
-            BadgeAnchorGeometry(caretRect: nil, fieldRect: nil)
+            BadgeAnchorGeometry(caretRect: nil)
         )
     }
 }

@@ -15,6 +15,8 @@ Whisper/GGML libraries.
 - Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
 - Show a caret-attached Listening/Transcribing/Busy/Error badge and an
   event-driven menu-bar state icon with setup, cancel, and quit controls.
+- Keep one latest transcript in memory and expose **Copy Last Dictation** as a
+  permanent ordinary clipboard copy.
 - Keep no model, helper, transcript history, Dock item, or polling worker alive
   while idle.
 - Register a signed, one-shot native LaunchAgent after one-time permission
@@ -30,8 +32,9 @@ Whisper/GGML libraries.
    once on release, and exits. Stock `whisper-cli` provides the Metal then
    Metal-specific CPU fallback.
 3. `WhisperHotkeySystem` owns the non-consuming Right Command event tap,
-   exact Accessibility caret geometry, opportunistic context spacing, and
-   unconditional temporary paste.
+   exact Accessibility caret geometry, bounded one-character context spacing,
+   unconditional temporary paste, and permanent explicit copy. It has no target
+   validation or one-paste lease.
 4. `WhisperHotkeyShell` owns the caret-attached badge, persistent mode
    checkmark, menu-bar state UI, first-run permission UI, one-shot login
    launcher registration, and private local control socket.
@@ -53,8 +56,8 @@ Whisper/GGML libraries.
 
 - Automated Swift tests cover the lifecycle reducer, capture cleanup,
   helper/CLI recognition fallback, bare-key/chord disambiguation, spacing,
-  clipboard restoration, exact-caret policy, control socket, and Login Item
-  policy.
+  temporary clipboard restoration, permanent last-dictation copy, exact-caret
+  policy, control socket, and Login Item policy.
 - The release build must pass strict deep code-signature verification and the
   installed main executable and controller must hash-match their built copies.
 - Installed verification must cover setup readiness, Login Item registration,

@@ -191,7 +191,6 @@ private struct Controller {
             "Login Item: \(status.loginItemEnabled ? "enabled" : "disabled")",
             "Model: \(available(status.modelAvailable))",
             "Helper: \(available(status.helperAvailable))",
-            "Clipboard lease: \(status.clipboardLeaseActive ? "active" : "inactive")",
         ]
         if let lastError = status.lastError, !lastError.isEmpty {
             lines.append("Last error: \(lastError)")

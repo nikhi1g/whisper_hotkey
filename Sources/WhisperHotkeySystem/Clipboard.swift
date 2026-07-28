@@ -92,94 +92,17 @@ public final class SystemPasteboard: PasteboardAccess {
     }
 }
 
-public enum ClipboardLeasePhase: Equatable, Sendable {
-    case inactive
-    case awaitingPaste
-    case restorationPending
-}
-
-public enum ClipboardLeaseEffect: Equatable, Sendable {
-    case none
-    case scheduleRestoration
-    case restoreNow
-    case discard
-}
-
-public struct ClipboardLeaseStateMachine: Equatable, Sendable {
-    public private(set) var phase: ClipboardLeasePhase = .inactive
-    public private(set) var ownedChangeCount: Int?
-
-    public init() {}
-
-    public mutating func install(ownedChangeCount: Int) {
-        phase = .awaitingPaste
-        self.ownedChangeCount = ownedChangeCount
-    }
-
-    public mutating func manualPaste(currentChangeCount: Int) -> ClipboardLeaseEffect {
-        guard phase == .awaitingPaste else {
-            return .none
-        }
-        guard currentChangeCount == ownedChangeCount else {
-            clear()
-            return .discard
-        }
-        phase = .restorationPending
-        return .scheduleRestoration
-    }
-
-    public mutating func copyOrCut() -> ClipboardLeaseEffect {
-        guard phase != .inactive else {
-            return .none
-        }
-        clear()
-        return .discard
-    }
-
-    public mutating func finishRestoration(
-        currentChangeCount: Int
-    ) -> ClipboardLeaseEffect {
-        guard phase == .restorationPending else {
-            return .none
-        }
-        let stillOwned = currentChangeCount == ownedChangeCount
-        clear()
-        return stillOwned ? .restoreNow : .discard
-    }
-
-    public mutating func cancel(currentChangeCount: Int) -> ClipboardLeaseEffect {
-        guard phase != .inactive else {
-            return .none
-        }
-        let stillOwned = currentChangeCount == ownedChangeCount
-        clear()
-        return stillOwned ? .restoreNow : .discard
-    }
-
-    private mutating func clear() {
-        phase = .inactive
-        ownedChangeCount = nil
-    }
-}
-
 @MainActor
 public final class ClipboardTransactionController {
-    public typealias LeaseStateHandler = @MainActor (ClipboardLeasePhase) -> Void
-
-    private struct PendingDirectRestore {
+    private struct PendingRestore {
         let snapshot: ClipboardSnapshot
         let ownedChangeCount: Int
-        let generation: UInt64
     }
 
     private let pasteboard: PasteboardAccess
     private let restorationDelayNanoseconds: UInt64
-    private var leaseMachine = ClipboardLeaseStateMachine()
-    private var leaseSnapshot: ClipboardSnapshot?
-    private var pendingDirectRestore: PendingDirectRestore?
+    private var pendingRestore: PendingRestore?
     private var generation: UInt64 = 0
-
-    public var onLeaseStateChange: LeaseStateHandler?
 
     public init(
         pasteboard: PasteboardAccess = SystemPasteboard(),
@@ -189,84 +112,12 @@ public final class ClipboardTransactionController {
         restorationDelayNanoseconds = UInt64(max(0, restorationDelay) * 1_000_000_000)
     }
 
-    public var leaseState: ClipboardLeasePhase {
-        leaseMachine.phase
-    }
-
-    public var isLeaseActive: Bool {
-        leaseMachine.phase != .inactive
-    }
-
+    /// Permanently replaces the clipboard, matching an ordinary Copy action.
     @discardableResult
-    public func installLease(_ text: String) -> Bool {
+    public func copy(_ text: String) -> Bool {
         generation &+= 1
-        cancelLease()
-        completeDirectRestoreIfOwned()
-
-        let snapshot = pasteboard.snapshotReadableContents()
-        guard let ownedChangeCount = pasteboard.replaceContents(withPlainText: text) else {
-            pasteboard.restore(snapshot)
-            return false
-        }
-        leaseSnapshot = snapshot
-        leaseMachine.install(ownedChangeCount: ownedChangeCount)
-        notifyLeaseState()
-        return true
-    }
-
-    public func cancelLease() {
-        let oldPhase = leaseMachine.phase
-        guard oldPhase != .inactive else {
-            return
-        }
-        let effect = leaseMachine.cancel(currentChangeCount: pasteboard.changeCount)
-        if effect == .restoreNow, let leaseSnapshot {
-            pasteboard.restore(leaseSnapshot)
-        }
-        self.leaseSnapshot = nil
-        if oldPhase != leaseMachine.phase {
-            notifyLeaseState()
-        }
-        generation &+= 1
-    }
-
-    public func manualPasteWillDispatch() {
-        let oldPhase = leaseMachine.phase
-        let effect = leaseMachine.manualPaste(currentChangeCount: pasteboard.changeCount)
-        guard effect == .scheduleRestoration else {
-            if oldPhase != leaseMachine.phase {
-                leaseSnapshot = nil
-                notifyLeaseState()
-            }
-            return
-        }
-        notifyLeaseState()
-        scheduleLeaseRestoration()
-    }
-
-    public func copyOrCutWillDispatch() {
-        let ownedChangeCounts = Set(
-            [
-                leaseMachine.phase == .inactive
-                    ? nil
-                    : leaseMachine.ownedChangeCount,
-                pendingDirectRestore?.ownedChangeCount,
-            ].compactMap { $0 }
-        )
-        guard !ownedChangeCounts.isEmpty else {
-            return
-        }
-
-        generation &+= 1
-        let reconciliationGeneration = generation
-        guard ownedChangeCounts.contains(pasteboard.changeCount) else {
-            discardClipboardObligationsForCopyOrCut()
-            return
-        }
-        scheduleCopyOrCutReconciliation(
-            generation: reconciliationGeneration,
-            ownedChangeCounts: ownedChangeCounts
-        )
+        pendingRestore = nil
+        return pasteboard.replaceContents(withPlainText: text) != nil
     }
 
     @discardableResult
@@ -275,8 +126,7 @@ public final class ClipboardTransactionController {
         postingPasteWith postPaste: () -> Bool
     ) -> Bool {
         generation &+= 1
-        cancelLease()
-        completeDirectRestoreIfOwned()
+        completePendingRestoration()
 
         let snapshot = pasteboard.snapshotReadableContents()
         guard let ownedChangeCount = pasteboard.replaceContents(withPlainText: text) else {
@@ -292,116 +142,35 @@ public final class ClipboardTransactionController {
 
         generation &+= 1
         let restoreGeneration = generation
-        pendingDirectRestore = PendingDirectRestore(
+        pendingRestore = PendingRestore(
             snapshot: snapshot,
-            ownedChangeCount: ownedChangeCount,
-            generation: restoreGeneration
+            ownedChangeCount: ownedChangeCount
         )
-        scheduleDirectRestoration(generation: restoreGeneration)
+        scheduleRestoration(generation: restoreGeneration)
         return true
     }
 
     /// Exposed for deterministic shutdown and focused tests. Restoration occurs
     /// only while the temporary pasteboard value is still owned.
     public func completePendingRestoration() {
-        completeDirectRestoreIfOwned()
-        finishLeaseRestoration()
-    }
-
-    private func scheduleLeaseRestoration() {
-        generation &+= 1
-        let restoreGeneration = generation
-        Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-            try? await Task.sleep(nanoseconds: restorationDelayNanoseconds)
-            guard restoreGeneration == generation else {
-                return
-            }
-            finishLeaseRestoration()
-        }
-    }
-
-    private func scheduleDirectRestoration(generation restoreGeneration: UInt64) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-            try? await Task.sleep(nanoseconds: restorationDelayNanoseconds)
-            guard restoreGeneration == generation else {
-                return
-            }
-            completeDirectRestoreIfOwned()
-        }
-    }
-
-    private func scheduleCopyOrCutReconciliation(
-        generation reconciliationGeneration: UInt64,
-        ownedChangeCounts: Set<Int>
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-            try? await Task.sleep(nanoseconds: restorationDelayNanoseconds)
-            guard reconciliationGeneration == generation else {
-                return
-            }
-            guard ownedChangeCounts.contains(pasteboard.changeCount) else {
-                discardClipboardObligationsForCopyOrCut()
-                return
-            }
-
-            // A no-op copy/cut must not abandon the original clipboard. If a
-            // restoration was already pending, complete it; otherwise retain
-            // the one-paste lease for the next real paste or copy.
-            completeDirectRestoreIfOwned()
-            if leaseMachine.phase == .restorationPending {
-                finishLeaseRestoration()
-            }
-        }
-    }
-
-    private func discardClipboardObligationsForCopyOrCut() {
-        let oldPhase = leaseMachine.phase
-        _ = leaseMachine.copyOrCut()
-        leaseSnapshot = nil
-        pendingDirectRestore = nil
-        if oldPhase != leaseMachine.phase {
-            notifyLeaseState()
-        }
-    }
-
-    private func finishLeaseRestoration() {
-        guard leaseMachine.phase == .restorationPending else {
+        guard let pendingRestore else {
             return
         }
-        let oldPhase = leaseMachine.phase
-        let effect = leaseMachine.finishRestoration(
-            currentChangeCount: pasteboard.changeCount
-        )
-        if effect == .restoreNow, let leaseSnapshot {
-            pasteboard.restore(leaseSnapshot)
-        }
-        leaseSnapshot = nil
-        if oldPhase != leaseMachine.phase {
-            notifyLeaseState()
-        }
-    }
-
-    private func completeDirectRestoreIfOwned() {
-        guard let pendingDirectRestore else {
+        self.pendingRestore = nil
+        guard pasteboard.changeCount == pendingRestore.ownedChangeCount else {
             return
         }
-        self.pendingDirectRestore = nil
-        guard pasteboard.changeCount == pendingDirectRestore.ownedChangeCount else {
-            return
-        }
-        pasteboard.restore(pendingDirectRestore.snapshot)
+        pasteboard.restore(pendingRestore.snapshot)
     }
 
-    private func notifyLeaseState() {
-        onLeaseStateChange?(leaseMachine.phase)
+    private func scheduleRestoration(generation restoreGeneration: UInt64) {
+        let delay = restorationDelayNanoseconds
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard let self, restoreGeneration == generation else {
+                return
+            }
+            completePendingRestoration()
+        }
     }
 }

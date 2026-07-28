@@ -5,7 +5,6 @@ final class TextInsertionTests: XCTestCase {
     func testAddsSpacesBetweenWords() {
         let context = SurroundingText(
             beforeSelection: "o",
-            selectedText: "",
             afterSelection: "w"
         )
 
@@ -21,7 +20,6 @@ final class TextInsertionTests: XCTestCase {
     func testDoesNotDuplicateWhitespace() {
         let context = SurroundingText(
             beforeSelection: " ",
-            selectedText: "",
             afterSelection: "\n"
         )
 
@@ -37,7 +35,6 @@ final class TextInsertionTests: XCTestCase {
     func testSelectionReplacementUsesOutsideBoundaries() {
         let context = SurroundingText(
             beforeSelection: "(",
-            selectedText: "old words",
             afterSelection: ")"
         )
 
@@ -56,7 +53,6 @@ final class TextInsertionTests: XCTestCase {
                 transcript: "world",
                 surroundingText: SurroundingText(
                     beforeSelection: ",",
-                    selectedText: "",
                     afterSelection: "."
                 )
             ),

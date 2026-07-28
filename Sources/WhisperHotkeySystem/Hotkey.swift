@@ -322,7 +322,7 @@ public enum GlobalHotkeyMonitorError: Error, Equatable, Sendable {
 public final class GlobalHotkeyMonitor {
     public typealias Handler = @MainActor (
         _ action: HotkeyAction,
-        _ releaseTarget: ReleaseTarget?,
+        _ insertionContext: DictationInsertionContext?,
         _ eventTimestampNanoseconds: UInt64
     ) -> Void
 
@@ -331,7 +331,7 @@ public final class GlobalHotkeyMonitor {
         let timestampNanoseconds: UInt64
     }
 
-    private let captureReleaseTarget: @MainActor () -> ReleaseTarget?
+    private let captureInsertionContext: @MainActor () -> DictationInsertionContext?
     private let holdActivationDelay: Duration
     private let handler: Handler
     private var reducer = GlobalInputReducer()
@@ -342,23 +342,23 @@ public final class GlobalHotkeyMonitor {
     private var holdActivationTask: Task<Void, Never>?
 
     public init(
-        targetProvider: AccessibilityTargetProvider,
+        contextProvider: AccessibilityContextProvider,
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
-        captureReleaseTarget = {
-            targetProvider.captureFocusedTarget()
+        captureInsertionContext = {
+            contextProvider.captureInsertionContext()
         }
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
 
     init(
-        captureReleaseTarget: @escaping @MainActor () -> ReleaseTarget?,
+        captureInsertionContext: @escaping @MainActor () -> DictationInsertionContext?,
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
-        self.captureReleaseTarget = captureReleaseTarget
+        self.captureInsertionContext = captureInsertionContext
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
@@ -531,7 +531,7 @@ public final class GlobalHotkeyMonitor {
             case .hotkey(.released):
                 handler(
                     .released,
-                    captureReleaseTarget(),
+                    captureInsertionContext(),
                     pending.timestampNanoseconds
                 )
             case let .hotkey(hotkeyAction):

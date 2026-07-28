@@ -18,153 +18,73 @@ final class ClipboardTests: XCTestCase {
         XCTAssertEqual(snapshot.items[1].representations[0].type, "public.file-url")
     }
 
-    func testManualPasteSchedulesOwnedRestoration() {
-        var machine = ClipboardLeaseStateMachine()
-        machine.install(ownedChangeCount: 7)
-
-        XCTAssertEqual(machine.manualPaste(currentChangeCount: 7), .scheduleRestoration)
-        XCTAssertEqual(machine.phase, .restorationPending)
-        XCTAssertEqual(machine.finishRestoration(currentChangeCount: 7), .restoreNow)
-        XCTAssertEqual(machine.phase, .inactive)
-    }
-
-    func testNewCopyCancelsLeaseWithoutRestoration() {
-        var machine = ClipboardLeaseStateMachine()
-        machine.install(ownedChangeCount: 7)
-
-        XCTAssertEqual(machine.copyOrCut(), .discard)
-        XCTAssertEqual(machine.phase, .inactive)
-    }
-
-    func testExternalClipboardOwnershipChangePreventsRestoration() {
-        var machine = ClipboardLeaseStateMachine()
-        machine.install(ownedChangeCount: 7)
-
-        XCTAssertEqual(machine.manualPaste(currentChangeCount: 8), .discard)
-        XCTAssertEqual(machine.phase, .inactive)
-    }
-
-    func testCancelRestoresOnlyWhenLeaseStillOwnsPasteboard() {
-        var owned = ClipboardLeaseStateMachine()
-        owned.install(ownedChangeCount: 7)
-        XCTAssertEqual(owned.cancel(currentChangeCount: 7), .restoreNow)
-
-        var changed = ClipboardLeaseStateMachine()
-        changed.install(ownedChangeCount: 7)
-        XCTAssertEqual(changed.cancel(currentChangeCount: 8), .discard)
-    }
-
     @MainActor
-    func testControllerRestoresFakePasteboardAfterManualPaste() {
-        let original = ClipboardSnapshot(items: [
-            ClipboardItemSnapshot(representations: [
-                ClipboardRepresentation(
-                    type: "public.utf8-plain-text",
-                    data: Data("original".utf8)
-                ),
-            ]),
-        ])
+    func testTemporaryPasteRestoresOriginalClipboard() {
+        let original = textSnapshot("original")
         let pasteboard = FakePasteboard(snapshot: original)
         let controller = ClipboardTransactionController(
             pasteboard: pasteboard,
             restorationDelay: 3_600
         )
 
-        XCTAssertTrue(controller.installLease("transcript"))
-        XCTAssertEqual(controller.leaseState, .awaitingPaste)
-        controller.manualPasteWillDispatch()
-        XCTAssertEqual(controller.leaseState, .restorationPending)
+        XCTAssertTrue(controller.pasteTemporarily("transcript") { true })
+        XCTAssertEqual(pasteboard.replacedTexts, ["transcript"])
         controller.completePendingRestoration()
-
-        XCTAssertEqual(controller.leaseState, .inactive)
         XCTAssertEqual(pasteboard.restoredSnapshots, [original])
     }
 
     @MainActor
-    func testControllerDoesNotOverwriteNewerFakeClipboard() {
-        let original = ClipboardSnapshot(items: [])
-        let pasteboard = FakePasteboard(snapshot: original)
+    func testTemporaryPasteDoesNotOverwriteNewerClipboard() {
+        let pasteboard = FakePasteboard(snapshot: textSnapshot("original"))
         let controller = ClipboardTransactionController(
             pasteboard: pasteboard,
             restorationDelay: 3_600
         )
 
-        XCTAssertTrue(controller.installLease("transcript"))
-        controller.manualPasteWillDispatch()
+        XCTAssertTrue(controller.pasteTemporarily("transcript") { true })
         pasteboard.simulateExternalChange()
         controller.completePendingRestoration()
-
         XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
-        XCTAssertEqual(controller.leaseState, .inactive)
     }
 
     @MainActor
-    func testCompletingDirectRestorationDoesNotDiscardAwaitingLeaseSnapshot() {
-        let original = ClipboardSnapshot(items: [
-            ClipboardItemSnapshot(representations: [
-                ClipboardRepresentation(
-                    type: "public.utf8-plain-text",
-                    data: Data("original".utf8)
-                ),
-            ]),
-        ])
+    func testFailedPastePostRestoresImmediately() {
+        let original = textSnapshot("original")
         let pasteboard = FakePasteboard(snapshot: original)
         let controller = ClipboardTransactionController(pasteboard: pasteboard)
 
-        XCTAssertTrue(controller.installLease("transcript"))
-        controller.completePendingRestoration()
-        XCTAssertEqual(controller.leaseState, .awaitingPaste)
-
-        controller.cancelLease()
-        XCTAssertEqual(controller.leaseState, .inactive)
+        XCTAssertFalse(controller.pasteTemporarily("transcript") { false })
         XCTAssertEqual(pasteboard.restoredSnapshots, [original])
     }
 
     @MainActor
-    func testNoOpCopyPreservesLeaseAndItsRestorationSnapshot() async {
-        let original = ClipboardSnapshot(items: [
+    func testPermanentCopyCancelsPendingRestoration() {
+        let pasteboard = FakePasteboard(snapshot: textSnapshot("original"))
+        let controller = ClipboardTransactionController(
+            pasteboard: pasteboard,
+            restorationDelay: 3_600
+        )
+
+        XCTAssertTrue(controller.pasteTemporarily("transcript") { true })
+        XCTAssertTrue(controller.copy("last dictation"))
+        controller.completePendingRestoration()
+
+        XCTAssertEqual(
+            pasteboard.replacedTexts,
+            ["transcript", "last dictation"]
+        )
+        XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
+    }
+
+    private func textSnapshot(_ text: String) -> ClipboardSnapshot {
+        ClipboardSnapshot(items: [
             ClipboardItemSnapshot(representations: [
                 ClipboardRepresentation(
                     type: "public.utf8-plain-text",
-                    data: Data("original".utf8)
+                    data: Data(text.utf8)
                 ),
             ]),
         ])
-        let pasteboard = FakePasteboard(snapshot: original)
-        let controller = ClipboardTransactionController(
-            pasteboard: pasteboard,
-            restorationDelay: 0.001
-        )
-
-        XCTAssertTrue(controller.installLease("transcript"))
-        controller.copyOrCutWillDispatch()
-        try? await Task.sleep(for: .milliseconds(10))
-
-        XCTAssertEqual(controller.leaseState, .awaitingPaste)
-        XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
-
-        controller.manualPasteWillDispatch()
-        controller.completePendingRestoration()
-        XCTAssertEqual(pasteboard.restoredSnapshots, [original])
-    }
-
-    @MainActor
-    func testSuccessfulCopyDiscardsLeaseOnlyAfterPasteboardChanges() async {
-        let pasteboard = FakePasteboard(snapshot: ClipboardSnapshot(items: []))
-        let controller = ClipboardTransactionController(
-            pasteboard: pasteboard,
-            restorationDelay: 0.001
-        )
-
-        XCTAssertTrue(controller.installLease("transcript"))
-        controller.copyOrCutWillDispatch()
-        XCTAssertEqual(controller.leaseState, .awaitingPaste)
-
-        pasteboard.simulateExternalChange()
-        try? await Task.sleep(for: .milliseconds(10))
-
-        XCTAssertEqual(controller.leaseState, .inactive)
-        XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
     }
 }
 
@@ -172,6 +92,7 @@ final class ClipboardTests: XCTestCase {
 private final class FakePasteboard: PasteboardAccess {
     private(set) var changeCount = 1
     private var snapshot: ClipboardSnapshot
+    private(set) var replacedTexts: [String] = []
     private(set) var restoredSnapshots: [ClipboardSnapshot] = []
 
     init(snapshot: ClipboardSnapshot) {
@@ -183,6 +104,7 @@ private final class FakePasteboard: PasteboardAccess {
     }
 
     func replaceContents(withPlainText text: String) -> Int? {
+        replacedTexts.append(text)
         snapshot = ClipboardSnapshot(items: [
             ClipboardItemSnapshot(representations: [
                 ClipboardRepresentation(

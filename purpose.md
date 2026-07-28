@@ -26,6 +26,11 @@ shortcuts remain available in this mode too. Escape cancels either mode. A
 session lasting ten minutes finalizes automatically. Bare gestures are ignored
 while a previous dictation is finishing.
 
+The menu also offers **Copy Last Dictation** after the first successful local
+transcription. It copies that latest transcript to the system clipboard as a
+normal permanent copy. Only one transcript is retained in memory, it is replaced
+by the next successful transcription, and it is discarded when the app exits.
+
 Runtime UI consists of a non-activating badge beside the Accessibility caret
 and the persistent menu-bar state icon. Standard selection ranges and
 Chromium-style text markers are both used to locate the caret. Exact caret
@@ -40,11 +45,12 @@ live text preview or success confirmation.
 Insertion always posts one local Command-V to the currently focused application.
 This naturally replaces the current selection in normal text controls. When
 nearby text is exposed through Accessibility, contextually necessary boundary
-spacing is added; missing or opaque target information never blocks the paste.
-The user is responsible for keeping the intended destination focused. The
-pasteboard transaction restores prior clipboard contents when possible and
-does not retain a transcript for a later manual paste.
+spacing is added; only one character on either side is queried, and missing or
+opaque information never blocks the paste. There is no text-role classification,
+target validation, or alternate delivery path. Pasting into a non-text control
+may do nothing or invoke that application's normal paste behavior. The
+pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for the MVP. It stores no history, performs no network
-requests, never downloads models, and removes audio/transcript state after use
-without retaining a clipboard fallback. Logs contain state and errors only.
+The app is English-only for the MVP. Beyond the single in-memory last
+dictation, it stores no history, performs no network requests, never downloads
+models, and removes audio state after use. Logs contain state and errors only.

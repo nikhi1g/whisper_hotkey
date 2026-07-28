@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class DeliveryTests: XCTestCase {
-    func testMissingAccessibilityTargetStillPastesImmediately() {
+    func testMissingAccessibilityContextStillPastesImmediately() {
         let original = ClipboardSnapshot(items: [
             ClipboardItemSnapshot(representations: [
                 ClipboardRepresentation(
@@ -24,18 +24,16 @@ final class DeliveryTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            service.deliver(transcript: "  dictated text  ", to: nil),
+            service.deliver(transcript: "  dictated text  ", context: nil),
             .inserted
         )
         XCTAssertEqual(poster.postCount, 1)
         XCTAssertEqual(pasteboard.replacedTexts, ["dictated text"])
-        XCTAssertFalse(service.clipboardLeaseActive)
-
         clipboard.completePendingRestoration()
         XCTAssertEqual(pasteboard.restoredSnapshots, [original])
     }
 
-    func testPastePostFailureRestoresClipboardWithoutInstallingLease() {
+    func testPastePostFailureRestoresClipboardWithoutRetainingTranscript() {
         let original = ClipboardSnapshot(items: [])
         let pasteboard = DeliveryTestPasteboard(snapshot: original)
         let clipboard = ClipboardTransactionController(
@@ -49,12 +47,23 @@ final class DeliveryTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            service.deliver(transcript: "dictated text", to: nil),
+            service.deliver(transcript: "dictated text", context: nil),
             .clipboardUnavailable
         )
         XCTAssertEqual(poster.postCount, 1)
         XCTAssertEqual(pasteboard.restoredSnapshots, [original])
-        XCTAssertFalse(service.clipboardLeaseActive)
+    }
+
+    func testCopyToClipboardPermanentlyReplacesExistingContents() {
+        let original = ClipboardSnapshot(items: [])
+        let pasteboard = DeliveryTestPasteboard(snapshot: original)
+        let service = TextDeliveryService(
+            clipboard: ClipboardTransactionController(pasteboard: pasteboard)
+        )
+
+        XCTAssertTrue(service.copyToClipboard("  last words  "))
+        XCTAssertEqual(pasteboard.replacedTexts, ["last words"])
+        XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
     }
 }
 

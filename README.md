@@ -37,6 +37,13 @@ delivery occurs. In normal text controls this replaces the current selection.
 Boundary spaces are added when Accessibility exposes enough surrounding text;
 missing or opaque target information never blocks delivery. There is no delayed
 clipboard fallback, so keep the intended text field focused until insertion.
+Pasting into a non-text control may do nothing or invoke that application's
+ordinary paste behavior.
+
+After a transcription, the menu item **Copy Last Dictation** permanently copies
+the latest transcript to the system clipboard. It is disabled until a transcript
+exists. Only that one transcript is held in memory; it is replaced on the next
+dictation and discarded when the app quits.
 
 The badge uses both standard macOS selection ranges and Chromium/Electron text
 markers. Exact caret placement is not universally available: if an editor
@@ -58,8 +65,9 @@ The signed app requests three local macOS permissions:
 - **Microphone** records only after an accepted bare Right Command gesture.
 - **Input Monitoring** distinguishes bare Right Command gestures from ordinary
   Right Command shortcuts and observes Escape while dictating.
-- **Accessibility** reads caret geometry and optional nearby text, then posts one
-  local Command-V for insertion. It does not gate delivery on a detected field.
+- **Accessibility** reads exact caret geometry and at most one neighboring
+  character on each side, then posts one local Command-V. It performs no target
+  validation and does not gate delivery on a detected field.
 
 macOS describes Accessibility as permission to “control this computer” because
 it offers no narrower per-API grant. `whisper_hotkey` does not request Screen
