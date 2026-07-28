@@ -47,47 +47,110 @@ public protocol LoginItemService: AnyObject {
 }
 
 @MainActor
-public final class LoginItemManager {
-    private let service: any LoginItemService
+public protocol LoginItemPreferenceStoring: AnyObject {
+    var explicitlyDisabled: Bool { get set }
+}
 
-    public convenience init() {
-        self.init(service: MainAppLoginItemService())
+@MainActor
+public final class UserDefaultsLoginItemPreferenceStore: LoginItemPreferenceStoring {
+    private let defaults: UserDefaults
+    private let key: String
+
+    public init(
+        defaults: UserDefaults = .standard,
+        key: String = "loginItemExplicitlyDisabled"
+    ) {
+        self.defaults = defaults
+        self.key = key
     }
 
-    public init(service: any LoginItemService) {
+    public var explicitlyDisabled: Bool {
+        get { defaults.bool(forKey: key) }
+        set { defaults.set(newValue, forKey: key) }
+    }
+}
+
+@MainActor
+public final class LoginItemManager {
+    private let service: any LoginItemService
+    private let preferenceStore: any LoginItemPreferenceStoring
+
+    public convenience init() {
+        self.init(
+            service: MainAppLoginItemService(),
+            preferenceStore: UserDefaultsLoginItemPreferenceStore()
+        )
+    }
+
+    public convenience init(service: any LoginItemService) {
+        self.init(
+            service: service,
+            preferenceStore: UserDefaultsLoginItemPreferenceStore()
+        )
+    }
+
+    public init(
+        service: any LoginItemService,
+        preferenceStore: any LoginItemPreferenceStoring
+    ) {
         self.service = service
+        self.preferenceStore = preferenceStore
     }
 
     public var status: LoginItemStatus {
         LoginItemStatusMapper.status(for: service.state)
     }
 
+    public var automaticRegistrationAllowed: Bool {
+        !preferenceStore.explicitlyDisabled
+    }
+
     @discardableResult
     public func register() throws -> LoginItemStatus {
+        try enableExplicitly()
+    }
+
+    @discardableResult
+    public func enableExplicitly() throws -> LoginItemStatus {
+        preferenceStore.explicitlyDisabled = false
+        return try registerIfNeeded()
+    }
+
+    @discardableResult
+    public func unregister() throws -> LoginItemStatus {
+        try disableExplicitly()
+    }
+
+    @discardableResult
+    public func disableExplicitly() throws -> LoginItemStatus {
+        preferenceStore.explicitlyDisabled = true
+        return try unregisterIfNeeded()
+    }
+
+    @discardableResult
+    public func enableAutomaticallyIfReady(_ setupIsReady: Bool) throws -> LoginItemStatus {
+        guard setupIsReady, automaticRegistrationAllowed else {
+            return status
+        }
+        return try registerIfNeeded()
+    }
+
+    public func openLoginItemsSettings() {
+        service.openLoginItemsSettings()
+    }
+
+    private func registerIfNeeded() throws -> LoginItemStatus {
         if status == .notRegistered {
             try service.register()
         }
         return status
     }
 
-    @discardableResult
-    public func unregister() throws -> LoginItemStatus {
+    private func unregisterIfNeeded() throws -> LoginItemStatus {
         if status == .enabled || status == .requiresApproval {
             try service.unregister()
         }
         return status
-    }
-
-    @discardableResult
-    public func enableAutomaticallyIfReady(_ setupIsReady: Bool) throws -> LoginItemStatus {
-        guard setupIsReady else {
-            return status
-        }
-        return try register()
-    }
-
-    public func openLoginItemsSettings() {
-        service.openLoginItemsSettings()
     }
 }
 

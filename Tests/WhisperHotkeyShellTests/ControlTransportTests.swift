@@ -108,6 +108,39 @@ final class ControlTransportTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
     }
 
+    func testPostResponseFlushCallbackReceivesRequestAndResponse() throws {
+        let directory = temporaryDirectory()
+        let socketURL = directory.appendingPathComponent("control.sock")
+        let expectedResponse = ControlResponse(ok: true, message: "Stopping.")
+        let recorder = FlushedResponseRecorder()
+        let callback = expectation(description: "response flush callback")
+        let server = ControlServer(
+            socketURL: socketURL,
+            onResponseFlushed: { request, response in
+                recorder.record(request: request, response: response)
+                callback.fulfill()
+            }
+        ) { _ in
+            expectedResponse
+        }
+
+        defer {
+            server.stop()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        try server.start()
+        XCTAssertEqual(
+            try ControlClient(socketURL: socketURL).send(.stop),
+            expectedResponse
+        )
+        wait(for: [callback], timeout: 1)
+
+        let recorded = recorder.snapshot()
+        XCTAssertEqual(recorded?.request, ControlRequest(command: .stop))
+        XCTAssertEqual(recorded?.response, expectedResponse)
+    }
+
     private func temporaryDirectory() -> URL {
         URL(
             fileURLWithPath: "/private/tmp/wh-shell-\(UUID().uuidString.prefix(8))",
@@ -147,5 +180,22 @@ final class ControlTransportTests: XCTestCase {
         guard result == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
+    }
+}
+
+private final class FlushedResponseRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: (request: ControlRequest, response: ControlResponse)?
+
+    func record(request: ControlRequest, response: ControlResponse) {
+        lock.lock()
+        value = (request, response)
+        lock.unlock()
+    }
+
+    func snapshot() -> (request: ControlRequest, response: ControlResponse)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }

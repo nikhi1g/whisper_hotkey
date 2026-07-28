@@ -87,10 +87,15 @@ public struct ControlClient: Sendable {
 
 public final class ControlServer: @unchecked Sendable {
     public typealias Handler = @Sendable (ControlRequest) async -> ControlResponse
+    public typealias ResponseFlushedHandler = @Sendable (
+        _ request: ControlRequest,
+        _ response: ControlResponse
+    ) async -> Void
 
     public let socketURL: URL
 
     private let handler: Handler
+    private let onResponseFlushed: ResponseFlushedHandler?
     private let eventQueue = DispatchQueue(
         label: "local.whisperhotkey.control-server",
         qos: .utility
@@ -105,9 +110,11 @@ public final class ControlServer: @unchecked Sendable {
 
     public init(
         socketURL: URL = WhisperHotkeyPaths.controlSocket,
+        onResponseFlushed: ResponseFlushedHandler? = nil,
         handler: @escaping Handler
     ) {
         self.socketURL = socketURL
+        self.onResponseFlushed = onResponseFlushed
         self.handler = handler
         eventQueue.setSpecific(key: queueKey, value: 1)
     }
@@ -271,12 +278,15 @@ public final class ControlServer: @unchecked Sendable {
             finishServing(descriptor)
         }
 
+        let request: ControlRequest?
         let response: ControlResponse
         do {
             let data = try readLine(from: descriptor)
-            let request = try JSONDecoder().decode(ControlRequest.self, from: data)
-            response = await handler(request)
+            let decodedRequest = try JSONDecoder().decode(ControlRequest.self, from: data)
+            request = decodedRequest
+            response = await handler(decodedRequest)
         } catch {
+            request = nil
             response = ControlResponse(
                 ok: false,
                 message: "Malformed control request."
@@ -287,17 +297,25 @@ public final class ControlServer: @unchecked Sendable {
             var payload = try JSONEncoder().encode(response)
             payload.append(0x0A)
             try writeAll(payload, to: descriptor)
+            untrackClient(descriptor)
+            if let request, let onResponseFlushed {
+                await onResponseFlushed(request, response)
+            }
         } catch {
             // The peer may have exited while an application action completed.
         }
     }
 
     private func finishServing(_ descriptor: Int32) {
+        untrackClient(descriptor)
+        Darwin.shutdown(descriptor, SHUT_RDWR)
+        Darwin.close(descriptor)
+    }
+
+    private func untrackClient(_ descriptor: Int32) {
         stateLock.lock()
         clientDescriptors.remove(descriptor)
         stateLock.unlock()
-        Darwin.shutdown(descriptor, SHUT_RDWR)
-        Darwin.close(descriptor)
     }
 
     private func prepareParentDirectory() throws {

@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import WhisperHotkeyShell
 
@@ -13,7 +14,11 @@ final class LoginItemStatusMapperTests: XCTestCase {
     @MainActor
     func testAutomaticallyRegistersOnlyWhenSetupIsReady() throws {
         let service = FakeLoginItemService()
-        let manager = LoginItemManager(service: service)
+        let preferences = FakeLoginItemPreferenceStore()
+        let manager = LoginItemManager(
+            service: service,
+            preferenceStore: preferences
+        )
 
         XCTAssertEqual(try manager.enableAutomaticallyIfReady(false), .notRegistered)
         XCTAssertEqual(service.registerCount, 0)
@@ -25,11 +30,79 @@ final class LoginItemStatusMapperTests: XCTestCase {
     @MainActor
     func testUnregisterIsIdempotentAtManagerBoundary() throws {
         let service = FakeLoginItemService(state: .enabled)
-        let manager = LoginItemManager(service: service)
+        let preferences = FakeLoginItemPreferenceStore()
+        let manager = LoginItemManager(
+            service: service,
+            preferenceStore: preferences
+        )
 
         XCTAssertEqual(try manager.unregister(), .notRegistered)
         XCTAssertEqual(try manager.unregister(), .notRegistered)
         XCTAssertEqual(service.unregisterCount, 1)
+        XCTAssertTrue(preferences.explicitlyDisabled)
+    }
+
+    @MainActor
+    func testExplicitDisablePreventsLaterAutomaticRegistration() throws {
+        let preferences = FakeLoginItemPreferenceStore()
+        let enabledService = FakeLoginItemService(state: .enabled)
+        let firstManager = LoginItemManager(
+            service: enabledService,
+            preferenceStore: preferences
+        )
+
+        XCTAssertEqual(try firstManager.disableExplicitly(), .notRegistered)
+        XCTAssertTrue(preferences.explicitlyDisabled)
+
+        let relaunchedService = FakeLoginItemService()
+        let relaunchedManager = LoginItemManager(
+            service: relaunchedService,
+            preferenceStore: preferences
+        )
+
+        XCTAssertFalse(relaunchedManager.automaticRegistrationAllowed)
+        XCTAssertEqual(
+            try relaunchedManager.enableAutomaticallyIfReady(true),
+            .notRegistered
+        )
+        XCTAssertTrue(preferences.explicitlyDisabled)
+        XCTAssertEqual(relaunchedService.registerCount, 0)
+    }
+
+    @MainActor
+    func testExplicitEnableClearsOptOutAndRegisters() throws {
+        let preferences = FakeLoginItemPreferenceStore(explicitlyDisabled: true)
+        let service = FakeLoginItemService()
+        let manager = LoginItemManager(
+            service: service,
+            preferenceStore: preferences
+        )
+
+        XCTAssertEqual(try manager.enableExplicitly(), .enabled)
+        XCTAssertTrue(manager.automaticRegistrationAllowed)
+        XCTAssertFalse(preferences.explicitlyDisabled)
+        XCTAssertEqual(service.registerCount, 1)
+    }
+
+    @MainActor
+    func testUserDefaultsPreferencePersistsAcrossStoreInstances() throws {
+        let suiteName = "local.whisperhotkey.login-item-tests.\(UUID().uuidString)"
+        let firstDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        firstDefaults.removePersistentDomain(forName: suiteName)
+        defer {
+            firstDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let firstStore = UserDefaultsLoginItemPreferenceStore(
+            defaults: firstDefaults
+        )
+        firstStore.explicitlyDisabled = true
+
+        let secondDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let secondStore = UserDefaultsLoginItemPreferenceStore(
+            defaults: secondDefaults
+        )
+        XCTAssertTrue(secondStore.explicitlyDisabled)
     }
 }
 
@@ -54,4 +127,13 @@ private final class FakeLoginItemService: LoginItemService {
     }
 
     func openLoginItemsSettings() {}
+}
+
+@MainActor
+private final class FakeLoginItemPreferenceStore: LoginItemPreferenceStoring {
+    var explicitlyDisabled: Bool
+
+    init(explicitlyDisabled: Bool = false) {
+        self.explicitlyDisabled = explicitlyDisabled
+    }
 }
