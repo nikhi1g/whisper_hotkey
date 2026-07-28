@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 ASSETS = ROOT / "Assets"
 DIST = ROOT / "dist"
 APP = DIST / "whisper_hotkey.app"
@@ -50,14 +51,14 @@ def write_info_plist() -> None:
         "CFBundleDisplayName": "whisper_hotkey",
         "CFBundleIconFile": "AppIcon",
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "0.1.0",
+        "CFBundleShortVersionString": VERSION,
         "CFBundleVersion": "1",
         "LSMinimumSystemVersion": "14.0",
         "LSUIElement": True,
         "NSHighResolutionCapable": True,
         "NSMicrophoneUsageDescription": (
-            "whisper_hotkey records only while Right Command is held and "
-            "transcribes the temporary audio locally."
+            "whisper_hotkey records only during an active dictation gesture "
+            "and transcribes the temporary audio locally."
         ),
     }
     with (CONTENTS / "Info.plist").open("wb") as handle:

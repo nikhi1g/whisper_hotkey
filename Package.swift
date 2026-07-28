@@ -2,6 +2,11 @@
 
 import PackageDescription
 
+let whisperPrefix = Context.environment["WHISPER_CPP_PREFIX"]
+    ?? "/opt/homebrew/opt/whisper-cpp"
+let ggmlPrefix = Context.environment["GGML_PREFIX"]
+    ?? "/opt/homebrew/opt/ggml"
+
 let package = Package(
     name: "whisper_hotkey",
     platforms: [.macOS(.v14)],
@@ -62,20 +67,20 @@ let package = Package(
             path: "Sources/WhisperModelHelper",
             cxxSettings: [
                 .unsafeFlags([
-                    "-I/opt/homebrew/opt/whisper-cpp/include",
-                    "-I/opt/homebrew/opt/ggml/include",
+                    "-I\(whisperPrefix)/include",
+                    "-I\(ggmlPrefix)/include",
                 ]),
             ],
             linkerSettings: [
                 .unsafeFlags([
-                    "-L/opt/homebrew/opt/whisper-cpp/lib",
-                    "-L/opt/homebrew/opt/ggml/lib",
+                    "-L\(whisperPrefix)/lib",
+                    "-L\(ggmlPrefix)/lib",
                     "-lwhisper",
                     "-lggml",
                     "-Xlinker", "-rpath",
-                    "-Xlinker", "/opt/homebrew/opt/whisper-cpp/lib",
+                    "-Xlinker", "\(whisperPrefix)/lib",
                     "-Xlinker", "-rpath",
-                    "-Xlinker", "/opt/homebrew/opt/ggml/lib",
+                    "-Xlinker", "\(ggmlPrefix)/lib",
                 ]),
             ]
         ),

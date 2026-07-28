@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install whisper.cpp
+        run: brew install whisper-cpp
+      - name: Configure Homebrew paths
+        run: |
+          echo "WHISPER_CPP_PREFIX=$(brew --prefix whisper-cpp)" >> "$GITHUB_ENV"
+          echo "GGML_PREFIX=$(brew --prefix ggml)" >> "$GITHUB_ENV"
+      - name: Test
+        run: swift test

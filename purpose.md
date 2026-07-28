@@ -75,6 +75,8 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for the MVP. Beyond the single in-memory last
+The app is English-only for version 1.0.0. Beyond the single in-memory last
 dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
+The separately invoked `run.sh` bootstrap may download selected documented
+models, but installs them only after pinned SHA-256 verification.

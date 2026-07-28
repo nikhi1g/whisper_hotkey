@@ -12,8 +12,9 @@ product contract for this repository.
   Dock icon, transcript history, network request, or live transcript preview.
 - The only persistent UI is a one-time permissions window. Runtime UI is a
   non-activating caret-attached Listening/Transcribing/Error badge.
-- Use the installed local Base English whisper.cpp model. Never download a model
-  or send audio/transcripts to a remote service.
+- The running app uses installed local whisper.cpp models and never downloads a
+  model or sends audio/transcripts remotely. The explicit `run.sh` bootstrap may
+  download documented models only with pinned SHA-256 verification.
 - Audio and transcripts are ephemeral. Logs must not contain either.
 
 ## Structure

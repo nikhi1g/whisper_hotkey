@@ -1,6 +1,9 @@
 # whisper_hotkey
 
-`whisper_hotkey` is a private, background macOS dictation utility. By default,
+Private, local, low-resource dictation for any macOS application, powered by
+whisper.cpp.
+
+`whisper_hotkey` is a background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
 English Whisper transcription at the current selection. The menu can instead
 select either side of Command, Shift, Option, or Control, plus Caps Lock,
@@ -18,6 +21,27 @@ caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
 Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
 and then presses Return. In the final 30 seconds the badge switches to
 elapsed/limit and pulses orange toward deep red.
+
+## Quick start
+
+Requirements: Apple Silicon, macOS 14+, Xcode Command Line Tools, and
+[Homebrew](https://brew.sh).
+
+```sh
+git clone https://github.com/nikhi1g/whisper_hotkey.git
+cd whisper_hotkey
+./run.sh
+```
+
+The script installs Homebrew `whisper-cpp` when needed, downloads and verifies
+Base English, builds/signs the app, installs it in `/Applications`, launches it,
+and opens permission setup. With no Apple signing identity it clearly warns and
+uses an ad-hoc local signature; macOS may then request permissions again after a
+future rebuild.
+
+Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
+`./run.sh --all-models` for all four. See [Models](docs/MODELS.md) and
+[Architecture](docs/ARCHITECTURE.md).
 
 ## Use
 
@@ -71,7 +95,7 @@ update restores it and periodically keeps it frontmost until recording ends.
 
 ## Setup and permissions
 
-Install first, then open setup:
+For manual installation instead of `run.sh`:
 
 ```sh
 python3 build_app.py
@@ -122,7 +146,7 @@ process. Use `whisper_hotkey stop` when both behaviors are wanted.
 
 ## Local runtime and privacy
 
-This build uses the already-installed local stack:
+The installed runtime uses:
 
 - `/opt/homebrew/bin/whisper-cli`
 - `/opt/homebrew/opt/whisper-cpp/`
@@ -138,7 +162,8 @@ The model menu offers:
 - **Large-v3 Turbo Q5 (Best Balance, 547 MB)** — selectable when its local file
   is present.
 
-Missing models remain visible but disabled. The app never downloads weights.
+Missing models remain visible but disabled. The running app never downloads
+weights; only the explicitly invoked bootstrap does.
 The decoder keeps beam search at width five for accuracy, uses Metal and flash
 attention, and assigns half the available logical CPUs up to eight threads.
 
@@ -155,10 +180,9 @@ Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or
 transcript text. No model is downloaded and no network request is made.
 
-The Swift package declares macOS 14 as its source-level minimum. The currently
-installed Homebrew Whisper/GGML libraries were built for this Mac's current
-macOS toolchain, so the produced bundle is a host-local MVP rather than a
-portable release for older Macs.
+The Swift package requires macOS 14. Version 1.0.0 is source-distributed for
+Apple Silicon because the helper links to the user's Homebrew whisper.cpp/GGML
+installation. A notarized universal binary is not currently published.
 
 ## Development
 
@@ -175,3 +199,8 @@ Apple Development or Developer ID identity, signs every nested executable
 before the outer app, and verifies the finished bundle. `install.py` safely
 stops the old instance, atomically replaces the controller, installs the app,
 verifies executable hashes, and relaunches it.
+
+`run.sh` is the explicit certificate-free source-install path: it supplies an
+ad-hoc identity with a visible warning when no stable identity exists.
+
+See [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
