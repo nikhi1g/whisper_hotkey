@@ -123,6 +123,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectRecordingLimit: { [weak self] limit in
                 self?.selectRecordingLimit(limit)
             },
+            restart: { [weak self] in
+                self?.restartApplication()
+            },
             quit: {
                 NSApp.terminate(nil)
             }
@@ -935,6 +938,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         if !delivery.copyToClipboard(lastDictation) {
             fail("Clipboard unavailable — try again.")
         }
+    }
+
+    private func restartApplication() {
+        guard !isTerminating else {
+            return
+        }
+        do {
+            try ApplicationRelauncher().schedule()
+        } catch {
+            logger.error(
+                "Could not schedule restart: \(error.localizedDescription, privacy: .public)"
+            )
+            fail("Could not restart — try again.")
+            return
+        }
+        logger.info("Restart requested from menu")
+        NSApp.terminate(nil)
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {

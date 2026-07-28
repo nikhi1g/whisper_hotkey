@@ -37,7 +37,7 @@ down the helper, and deletes the private audio directory.
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
 | `whisper_hotkey` | Terminal control client |
 | `WhisperModelHelper` | Per-dictation C++ bridge to whisper.cpp |
-| `WhisperHotkeyLoginLauncher` | Signed one-shot login launcher |
+| `WhisperHotkeyLoginLauncher` | Signed one-shot login and post-exit restart launcher |
 
 ## State and delivery
 

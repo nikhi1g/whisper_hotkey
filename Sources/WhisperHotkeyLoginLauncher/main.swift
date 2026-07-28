@@ -5,6 +5,8 @@ import Foundation
 
 private let mainApplicationBundleIdentifier = "local.whisperhotkey.app"
 private let launchTimeout: DispatchTimeInterval = .seconds(10)
+private let processExitTimeout: TimeInterval = 30
+private let processPollIntervalMicroseconds: useconds_t = 50_000
 
 private func fail(_ message: String) -> Never {
     let line = "whisper_hotkey login launcher: \(message)\n"
@@ -83,12 +85,45 @@ private func containingApplicationURL(for executableURL: URL) -> URL? {
     return applicationURL
 }
 
+private func waitForProcessToExit(
+    arguments: ArraySlice<String>
+) {
+    guard !arguments.isEmpty else {
+        return
+    }
+    guard arguments.count == 2,
+          arguments.first == "--wait-for-pid",
+          let rawPID = arguments.last,
+          let processIdentifier = pid_t(rawPID),
+          processIdentifier > 0,
+          processIdentifier != getpid()
+    else {
+        fail("invalid relaunch arguments")
+    }
+
+    let deadline = Date().addingTimeInterval(processExitTimeout)
+    while Date() < deadline {
+        errno = 0
+        if kill(processIdentifier, 0) == -1 {
+            if errno == ESRCH {
+                return
+            }
+            if errno != EINTR {
+                fail("could not observe the exiting application")
+            }
+        }
+        usleep(processPollIntervalMicroseconds)
+    }
+    fail("timed out waiting for the application to exit")
+}
+
 guard let launcherURL = executableURL() else {
     fail("could not resolve its executable")
 }
 guard let applicationURL = containingApplicationURL(for: launcherURL) else {
     fail("could not resolve its signed containing application")
 }
+waitForProcessToExit(arguments: CommandLine.arguments.dropFirst())
 
 private let completion = DispatchSemaphore(value: 0)
 private let result = LaunchResult()

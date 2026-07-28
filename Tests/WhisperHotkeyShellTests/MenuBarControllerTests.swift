@@ -87,4 +87,38 @@ final class MenuBarControllerTests: XCTestCase {
             )
         }
     }
+
+    @MainActor
+    func testRestartIsImmediatelyBeforeQuitAndRoutesItsAction() {
+        var restartCount = 0
+        let controller = MenuBarController(
+            toggleDictationEnabled: true,
+            selectedHotkey: .rightOption,
+            selectedModel: .baseEnglish,
+            recordingLimit: .minutes5,
+            availableModels: [.baseEnglish],
+            hasLastDictation: false,
+            actions: MenuBarActions(
+                showSetup: {},
+                cancelDictation: {},
+                copyLastDictation: {},
+                toggleDictationMode: {},
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                restart: { restartCount += 1 },
+                quit: {}
+            )
+        )
+        let titles = controller.menuItemTitlesForTesting
+        let restartIndex = try! XCTUnwrap(
+            titles.firstIndex(of: "Restart whisper_hotkey")
+        )
+
+        XCTAssertEqual(titles[restartIndex + 1], "Quit whisper_hotkey")
+        controller.activateMenuItemForTesting(
+            titled: "Restart whisper_hotkey"
+        )
+        XCTAssertEqual(restartCount, 1)
+    }
 }

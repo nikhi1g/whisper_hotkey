@@ -128,6 +128,11 @@ headless app at login and exits; it is not a second persistent worker. macOS
 shows this registration under **System Settings → General → Login Items &
 Extensions → App Background Activity**.
 
+The menu-bar dropdown includes **Restart whisper_hotkey** immediately before
+**Quit whisper_hotkey**. Restart performs the same bounded cleanup as Quit, then
+the signed bundled launcher reopens that exact application bundle after the old
+process has exited.
+
 ## Terminal control
 
 The installer places the app at `/Applications/whisper_hotkey.app` and the

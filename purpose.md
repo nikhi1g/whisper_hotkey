@@ -4,7 +4,10 @@
 text while keeping its always-running cost as close to zero as practical.
 
 The app has no Dock presence. A lightweight menu-bar item shows current state
-and offers setup, cancellation, and quit controls without polling. It starts at
+and offers setup, cancellation, restart, and quit controls without polling.
+Restart appears immediately before Quit, completes normal cleanup, and uses the
+signed bundled one-shot launcher to reopen the installed app only after the old
+process exits. It starts at
 login as a visible macOS background item: a signed, one-shot Service Management
 LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time setup window

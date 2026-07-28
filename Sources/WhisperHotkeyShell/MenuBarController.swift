@@ -87,6 +87,7 @@ public struct MenuBarActions {
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
+    public var restart: () -> Void
     public var quit: () -> Void
 
     public init(
@@ -97,6 +98,7 @@ public struct MenuBarActions {
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
+        restart: @escaping () -> Void,
         quit: @escaping () -> Void
     ) {
         self.showSetup = showSetup
@@ -106,6 +108,7 @@ public struct MenuBarActions {
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectRecordingLimit = selectRecordingLimit
+        self.restart = restart
         self.quit = quit
     }
 }
@@ -142,6 +145,11 @@ public final class MenuBarController: NSObject {
     private let recordingLimitItem = NSMenuItem(
         title: "Recording Limit",
         action: nil,
+        keyEquivalent: ""
+    )
+    private let restartItem = NSMenuItem(
+        title: "Restart whisper_hotkey",
+        action: #selector(restart),
         keyEquivalent: ""
     )
     private var recordingLimitItems: [RecordingLimit: NSMenuItem] = [:]
@@ -240,6 +248,9 @@ public final class MenuBarController: NSObject {
         setupItem.target = self
         menu.addItem(setupItem)
         menu.addItem(.separator())
+
+        restartItem.target = self
+        menu.addItem(restartItem)
 
         let quitItem = NSMenuItem(
             title: "Quit whisper_hotkey",
@@ -364,6 +375,23 @@ public final class MenuBarController: NSObject {
 
     @objc private func quit() {
         actions.quit()
+    }
+
+    @objc private func restart() {
+        actions.restart()
+    }
+
+    var menuItemTitlesForTesting: [String] {
+        statusItem.menu?.items.map(\.title) ?? []
+    }
+
+    func activateMenuItemForTesting(titled title: String) {
+        guard let menu = statusItem.menu,
+              let index = menu.items.firstIndex(where: { $0.title == title })
+        else {
+            return
+        }
+        menu.performActionForItem(at: index)
     }
 }
 
