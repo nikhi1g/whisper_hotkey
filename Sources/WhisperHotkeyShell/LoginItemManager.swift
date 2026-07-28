@@ -77,7 +77,7 @@ public final class LoginItemManager {
 
     public convenience init() {
         self.init(
-            service: MainAppLoginItemService(),
+            service: LaunchAgentLoginItemService(),
             preferenceStore: UserDefaultsLoginItemPreferenceStore()
         )
     }
@@ -155,8 +155,10 @@ public final class LoginItemManager {
 }
 
 @MainActor
-private final class MainAppLoginItemService: LoginItemService {
-    private let service = SMAppService.mainApp
+private final class LaunchAgentLoginItemService: LoginItemService {
+    private static let agentPlistName =
+        "local.whisperhotkey.app.login-launcher.plist"
+    private let service = SMAppService.agent(plistName: agentPlistName)
 
     var state: LoginItemServiceState {
         switch service.status {

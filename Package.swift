@@ -13,6 +13,10 @@ let package = Package(
         .executable(name: "WhisperHotkeyApp", targets: ["WhisperHotkeyApp"]),
         .executable(name: "whisper_hotkey", targets: ["whisper_hotkey"]),
         .executable(name: "WhisperModelHelper", targets: ["WhisperModelHelper"]),
+        .executable(
+            name: "WhisperHotkeyLoginLauncher",
+            targets: ["WhisperHotkeyLoginLauncher"]
+        ),
     ],
     targets: [
         .target(name: "WhisperHotkeyCore"),
@@ -40,6 +44,18 @@ let package = Package(
         .executableTarget(
             name: "whisper_hotkey",
             dependencies: ["WhisperHotkeyCore"]
+        ),
+        .executableTarget(
+            name: "WhisperHotkeyLoginLauncher",
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Sources/WhisperHotkeyLoginLauncher/Info.plist",
+                ]),
+            ]
         ),
         .executableTarget(
             name: "WhisperModelHelper",

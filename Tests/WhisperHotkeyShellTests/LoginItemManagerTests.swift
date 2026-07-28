@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import WhisperHotkeyShell
 
-final class LoginItemStatusMapperTests: XCTestCase {
+final class LoginItemManagerTests: XCTestCase {
     func testMapsEveryServiceState() {
         XCTAssertEqual(LoginItemStatusMapper.status(for: .enabled), .enabled)
         XCTAssertEqual(LoginItemStatusMapper.status(for: .requiresApproval), .requiresApproval)
