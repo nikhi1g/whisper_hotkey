@@ -34,7 +34,7 @@ def running_pids() -> list[int]:
         [
             "/usr/bin/pgrep",
             "-f",
-            f"^{re.escape(str(INSTALLED_EXECUTABLE))}$",
+            f"^{re.escape(str(INSTALLED_EXECUTABLE))}(?:\\s|$)",
         ],
         capture_output=True,
         text=True,
@@ -96,12 +96,27 @@ def verify_installation() -> None:
 def launch_and_verify() -> None:
     subprocess.run(["/usr/bin/open", "-gj", str(INSTALLED_APP)], check=True)
     deadline = time.monotonic() + 5
+    last_status_error = ""
     while time.monotonic() < deadline:
         if running_pids():
-            return
+            try:
+                status = subprocess.run(
+                    [str(INSTALLED_CLI), "status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                last_status_error = "control status timed out"
+            else:
+                if status.returncode == 0:
+                    return
+                last_status_error = status.stderr.strip() or status.stdout.strip()
         time.sleep(0.05)
     raise RuntimeError(
-        "The installed app did not launch from /Applications within five seconds."
+        "The installed app did not become control-ready within five seconds"
+        + (f": {last_status_error}" if last_status_error else ".")
     )
 
 

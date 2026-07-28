@@ -12,6 +12,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let maximumDuration: Duration = .seconds(600)
     private static let errorPresentationDuration: Duration = .seconds(2)
 
+    private struct PendingRecognizerWork {
+        let precedingCleanup: Task<Void, Never>?
+        let preload: Task<Void, Never>?
+        let recognition: Task<Void, Never>?
+    }
+
     private let logger = Logger(
         subsystem: WhisperHotkeyPaths.bundleIdentifier,
         category: "lifecycle"
@@ -74,6 +80,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var badgeFieldRect: CGRect?
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
+    private var startupBadgeVisible = false
     private var isTerminating = false
     private var terminationCleanupStarted = false
 
@@ -100,13 +107,25 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         terminationCleanupStarted = true
         isTerminating = true
-        stopSynchronousServices()
+        let pendingWork = stopSynchronousServices()
 
         Task { @MainActor [weak self] in
             guard let self else {
                 sender.reply(toApplicationShouldTerminate: true)
                 return
             }
+            if let precedingCleanup = pendingWork.precedingCleanup {
+                await precedingCleanup.value
+            }
+            await recognizer.shutdown()
+            if let preload = pendingWork.preload {
+                await preload.value
+            }
+            if let recognition = pendingWork.recognition {
+                await recognition.value
+            }
+            // A wrapper already queued at shutdown must be unable to outlive
+            // the final process-group sweep.
             await recognizer.shutdown()
             logger.info("Agent stopped")
             sender.reply(toApplicationShouldTerminate: true)
@@ -116,7 +135,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
-        stopSynchronousServices()
+        _ = stopSynchronousServices()
     }
 
     @objc private func applicationDidBecomeActive() {
@@ -191,14 +210,27 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         case .enableLogin:
             do {
-                _ = try loginItemManager.register()
-                return ControlResponse(
-                    ok: true,
-                    message: loginItemManager.status == .requiresApproval
-                        ? "Login Item needs approval in System Settings."
-                        : "Login Item enabled.",
-                    status: runtimeStatus
-                )
+                let resultingStatus = try loginItemManager.register()
+                switch resultingStatus {
+                case .enabled:
+                    return ControlResponse(
+                        ok: true,
+                        message: "Login Item enabled.",
+                        status: runtimeStatus
+                    )
+                case .requiresApproval:
+                    return ControlResponse(
+                        ok: true,
+                        message: "Login Item needs approval in System Settings.",
+                        status: runtimeStatus
+                    )
+                case .notRegistered, .notFound, .unknown:
+                    return ControlResponse(
+                        ok: false,
+                        message: "Login Item could not be enabled (\(resultingStatus.rawValue)).",
+                        status: runtimeStatus
+                    )
+                }
             } catch {
                 return ControlResponse(
                     ok: false,
@@ -248,20 +280,30 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func reconcileRuntime(showSetupIfNeeded: Bool) {
         let readiness = setupReadiness
+        var forceSetup = false
         if readiness.isReady {
             do {
                 try hotkeyMonitor.start()
                 startupError = nil
+                if startupBadgeVisible, !machine.phase.isBusy {
+                    badge.hide()
+                    startupBadgeVisible = false
+                }
             } catch {
                 startupError = "Hotkey monitor failed: \(error.localizedDescription)"
                 logger.error("\(self.startupError ?? "Hotkey monitor failed", privacy: .public)")
+                badge.present(.error("Hotkey unavailable — run setup"))
+                startupBadgeVisible = true
+                forceSetup = true
             }
         } else {
             hotkeyMonitor.stop()
         }
 
-        if showSetupIfNeeded || !readiness.isReady {
-            _ = setupWindowController.showIfNeeded(force: !readiness.isReady)
+        if showSetupIfNeeded || !readiness.isReady || forceSetup {
+            _ = setupWindowController.showIfNeeded(
+                force: !readiness.isReady || forceSetup
+            )
         }
     }
 
@@ -338,8 +380,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let generation = sessionGeneration
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
-        recognitionTask?.cancel()
-        recognitionTask = nil
         maximumDurationTask?.cancel()
 
         let precedingCleanup = recognizerCleanupTask
@@ -392,8 +432,20 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
         let generation = sessionGeneration
+        let precedingCleanup = recognizerCleanupTask
+        let sessionPreload = preloadTask
         recognitionTask = Task { @MainActor [weak self, recognizer] in
+            defer {
+                audio.delete()
+            }
             do {
+                if let precedingCleanup {
+                    await precedingCleanup.value
+                }
+                if let sessionPreload {
+                    await sessionPreload.value
+                }
+                try Task.checkCancellation()
                 let transcript = try await recognizer.transcribe(audio)
                 guard let self,
                       generation == sessionGeneration,
@@ -405,7 +457,16 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 recognitionTask = nil
                 process(.transcriptReady, transcript: transcript)
             } catch is CancellationError {
-                audio.delete()
+                guard !Task.isCancelled,
+                      let self,
+                      generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                preloadTask = nil
+                recognitionTask = nil
+                fail("Transcription was interrupted — try again.")
             } catch {
                 guard let self,
                       generation == sessionGeneration,
@@ -457,16 +518,28 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         sessionGeneration &+= 1
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
-        preloadTask?.cancel()
+        let cancelledPreload = preloadTask
+        cancelledPreload?.cancel()
         preloadTask = nil
-        recognitionTask?.cancel()
+        let cancelledRecognition = recognitionTask
+        cancelledRecognition?.cancel()
         recognitionTask = nil
         recorder.cancel()
         releaseTarget = nil
 
+        let precedingCleanup = recognizerCleanupTask
         let recognizer = recognizer
         recognizerCleanupTask = Task.detached(priority: .userInitiated) {
+            if let precedingCleanup {
+                await precedingCleanup.value
+            }
             await recognizer.cancel()
+            if let cancelledPreload {
+                await cancelledPreload.value
+            }
+            if let cancelledRecognition {
+                await cancelledRecognition.value
+            }
         }
     }
 
@@ -513,7 +586,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func stopSynchronousServices() {
+    private func stopSynchronousServices() -> PendingRecognizerWork {
+        let pendingWork = PendingRecognizerWork(
+            precedingCleanup: recognizerCleanupTask,
+            preload: preloadTask,
+            recognition: recognitionTask
+        )
         scheduledTerminationTask?.cancel()
         scheduledTerminationTask = nil
         maximumDurationTask?.cancel()
@@ -524,6 +602,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         preloadTask = nil
         recognitionTask?.cancel()
         recognitionTask = nil
+        recognizerCleanupTask = nil
         hotkeyMonitor.stop()
         recorder.cancel()
         badge.hide()
@@ -532,6 +611,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         controlServer?.stop()
         controlServer = nil
         releaseTarget = nil
+        return pendingWork
     }
 
     private var setupReadiness: SetupReadiness {
