@@ -45,7 +45,10 @@ let package = Package(
             name: "WhisperModelHelper",
             path: "Sources/WhisperModelHelper",
             cxxSettings: [
-                .unsafeFlags(["-I/opt/homebrew/opt/whisper-cpp/include"]),
+                .unsafeFlags([
+                    "-I/opt/homebrew/opt/whisper-cpp/include",
+                    "-I/opt/homebrew/opt/ggml/include",
+                ]),
             ],
             linkerSettings: [
                 .unsafeFlags([
