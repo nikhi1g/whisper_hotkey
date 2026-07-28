@@ -1,4 +1,5 @@
 @preconcurrency import ApplicationServices
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -123,7 +124,9 @@ public enum TargetValidator {
 @MainActor
 public final class ReleaseTarget {
     public let state: CapturedTargetState
+    /// AppKit global screen coordinates.
     public let caretRect: CGRect?
+    /// AppKit global screen coordinates.
     public let fieldRect: CGRect?
 
     fileprivate let element: AXUIElement
@@ -161,11 +164,12 @@ public final class AccessibilityTargetProvider {
             element,
             attribute: kAXSelectedTextRangeAttribute
         ),
-        let caretRect = copyCaretRect(element, selectionRange: selection)
+        let caretRect = copyCaretRect(element, selectionRange: selection),
+        let appKitRect = appKitScreenRect(caretRect)
         {
-            return caretRect
+            return appKitRect
         }
-        return copyElementRect(element)
+        return copyElementRect(element).flatMap(appKitScreenRect)
     }
 
     public func captureFocusedTarget() -> ReleaseTarget? {
@@ -233,9 +237,16 @@ public final class AccessibilityTargetProvider {
         let surroundingText = isSecure
             ? nil
             : makeSurroundingText(element: element, selectionRange: selectionRange)
-        let fieldRect = copyElementRect(element)
-        let caretRect = selectionRange.flatMap {
+        let accessibilityFieldRect = copyElementRect(element)
+        let accessibilityCaretRect = selectionRange.flatMap {
             copyCaretRect(element, selectionRange: $0)
+        }
+        let primaryScreenFrame = NSScreen.screens.first?.frame
+        let fieldRect = accessibilityFieldRect.flatMap {
+            appKitScreenRect($0, primaryScreenFrame: primaryScreenFrame)
+        }
+        let caretRect = accessibilityCaretRect.flatMap {
+            appKitScreenRect($0, primaryScreenFrame: primaryScreenFrame)
         }
 
         return Inspection(
@@ -304,6 +315,26 @@ public final class AccessibilityTargetProvider {
             return nil
         }
         return copyBounds(element, range: selectionRange)
+    }
+
+    private func appKitScreenRect(_ accessibilityRect: CGRect) -> CGRect? {
+        appKitScreenRect(
+            accessibilityRect,
+            primaryScreenFrame: NSScreen.screens.first?.frame
+        )
+    }
+
+    private func appKitScreenRect(
+        _ accessibilityRect: CGRect,
+        primaryScreenFrame: CGRect?
+    ) -> CGRect? {
+        guard let primaryScreenFrame else {
+            return nil
+        }
+        return AccessibilityScreenCoordinates.appKitRect(
+            from: accessibilityRect,
+            primaryScreenFrame: primaryScreenFrame
+        )
     }
 }
 
