@@ -81,6 +81,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
     private var startupBadgeVisible = false
+    private var runtimeReadyForHotkey = false
     private var isTerminating = false
     private var terminationCleanupStarted = false
 
@@ -107,6 +108,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         terminationCleanupStarted = true
         isTerminating = true
+        runtimeReadyForHotkey = false
+        if machine.phase.isBusy {
+            process(.cancel)
+        } else {
+            sessionGeneration &+= 1
+        }
         let pendingWork = stopSynchronousServices()
 
         Task { @MainActor [weak self] in
@@ -284,12 +291,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         if readiness.isReady {
             do {
                 try hotkeyMonitor.start()
+                runtimeReadyForHotkey = true
                 startupError = nil
                 if startupBadgeVisible, !machine.phase.isBusy {
                     badge.hide()
                     startupBadgeVisible = false
                 }
             } catch {
+                deactivateRuntime()
                 startupError = "Hotkey monitor failed: \(error.localizedDescription)"
                 logger.error("\(self.startupError ?? "Hotkey monitor failed", privacy: .public)")
                 badge.present(.error("Hotkey unavailable — run setup"))
@@ -297,7 +306,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 forceSetup = true
             }
         } else {
-            hotkeyMonitor.stop()
+            deactivateRuntime()
         }
 
         if showSetupIfNeeded || !readiness.isReady || forceSetup {
@@ -312,7 +321,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         releaseTarget suppliedTarget: ReleaseTarget?,
         eventTime: TimeInterval
     ) {
-        guard !isTerminating else {
+        guard !isTerminating, runtimeReadyForHotkey else {
             return
         }
 
@@ -408,6 +417,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             guard let self,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
                   generation == sessionGeneration,
                   machine.phase == .preparing || machine.phase == .listening
             else {
@@ -448,6 +459,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 try Task.checkCancellation()
                 let transcript = try await recognizer.transcribe(audio)
                 guard let self,
+                      runtimeReadyForHotkey,
+                      !isTerminating,
                       generation == sessionGeneration,
                       machine.phase == .transcribing
                 else {
@@ -459,6 +472,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             } catch is CancellationError {
                 guard !Task.isCancelled,
                       let self,
+                      runtimeReadyForHotkey,
+                      !isTerminating,
                       generation == sessionGeneration,
                       machine.phase == .transcribing
                 else {
@@ -469,6 +484,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 fail("Transcription was interrupted — try again.")
             } catch {
                 guard let self,
+                      runtimeReadyForHotkey,
+                      !isTerminating,
                       generation == sessionGeneration,
                       machine.phase == .transcribing
                 else {
@@ -584,6 +601,20 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             badgeCaretRect = target.caretRect
             badgeFieldRect = target.fieldRect
         }
+    }
+
+    private func deactivateRuntime() {
+        let wasReady = runtimeReadyForHotkey
+        runtimeReadyForHotkey = false
+        hotkeyMonitor.stop()
+
+        if machine.phase.isBusy {
+            process(.cancel)
+        } else if wasReady {
+            sessionGeneration &+= 1
+        }
+        clipboard.completePendingRestoration()
+        clipboard.cancelLease()
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {
