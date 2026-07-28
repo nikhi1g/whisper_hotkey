@@ -65,6 +65,26 @@ final class DeliveryTests: XCTestCase {
         XCTAssertEqual(pasteboard.replacedTexts, ["last words"])
         XCTAssertTrue(pasteboard.restoredSnapshots.isEmpty)
     }
+
+    func testReturnIsExplicitAndIndependentOfSuccessfulPaste() {
+        let pasteboard = DeliveryTestPasteboard(
+            snapshot: ClipboardSnapshot(items: [])
+        )
+        let returnPoster = DeliveryTestReturnPoster(result: true)
+        let service = TextDeliveryService(
+            clipboard: ClipboardTransactionController(pasteboard: pasteboard),
+            pastePoster: DeliveryTestPastePoster(result: true),
+            returnKeyPoster: returnPoster
+        )
+
+        XCTAssertEqual(
+            service.deliver(transcript: "send this", context: nil),
+            .inserted
+        )
+        XCTAssertEqual(returnPoster.postCount, 0)
+        XCTAssertTrue(service.pressReturn())
+        XCTAssertEqual(returnPoster.postCount, 1)
+    }
 }
 
 @MainActor
@@ -77,6 +97,21 @@ private final class DeliveryTestPastePoster: CommandPastePosting {
     }
 
     func postCommandV() -> Bool {
+        postCount += 1
+        return result
+    }
+}
+
+@MainActor
+private final class DeliveryTestReturnPoster: ReturnKeyPosting {
+    private let result: Bool
+    private(set) var postCount = 0
+
+    init(result: Bool) {
+        self.result = result
+    }
+
+    func postReturn() -> Bool {
         postCount += 1
         return result
     }

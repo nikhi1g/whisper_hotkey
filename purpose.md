@@ -51,11 +51,15 @@ geometry is feasible only when the destination app exposes one of those
 Accessibility representations. If it does not, the badge snapshots the current
 pointer position when each runtime state begins; it does not poll or follow the
 pointer. This fallback affects presentation only and never validates or changes
-the paste destination. While listening, the badge shows a five-bar waveform
-sampled from the existing audio callback at 10 Hz and an elapsed timer instead
-of status words. During the last 30 seconds it shows elapsed/limit and pulses
-from orange toward deep red. The update task exists only while recording. Other
-badge states show Transcribing, Busy, or an actionable error. The menu icon
+the paste destination. While listening, the badge shows a sensitive scrolling
+23-sample waveform read from the existing audio callback at 20 Hz, an elapsed
+timer, a Stop and Insert button, and a Send button. Stop and Insert has the same
+result as hotkey release. Send inserts successfully before posting an unmodified
+Return. The panel remains non-activating, and controller clicks are excluded
+from modifier-chord cancellation. During the last 30 seconds it shows
+elapsed/limit and pulses from orange toward deep red. The update task exists only
+while recording and restores the panel if AppKit orders it out. Other badge
+states show Transcribing, Busy, or an actionable error. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. There is no live text preview or success
 confirmation.

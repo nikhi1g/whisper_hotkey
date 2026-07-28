@@ -10,6 +10,12 @@ import WhisperHotkeySystem
 @MainActor
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let errorPresentationDuration: Duration = .seconds(2)
+    private static let postPasteSubmitDelay: Duration = .milliseconds(80)
+
+    private enum CompletionBehavior {
+        case insert
+        case insertAndSubmit
+    }
 
     private struct PendingRecognizerWork {
         let precedingCleanup: Task<Void, Never>?
@@ -25,8 +31,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private let recognizer = WhisperRecognizer()
     private let contextProvider = AccessibilityContextProvider()
     private let clipboard = ClipboardTransactionController()
-    private let badge = CaretBadgeController()
     private let loginItemManager = LoginItemManager()
+    private lazy var badge = CaretBadgeController(
+        actions: CaretBadgeActions(
+            stopAndInsert: { [weak self] in
+                self?.finishFromBadge(.insert)
+            },
+            sendAndSubmit: { [weak self] in
+                self?.finishFromBadge(.insertAndSubmit)
+            }
+        )
+    )
     private var selectedHotkey = HotkeyKey(
         rawValue: UserDefaults.standard.string(forKey: "dictationHotkey") ?? ""
     ) ?? .rightCommand
@@ -38,7 +53,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
-        contextProvider: contextProvider
+        contextProvider: contextProvider,
+        shouldIgnorePointerDown: { [weak self] in
+            guard let self else {
+                return false
+            }
+            return badge.containsInteractivePoint(NSEvent.mouseLocation)
+        }
     ) { [weak self] action, insertionContext, timestampNanoseconds in
         self?.handleHotkey(
             action,
@@ -115,9 +136,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var maximumDurationTask: Task<Void, Never>?
     private var recordingPresentationTask: Task<Void, Never>?
     private var errorPresentationTask: Task<Void, Never>?
+    private var submitAfterPasteTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
     private var insertionContext: DictationInsertionContext?
+    private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
     private var lastDictation: String?
     private var sessionGeneration: UInt64 = 0
@@ -410,6 +433,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         case .released:
             if machine.phase == .preparing || machine.phase == .listening {
+                completionBehavior = .insert
                 captureInsertionContext(suppliedContext)
             }
             process(.hotkeyReleased(at: eventTime))
@@ -468,6 +492,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
         maximumDurationTask?.cancel()
+        submitAfterPasteTask?.cancel()
+        submitAfterPasteTask = nil
+        completionBehavior = .insert
 
         let precedingCleanup = recognizerCleanupTask
         preloadTask = Task.detached(priority: .userInitiated) { [recognizer] in
@@ -508,6 +535,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             captureInsertionContext(contextProvider.captureInsertionContext())
+            completionBehavior = .insert
             process(.maximumDurationReached)
         }
         return true
@@ -597,6 +625,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch result {
         case .inserted:
             logger.info("Dictation inserted")
+            if completionBehavior == .insertAndSubmit {
+                completionBehavior = .insert
+                scheduleSubmitAfterPaste()
+                return true
+            }
+            completionBehavior = .insert
             process(.deliveryFinished)
             return true
 
@@ -615,6 +649,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         stopRecordingPresentation()
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
+        submitAfterPasteTask?.cancel()
+        submitAfterPasteTask = nil
+        completionBehavior = .insert
         let cancelledPreload = preloadTask
         cancelledPreload?.cancel()
         preloadTask = nil
@@ -696,14 +733,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 let sampledLevel = recorder.normalizedInputLevel
-                displayedLevel = max(sampledLevel, displayedLevel * 0.68)
+                displayedLevel = max(sampledLevel, displayedLevel * 0.58)
                 badge.updateListening(
                     elapsed: ProcessInfo.processInfo.systemUptime - startedAt,
                     limit: TimeInterval(limit),
                     level: displayedLevel
                 )
                 do {
-                    try await Task.sleep(for: .milliseconds(100))
+                    try await Task.sleep(for: .milliseconds(50))
                 } catch {
                     return
                 }
@@ -714,6 +751,45 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func stopRecordingPresentation() {
         recordingPresentationTask?.cancel()
         recordingPresentationTask = nil
+    }
+
+    private func finishFromBadge(_ behavior: CompletionBehavior) {
+        guard runtimeReadyForHotkey,
+              !isTerminating,
+              machine.phase == .preparing || machine.phase == .listening
+        else {
+            return
+        }
+        completionBehavior = behavior
+        captureInsertionContext(contextProvider.captureInsertionContext())
+        process(.maximumDurationReached)
+    }
+
+    private func scheduleSubmitAfterPaste() {
+        submitAfterPasteTask?.cancel()
+        let generation = sessionGeneration
+        submitAfterPasteTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.postPasteSubmitDelay)
+            } catch {
+                return
+            }
+            guard let self,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  generation == sessionGeneration,
+                  machine.phase == .inserting
+            else {
+                return
+            }
+            submitAfterPasteTask = nil
+            guard delivery.pressReturn() else {
+                fail("Could not press Return in the destination app.")
+                return
+            }
+            logger.info("Dictation inserted and submitted")
+            process(.deliveryFinished)
+        }
     }
 
     private func captureInsertionContext(
@@ -874,6 +950,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         stopRecordingPresentation()
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
+        submitAfterPasteTask?.cancel()
+        submitAfterPasteTask = nil
+        completionBehavior = .insert
         preloadTask?.cancel()
         preloadTask = nil
         recognitionTask?.cancel()

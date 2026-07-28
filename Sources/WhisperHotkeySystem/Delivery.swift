@@ -64,6 +64,11 @@ public protocol CommandPastePosting: AnyObject {
 }
 
 @MainActor
+public protocol ReturnKeyPosting: AnyObject {
+    func postReturn() -> Bool
+}
+
+@MainActor
 public final class CGCommandPastePoster: CommandPastePosting {
     public init() {}
 
@@ -91,6 +96,31 @@ public final class CGCommandPastePoster: CommandPastePosting {
     }
 }
 
+@MainActor
+public final class CGReturnKeyPoster: ReturnKeyPosting {
+    public init() {}
+
+    public func postReturn() -> Bool {
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let keyDown = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: CGKeyCode(MacVirtualKey.returnKey),
+                keyDown: true
+              ),
+              let keyUp = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: CGKeyCode(MacVirtualKey.returnKey),
+                keyDown: false
+              )
+        else {
+            return false
+        }
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+}
+
 public enum SystemDeliveryResult: Equatable, Sendable {
     case inserted
     case clipboardUnavailable
@@ -101,13 +131,16 @@ public enum SystemDeliveryResult: Equatable, Sendable {
 public final class TextDeliveryService {
     private let clipboard: ClipboardTransactionController
     private let pastePoster: CommandPastePosting
+    private let returnKeyPoster: ReturnKeyPosting
 
     public init(
         clipboard: ClipboardTransactionController,
-        pastePoster: CommandPastePosting = CGCommandPastePoster()
+        pastePoster: CommandPastePosting = CGCommandPastePoster(),
+        returnKeyPoster: ReturnKeyPosting = CGReturnKeyPoster()
     ) {
         self.clipboard = clipboard
         self.pastePoster = pastePoster
+        self.returnKeyPoster = returnKeyPoster
     }
 
     public func deliver(
@@ -144,5 +177,13 @@ public final class TextDeliveryService {
             return false
         }
         return clipboard.copy(trimmed)
+    }
+
+    /// Posts an unmodified Return after a successful insertion. The caller
+    /// controls the short delay required for the destination app to process
+    /// the preceding paste.
+    @discardableResult
+    public func pressReturn() -> Bool {
+        returnKeyPoster.postReturn()
     }
 }

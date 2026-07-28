@@ -49,4 +49,52 @@ final class ListeningBadgeTests: XCTestCase {
         controller.hide()
         XCTAssertFalse(controller.isVisible)
     }
+
+    @MainActor
+    func testListeningUpdateRestoresUnexpectedlyOrderedOutPanel() {
+        let controller = CaretBadgeController()
+        controller.present(
+            .listening,
+            caretFrame: nil,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        controller.orderOutWithoutEndingPresentationForTesting()
+        XCTAssertFalse(controller.isVisible)
+
+        controller.updateListening(elapsed: 1, limit: 600, level: 0.4)
+
+        XCTAssertTrue(controller.isVisible)
+        controller.hide()
+    }
+
+    @MainActor
+    func testControllerRoutesBothExplicitCompletionActions() {
+        var stopped = 0
+        var submitted = 0
+        let controller = CaretBadgeController(
+            actions: CaretBadgeActions(
+                stopAndInsert: { stopped += 1 },
+                sendAndSubmit: { submitted += 1 }
+            )
+        )
+
+        controller.invokeStopAndInsertForTesting()
+        controller.invokeSendAndSubmitForTesting()
+
+        XCTAssertEqual(stopped, 1)
+        XCTAssertEqual(submitted, 1)
+    }
+
+    func testWaveformHistoryIsSensitiveAndScrolls() {
+        var history = AudioWaveformHistory(capacity: 3)
+        history.append(0.1)
+        XCTAssertGreaterThan(history.samples.last ?? 0, 0.2)
+
+        history.append(0.4)
+        history.append(0.8)
+        history.append(1)
+        XCTAssertEqual(history.samples.count, 3)
+        XCTAssertEqual(history.samples.last, 1)
+        XCTAssertGreaterThan(history.samples[2], history.samples[1])
+    }
 }

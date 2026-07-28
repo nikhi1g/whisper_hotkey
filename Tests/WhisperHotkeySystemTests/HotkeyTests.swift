@@ -390,6 +390,53 @@ final class HotkeyTests: XCTestCase {
 
 @MainActor
 final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
+    func testRecordingControllerClickDoesNotCancelModifierSession() async {
+        var deliveries: [HotkeyAction] = []
+        let started = expectation(description: "hold started")
+        let released = expectation(description: "hold released")
+        let monitor = GlobalHotkeyMonitor(
+            captureInsertionContext: { nil },
+            shouldIgnorePointerDown: { true },
+            holdActivationDelay: .milliseconds(1)
+        ) { action, _, _ in
+            deliveries.append(action)
+            if action == .pressed {
+                started.fulfill()
+            } else if action == .released {
+                released.fulfill()
+            }
+        }
+        let press = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: true,
+            timestampNanoseconds: 700
+        )
+        let mouseDown = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseDown,
+            mouseCursorPosition: .zero,
+            mouseButton: .left
+        )!
+        let release = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: false,
+            timestampNanoseconds: 900
+        )
+
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .leftMouseDown, event: mouseDown)
+        )
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
+        )
+        await fulfillment(of: [released], timeout: 1)
+        XCTAssertEqual(deliveries, [.pressed, .released])
+    }
+
     func testHotkeyDeliveryIsDeferredOrderedAndUsesPhysicalTimestamps() async {
         var deliveries: [(HotkeyAction, UInt64)] = []
         var didCaptureInsertionContext = false

@@ -2,12 +2,38 @@ import AppKit
 import WhisperHotkeyCore
 
 @MainActor
+public struct CaretBadgeActions {
+    public let stopAndInsert: @MainActor () -> Void
+    public let sendAndSubmit: @MainActor () -> Void
+
+    public init(
+        stopAndInsert: @escaping @MainActor () -> Void,
+        sendAndSubmit: @escaping @MainActor () -> Void
+    ) {
+        self.stopAndInsert = stopAndInsert
+        self.sendAndSubmit = sendAndSubmit
+    }
+
+    public static let none = CaretBadgeActions(
+        stopAndInsert: {},
+        sendAndSubmit: {}
+    )
+}
+
+@MainActor
 public final class CaretBadgeController {
     private let panel: NonactivatingBadgePanel
     private let badgeView: BadgeView
+    private var lastCaretFrame: CGRect?
+    private var lastFieldFrame: CGRect?
+    private var lastScreenFrame: CGRect?
+    private var lastVisibilityAssertion = TimeInterval.zero
 
-    public init() {
-        badgeView = BadgeView(frame: CGRect(origin: .zero, size: BadgePlacement.defaultSize))
+    public init(actions: CaretBadgeActions = .none) {
+        badgeView = BadgeView(
+            frame: CGRect(origin: .zero, size: BadgePlacement.defaultSize),
+            actions: actions
+        )
         panel = NonactivatingBadgePanel(
             contentRect: badgeView.frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -50,6 +76,9 @@ public final class CaretBadgeController {
             hide()
             return
         }
+        lastCaretFrame = caretFrame
+        lastFieldFrame = fieldFrame
+        lastScreenFrame = screenFrame
 
         let runtimeAnchor: CGRect?
         switch presentation {
@@ -64,6 +93,7 @@ public final class CaretBadgeController {
         }
 
         badgeView.presentation = presentation
+        panel.ignoresMouseEvents = presentation != .listening
         let size = badgeView.preferredSize
         badgeView.frame = CGRect(origin: .zero, size: size)
         panel.setContentSize(size)
@@ -89,10 +119,16 @@ public final class CaretBadgeController {
             display: true
         )
         panel.orderFrontRegardless()
+        lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
     }
 
     public func hide() {
+        badgeView.presentation = .hidden
+        panel.ignoresMouseEvents = true
         panel.orderOut(nil)
+        lastCaretFrame = nil
+        lastFieldFrame = nil
+        lastScreenFrame = nil
     }
 
     public func updateListening(
@@ -100,7 +136,7 @@ public final class CaretBadgeController {
         limit: TimeInterval,
         level: Float
     ) {
-        guard panel.isVisible, badgeView.presentation == .listening else {
+        guard badgeView.presentation == .listening else {
             return
         }
         badgeView.updateListening(
@@ -108,6 +144,41 @@ public final class CaretBadgeController {
             limit: limit,
             level: level
         )
+
+        let now = ProcessInfo.processInfo.systemUptime
+        if !panel.isVisible {
+            present(
+                .listening,
+                caretFrame: lastCaretFrame,
+                fieldFrame: lastFieldFrame,
+                screenFrame: lastScreenFrame
+            )
+        } else if now - lastVisibilityAssertion >= 0.5 {
+            // AppKit can retain `isVisible == true` while moving a
+            // non-activating utility panel behind the current Space. A bounded
+            // assertion while recording keeps the controller discoverable
+            // without any background polling while idle.
+            panel.orderFrontRegardless()
+            lastVisibilityAssertion = now
+        }
+    }
+
+    public func containsInteractivePoint(_ point: CGPoint) -> Bool {
+        panel.isVisible
+            && badgeView.presentation == .listening
+            && panel.frame.contains(point)
+    }
+
+    func orderOutWithoutEndingPresentationForTesting() {
+        panel.orderOut(nil)
+    }
+
+    func invokeStopAndInsertForTesting() {
+        badgeView.invokeStopAndInsert()
+    }
+
+    func invokeSendAndSubmitForTesting() {
+        badgeView.invokeSendAndSubmit()
     }
 
     private func screen(containing frame: CGRect?) -> NSScreen? {
@@ -125,9 +196,12 @@ private final class NonactivatingBadgePanel: NSPanel {
 
 @MainActor
 private final class BadgeView: NSView {
+    private let actions: CaretBadgeActions
     private let statusLabel = NSTextField(labelWithString: "")
     private let timeLabel = NSTextField(labelWithString: "0:00")
     private let waveformView = AudioWaveformView()
+    private let stopButton = BadgeActionButton()
+    private let sendButton = BadgeActionButton()
     private let warningLayer = CAGradientLayer()
 
     var presentation: BadgePresentation = .hidden {
@@ -138,16 +212,17 @@ private final class BadgeView: NSView {
 
     var preferredSize: CGSize {
         if presentation == .listening {
-            return CGSize(width: 176, height: 32)
+            return CGSize(width: 300, height: 40)
         }
         let measuredWidth = ceil(statusLabel.intrinsicContentSize.width)
         return CGSize(width: min(max(116, measuredWidth + 34), 320), height: 34)
     }
 
-    override init(frame frameRect: NSRect) {
+    init(frame frameRect: NSRect, actions: CaretBadgeActions) {
+        self.actions = actions
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = 11
         layer?.masksToBounds = true
         layer?.borderWidth = 0.5
         layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
@@ -177,29 +252,94 @@ private final class BadgeView: NSView {
         timeLabel.isHidden = true
         addSubview(timeLabel)
 
+        configureActionButton(
+            stopButton,
+            symbol: "stop.fill",
+            accessibilityLabel: "Stop and insert dictation",
+            background: NSColor.white.withAlphaComponent(0.07),
+            foreground: NSColor.white.withAlphaComponent(0.86),
+            size: 32
+        )
+        stopButton.target = self
+        stopButton.action = #selector(stopAndInsert)
+        addSubview(stopButton)
+
+        configureActionButton(
+            sendButton,
+            symbol: "arrow.up",
+            accessibilityLabel: "Insert dictation and press Return",
+            background: NSColor(
+                calibratedRed: 0.91,
+                green: 0.94,
+                blue: 0.98,
+                alpha: 1
+            ),
+            foreground: NSColor(
+                calibratedRed: 0.10,
+                green: 0.12,
+                blue: 0.15,
+                alpha: 1
+            ),
+            size: 34
+        )
+        sendButton.target = self
+        sendButton.action = #selector(sendAndSubmit)
+        addSubview(sendButton)
+
         NSLayoutConstraint.activate([
             statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             statusLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            waveformView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 13),
+            waveformView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
             waveformView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            waveformView.widthAnchor.constraint(equalToConstant: 36),
-            waveformView.heightAnchor.constraint(equalToConstant: 18),
+            waveformView.widthAnchor.constraint(equalToConstant: 104),
+            waveformView.heightAnchor.constraint(equalToConstant: 24),
             timeLabel.leadingAnchor.constraint(
                 equalTo: waveformView.trailingAnchor,
-                constant: 8
+                constant: 6
             ),
-            timeLabel.trailingAnchor.constraint(
-                equalTo: trailingAnchor,
-                constant: -12
-            ),
+            timeLabel.widthAnchor.constraint(equalToConstant: 86),
             timeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stopButton.leadingAnchor.constraint(
+                equalTo: timeLabel.trailingAnchor,
+                constant: 7
+            ),
+            stopButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stopButton.widthAnchor.constraint(equalToConstant: 32),
+            stopButton.heightAnchor.constraint(equalToConstant: 32),
+            sendButton.leadingAnchor.constraint(
+                equalTo: stopButton.trailingAnchor,
+                constant: 7
+            ),
+            sendButton.trailingAnchor.constraint(
+                equalTo: trailingAnchor,
+                constant: -8
+            ),
+            sendButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            sendButton.widthAnchor.constraint(equalToConstant: 34),
+            sendButton.heightAnchor.constraint(equalToConstant: 34),
         ])
         updatePresentation()
     }
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    @objc private func stopAndInsert() {
+        actions.stopAndInsert()
+    }
+
+    @objc private func sendAndSubmit() {
+        actions.sendAndSubmit()
+    }
+
+    func invokeStopAndInsert() {
+        stopAndInsert()
+    }
+
+    func invokeSendAndSubmit() {
+        sendAndSubmit()
     }
 
     override func layout() {
@@ -259,12 +399,15 @@ private final class BadgeView: NSView {
         statusLabel.isHidden = presentation == .listening
         waveformView.isHidden = presentation != .listening
         timeLabel.isHidden = presentation != .listening
+        stopButton.isHidden = presentation != .listening
+        sendButton.isHidden = presentation != .listening
         warningLayer.isHidden = true
         layer?.backgroundColor = normalBackground.cgColor
 
         switch presentation {
         case .listening:
             statusLabel.stringValue = ""
+            waveformView.reset()
             updateListening(elapsed: 0, limit: 600, level: 0)
         case .transcribing:
             statusLabel.stringValue = "Transcribing…"
@@ -283,6 +426,33 @@ private final class BadgeView: NSView {
 
     private var normalBackground: NSColor {
         NSColor(calibratedRed: 0.12, green: 0.14, blue: 0.17, alpha: 0.95)
+    }
+
+    private func configureActionButton(
+        _ button: NSButton,
+        symbol: String,
+        accessibilityLabel: String,
+        background: NSColor,
+        foreground: NSColor,
+        size: CGFloat
+    ) {
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.image = NSImage(
+            systemSymbolName: symbol,
+            accessibilityDescription: accessibilityLabel
+        )
+        button.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: symbol == "arrow.up" ? 17 : 10,
+            weight: symbol == "arrow.up" ? .medium : .semibold
+        )
+        button.contentTintColor = foreground
+        button.toolTip = accessibilityLabel
+        button.setAccessibilityLabel(accessibilityLabel)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.wantsLayer = true
+        button.layer?.backgroundColor = background.cgColor
+        button.layer?.cornerRadius = size / 2
     }
 }
 
@@ -326,34 +496,78 @@ public struct ListeningBadgeMetrics: Equatable, Sendable {
     }
 }
 
+struct AudioWaveformHistory: Equatable {
+    private(set) var samples: [CGFloat]
+
+    init(capacity: Int = 23) {
+        samples = Array(repeating: 0, count: max(1, capacity))
+    }
+
+    mutating func append(_ level: CGFloat) {
+        let clamped = min(1, max(0, level))
+        // A sub-linear curve makes normal speech visibly responsive while
+        // preserving the top of the range for genuinely loud input.
+        let sensitive = pow(clamped, 0.62)
+        samples.removeFirst()
+        samples.append(sensitive)
+    }
+
+    mutating func reset() {
+        samples = Array(repeating: 0, count: samples.count)
+    }
+}
+
+private final class BadgeActionButton: NSButton {
+    override var acceptsFirstResponder: Bool { false }
+}
+
 @MainActor
 private final class AudioWaveformView: NSView {
+    private var history = AudioWaveformHistory()
+
     var level: CGFloat = 0 {
         didSet {
+            history.append(level)
             needsDisplay = true
         }
     }
 
     override var isFlipped: Bool { true }
 
+    func reset() {
+        history.reset()
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let weights: [CGFloat] = [0.45, 0.72, 1, 0.72, 0.45]
-        let barWidth: CGFloat = 3.5
-        let gap: CGFloat = 3
-        let totalWidth = CGFloat(weights.count) * barWidth
-            + CGFloat(weights.count - 1) * gap
+        let barWidth: CGFloat = 2.4
+        let gap: CGFloat = 2
+        let totalWidth = CGFloat(history.samples.count) * barWidth
+            + CGFloat(history.samples.count - 1) * gap
         var x = (bounds.width - totalWidth) / 2
-        NSColor(calibratedRed: 0.48, green: 0.73, blue: 1, alpha: 1).setFill()
+        let activeColor = NSColor(
+            calibratedRed: 0.53,
+            green: 0.76,
+            blue: 1,
+            alpha: 1
+        )
 
-        for weight in weights {
-            let height = max(4, 5 + level * weight * (bounds.height - 5))
+        for sample in history.samples {
+            let isQuiet = sample < 0.015
+            let height = isQuiet
+                ? 1.5
+                : max(3, 3 + sample * (bounds.height - 3))
             let rect = CGRect(
                 x: x,
                 y: (bounds.height - height) / 2,
                 width: barWidth,
                 height: height
             )
+            (isQuiet
+                ? activeColor.withAlphaComponent(0.38)
+                : activeColor
+            ).setFill()
             NSBezierPath(
                 roundedRect: rect,
                 xRadius: barWidth / 2,

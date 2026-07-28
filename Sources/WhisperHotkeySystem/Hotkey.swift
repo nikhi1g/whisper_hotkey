@@ -6,6 +6,7 @@ public enum MacVirtualKey {
     public static let c: Int64 = 8
     public static let v: Int64 = 9
     public static let x: Int64 = 7
+    public static let returnKey: Int64 = 36
     public static let escape: Int64 = 53
     public static let rightCommand: Int64 = 54
     public static let leftCommand: Int64 = 55
@@ -496,6 +497,7 @@ public final class GlobalHotkeyMonitor {
     }
 
     private let captureInsertionContext: @MainActor () -> DictationInsertionContext?
+    private let shouldIgnorePointerDown: @MainActor () -> Bool
     private let holdActivationDelay: Duration
     private let handler: Handler
     private var reducer = GlobalInputReducer()
@@ -507,22 +509,26 @@ public final class GlobalHotkeyMonitor {
 
     public init(
         contextProvider: AccessibilityContextProvider,
+        shouldIgnorePointerDown: @escaping @MainActor () -> Bool = { false },
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
         captureInsertionContext = {
             contextProvider.captureInsertionContext()
         }
+        self.shouldIgnorePointerDown = shouldIgnorePointerDown
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
 
     init(
         captureInsertionContext: @escaping @MainActor () -> DictationInsertionContext?,
+        shouldIgnorePointerDown: @escaping @MainActor () -> Bool = { false },
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
         self.captureInsertionContext = captureInsertionContext
+        self.shouldIgnorePointerDown = shouldIgnorePointerDown
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
@@ -635,6 +641,12 @@ public final class GlobalHotkeyMonitor {
             || type == .rightMouseDown
             || type == .otherMouseDown
         {
+            // The non-activating recording controller is part of dictation,
+            // not a shortcut chord in the destination app. Let AppKit deliver
+            // this click without cancelling the active modifier session.
+            if shouldIgnorePointerDown() {
+                return false
+            }
             let routing = reducer.routePointerDown()
             enqueue(
                 actions: routing.actions,

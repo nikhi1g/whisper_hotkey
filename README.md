@@ -14,8 +14,10 @@ The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
 and error states. Its menu includes persistent checked controls for the gesture,
 dictation key, local Whisper model, and recording limit. While recording, the
-caret badge shows a small audio-reactive waveform and elapsed time. In the final
-30 seconds it switches to elapsed/limit and pulses orange toward deep red.
+caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
+Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
+and then presses Return. In the final 30 seconds the badge switches to
+elapsed/limit and pulses orange toward deep red.
 
 ## Use
 
@@ -25,9 +27,11 @@ caret badge shows a small audio-reactive waveform and elapsed time. In the final
 
 Choose a trigger from **Dictation Key**. To dictate without holding it, enable
 the dynamically named **[Key] Toggles Dictation** item. Tap and release the
-selected key once to start, speak while the badge says Listening, then tap and
-release it again to transcribe and insert. Ordinary typing and selected-modifier
-shortcuts remain available between the two taps.
+selected key once to start, speak while the badge waveform is active, then tap
+and release it again to transcribe and insert. The badge's square button is an
+equivalent stop-and-insert action; its arrow button additionally presses Return
+after the paste succeeds. Ordinary typing and selected-modifier shortcuts remain
+available between the two taps.
 
 Caps Lock always uses toggle mode because macOS reports lock-state changes
 rather than a normal hold/release pair; its normal capitalization state remains
@@ -61,7 +65,9 @@ The badge uses both standard macOS selection ranges and Chromium/Electron text
 markers. Exact caret placement is not universally available: if an editor
 exposes neither representation, the badge snapshots the current pointer
 position for that state instead. It does not poll or track pointer movement,
-and this visual fallback has no effect on where Command-V is posted.
+and this visual fallback has no effect on where Command-V is posted. If AppKit
+orders the panel out during a Space or window transition, the active recording
+update restores it and periodically keeps it frontmost until recording ends.
 
 ## Setup and permissions
 
@@ -142,7 +148,7 @@ release. The model helper is owned only for that dictation and is terminated
 after insertion, cancellation, or failure. Idle operation is event-driven; no
 Whisper model, transcription helper, polling worker, audio, or transcript
 history remains resident. The menu-bar icon is updated only by state
-transitions. The waveform reads the existing capture buffer at 10 Hz only while
+transitions. The waveform reads the existing capture buffer at 20 Hz only while
 recording; it adds no idle timer or second audio pipeline.
 
 Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
