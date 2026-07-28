@@ -85,6 +85,36 @@ final class DeliveryTests: XCTestCase {
         XCTAssertTrue(service.pressReturn())
         XCTAssertEqual(returnPoster.postCount, 1)
     }
+
+    func testSyntheticReturnExplicitlyClearsEveryModifier() throws {
+        let source = try XCTUnwrap(
+            CGEventSource(stateID: .combinedSessionState)
+        )
+        let events = try XCTUnwrap(
+            CGReturnKeyPoster.makeEvents(source: source)
+        )
+        let modifierFlags: CGEventFlags = [
+            .maskCommand,
+            .maskShift,
+            .maskAlternate,
+            .maskControl,
+            .maskAlphaShift,
+            .maskSecondaryFn,
+        ]
+
+        XCTAssertEqual(events.keyDown.type, .keyDown)
+        XCTAssertEqual(events.keyUp.type, .keyUp)
+        XCTAssertEqual(
+            events.keyDown.getIntegerValueField(.keyboardEventKeycode),
+            Int64(MacVirtualKey.returnKey)
+        )
+        XCTAssertEqual(
+            events.keyUp.getIntegerValueField(.keyboardEventKeycode),
+            Int64(MacVirtualKey.returnKey)
+        )
+        XCTAssertTrue(events.keyDown.flags.intersection(modifierFlags).isEmpty)
+        XCTAssertTrue(events.keyUp.flags.intersection(modifierFlags).isEmpty)
+    }
 }
 
 @MainActor

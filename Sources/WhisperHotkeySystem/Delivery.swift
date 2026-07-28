@@ -102,7 +102,19 @@ public final class CGReturnKeyPoster: ReturnKeyPosting {
 
     public func postReturn() -> Bool {
         guard let source = CGEventSource(stateID: .combinedSessionState),
-              let keyDown = CGEvent(
+              let events = Self.makeEvents(source: source)
+        else {
+            return false
+        }
+        events.keyDown.post(tap: .cghidEventTap)
+        events.keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    static func makeEvents(
+        source: CGEventSource
+    ) -> (keyDown: CGEvent, keyUp: CGEvent)? {
+        guard let keyDown = CGEvent(
                 keyboardEventSource: source,
                 virtualKey: CGKeyCode(MacVirtualKey.returnKey),
                 keyDown: true
@@ -113,11 +125,16 @@ public final class CGReturnKeyPoster: ReturnKeyPosting {
                 keyDown: false
               )
         else {
-            return false
+            return nil
         }
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        return true
+
+        // `combinedSessionState` may contain a physically held or recently
+        // latched dictation modifier. Send means plain Return regardless of
+        // that source state; Chrome, for example, gives Option-Return and
+        // Command-Return different navigation behavior.
+        keyDown.flags = []
+        keyUp.flags = []
+        return (keyDown, keyUp)
     }
 }
 
