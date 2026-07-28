@@ -154,15 +154,22 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startControlServer() -> Bool {
-        let server = ControlServer { [weak self] request in
-            guard let self else {
-                return ControlResponse(
-                    ok: false,
-                    message: "whisper_hotkey is stopping."
-                )
+        let server = ControlServer(
+            onResponseFlushed: { [weak self] request, response in
+                guard response.ok else {
+                    return
+                }
+                await self?.controlResponseDidFlush(request)
             }
-            return await self.handleControlRequest(request)
-        }
+        ) { [weak self] request in
+                guard let self else {
+                    return ControlResponse(
+                        ok: false,
+                        message: "whisper_hotkey is stopping."
+                    )
+                }
+                return await self.handleControlRequest(request)
+            }
 
         do {
             try server.start()
@@ -217,7 +224,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         case .enableLogin:
             do {
-                let resultingStatus = try loginItemManager.register()
+                let resultingStatus = try loginItemManager.enableExplicitly()
                 switch resultingStatus {
                 case .enabled:
                     return ControlResponse(
@@ -248,12 +255,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         case .disableLogin:
             do {
-                _ = try loginItemManager.unregister()
-                return ControlResponse(
-                    ok: true,
-                    message: "Login Item disabled.",
-                    status: runtimeStatus
-                )
+                let resultingStatus = try loginItemManager.disableExplicitly()
+                switch resultingStatus {
+                case .notRegistered, .notFound:
+                    return ControlResponse(
+                        ok: true,
+                        message: "Login Item disabled.",
+                        status: runtimeStatus
+                    )
+                case .enabled, .requiresApproval, .unknown:
+                    return ControlResponse(
+                        ok: false,
+                        message: "Login Item could not be disabled (\(resultingStatus.rawValue)).",
+                        status: runtimeStatus
+                    )
+                }
             } catch {
                 return ControlResponse(
                     ok: false,
@@ -263,7 +279,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
 
         case .stop, .restart:
-            scheduleTermination()
             return ControlResponse(
                 ok: true,
                 message: request.command == .restart
@@ -274,14 +289,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func scheduleTermination() {
-        guard scheduledTerminationTask == nil else {
-            return
-        }
-        scheduledTerminationTask = Task { @MainActor in
-            // Let the control server flush its response before closing clients.
-            try? await Task.sleep(for: .milliseconds(200))
+    private func controlResponseDidFlush(_ request: ControlRequest) {
+        switch request.command {
+        case .stop, .restart:
             NSApp.terminate(nil)
+        case .status, .cancel, .setup, .enableLogin, .disableLogin:
+            break
         }
     }
 
