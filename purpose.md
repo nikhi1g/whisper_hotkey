@@ -4,9 +4,10 @@
 text while keeping its always-running cost as close to zero as practical.
 
 The app has no Dock or menu-bar presence. It starts at login as a visible macOS
-Login Item and can be started, stopped, inspected, or disabled from the terminal.
-A one-time setup window handles Microphone, Accessibility, and Input Monitoring
-permissions.
+background item: a signed, one-shot Service Management LaunchAgent opens the
+main app and immediately exits. The app can be started, stopped, inspected, or
+disabled from the terminal. A one-time setup window handles Microphone,
+Accessibility, and Input Monitoring permissions.
 
 Right Command is reserved for push-to-talk. Pressing it starts microphone capture
 and asynchronously loads the installed Base English whisper.cpp model. Releasing
