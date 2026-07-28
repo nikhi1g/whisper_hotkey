@@ -1,0 +1,669 @@
+@preconcurrency import AVFoundation
+import AppKit
+import Foundation
+import OSLog
+import WhisperHotkeyASR
+import WhisperHotkeyCore
+import WhisperHotkeyShell
+import WhisperHotkeySystem
+
+@MainActor
+final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
+    private static let maximumDuration: Duration = .seconds(600)
+    private static let errorPresentationDuration: Duration = .seconds(2)
+
+    private let logger = Logger(
+        subsystem: WhisperHotkeyPaths.bundleIdentifier,
+        category: "lifecycle"
+    )
+    private let recorder = WhisperAudioRecorder()
+    private let recognizer = WhisperRecognizer()
+    private let targetProvider = AccessibilityTargetProvider()
+    private let clipboard = ClipboardTransactionController()
+    private let badge = CaretBadgeController()
+    private let loginItemManager = LoginItemManager()
+
+    private lazy var delivery = TextDeliveryService(
+        targetProvider: targetProvider,
+        clipboard: clipboard
+    )
+    private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
+        targetProvider: targetProvider,
+        clipboard: clipboard
+    ) { [weak self] action, releaseTarget in
+        self?.handleHotkey(action, releaseTarget: releaseTarget)
+    }
+    private lazy var setupWindowController = SetupWindowController(
+        readinessProvider: { [weak self] in
+            self?.setupReadiness ?? Self.unavailableReadiness
+        },
+        actions: SetupActions(
+            requestMicrophone: { [weak self] in
+                self?.requestMicrophonePermission()
+            },
+            openAccessibilitySettings: { [weak self] in
+                self?.requestAccessibilityPermission()
+            },
+            openInputMonitoringSettings: { [weak self] in
+                self?.requestInputMonitoringPermission()
+            },
+            revealModelLocation: { [weak self] in
+                self?.revealModelLocation()
+            },
+            revealHelperLocation: { [weak self] in
+                self?.revealHelperLocation()
+            }
+        ),
+        loginItemManager: loginItemManager
+    )
+
+    private var machine = DictationStateMachine()
+    private var controlServer: ControlServer?
+    private var preloadTask: Task<Void, Never>?
+    private var recognitionTask: Task<Void, Never>?
+    private var maximumDurationTask: Task<Void, Never>?
+    private var errorPresentationTask: Task<Void, Never>?
+    private var recognizerCleanupTask: Task<Void, Never>?
+    private var scheduledTerminationTask: Task<Void, Never>?
+    private var releaseTarget: ReleaseTarget?
+    private var badgeCaretRect: CGRect?
+    private var badgeFieldRect: CGRect?
+    private var sessionGeneration: UInt64 = 0
+    private var startupError: String?
+    private var isTerminating = false
+    private var terminationCleanupStarted = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+
+        guard startControlServer() else {
+            return
+        }
+        reconcileRuntime(showSetupIfNeeded: true)
+        logger.info("Agent started")
+    }
+
+    func applicationShouldTerminate(
+        _ sender: NSApplication
+    ) -> NSApplication.TerminateReply {
+        guard !terminationCleanupStarted else {
+            return .terminateLater
+        }
+        terminationCleanupStarted = true
+        isTerminating = true
+        stopSynchronousServices()
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                sender.reply(toApplicationShouldTerminate: true)
+                return
+            }
+            await recognizer.shutdown()
+            logger.info("Agent stopped")
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NotificationCenter.default.removeObserver(self)
+        stopSynchronousServices()
+    }
+
+    @objc private func applicationDidBecomeActive() {
+        guard !isTerminating else {
+            return
+        }
+        reconcileRuntime(showSetupIfNeeded: false)
+        setupWindowController.refresh()
+    }
+
+    private func startControlServer() -> Bool {
+        let server = ControlServer { [weak self] request in
+            guard let self else {
+                return ControlResponse(
+                    ok: false,
+                    message: "whisper_hotkey is stopping."
+                )
+            }
+            return await self.handleControlRequest(request)
+        }
+
+        do {
+            try server.start()
+            controlServer = server
+            return true
+        } catch ControlTransportError.alreadyRunning {
+            logger.error("Another agent owns the control socket")
+            NSApp.terminate(nil)
+            return false
+        } catch {
+            startupError = "Control service failed: \(error.localizedDescription)"
+            logger.error("\(self.startupError ?? "Control service failed", privacy: .public)")
+            badge.present(.error("Control service failed — see logs"))
+            scheduledTerminationTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                NSApp.terminate(nil)
+            }
+            return false
+        }
+    }
+
+    private func handleControlRequest(
+        _ request: ControlRequest
+    ) -> ControlResponse {
+        switch request.command {
+        case .status:
+            return ControlResponse(
+                ok: true,
+                message: "whisper_hotkey is running.",
+                status: runtimeStatus
+            )
+
+        case .cancel:
+            let wasBusy = machine.phase.isBusy
+            process(.cancel)
+            return ControlResponse(
+                ok: true,
+                message: wasBusy
+                    ? "Current dictation cancelled."
+                    : "No dictation is active.",
+                status: runtimeStatus
+            )
+
+        case .setup:
+            _ = setupWindowController.showIfNeeded(force: true)
+            reconcileRuntime(showSetupIfNeeded: false)
+            return ControlResponse(
+                ok: true,
+                message: "Setup window opened.",
+                status: runtimeStatus
+            )
+
+        case .enableLogin:
+            do {
+                _ = try loginItemManager.register()
+                return ControlResponse(
+                    ok: true,
+                    message: loginItemManager.status == .requiresApproval
+                        ? "Login Item needs approval in System Settings."
+                        : "Login Item enabled.",
+                    status: runtimeStatus
+                )
+            } catch {
+                return ControlResponse(
+                    ok: false,
+                    message: "Could not enable Login Item: \(error.localizedDescription)",
+                    status: runtimeStatus
+                )
+            }
+
+        case .disableLogin:
+            do {
+                _ = try loginItemManager.unregister()
+                return ControlResponse(
+                    ok: true,
+                    message: "Login Item disabled.",
+                    status: runtimeStatus
+                )
+            } catch {
+                return ControlResponse(
+                    ok: false,
+                    message: "Could not disable Login Item: \(error.localizedDescription)",
+                    status: runtimeStatus
+                )
+            }
+
+        case .stop, .restart:
+            scheduleTermination()
+            return ControlResponse(
+                ok: true,
+                message: request.command == .restart
+                    ? "whisper_hotkey is stopping for restart."
+                    : "whisper_hotkey is stopping.",
+                status: runtimeStatus
+            )
+        }
+    }
+
+    private func scheduleTermination() {
+        guard scheduledTerminationTask == nil else {
+            return
+        }
+        scheduledTerminationTask = Task { @MainActor in
+            // Let the control server flush its response before closing clients.
+            try? await Task.sleep(for: .milliseconds(200))
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func reconcileRuntime(showSetupIfNeeded: Bool) {
+        let readiness = setupReadiness
+        if readiness.isReady {
+            do {
+                try hotkeyMonitor.start()
+                startupError = nil
+            } catch {
+                startupError = "Hotkey monitor failed: \(error.localizedDescription)"
+                logger.error("\(self.startupError ?? "Hotkey monitor failed", privacy: .public)")
+            }
+        } else {
+            hotkeyMonitor.stop()
+        }
+
+        if showSetupIfNeeded || !readiness.isReady {
+            _ = setupWindowController.showIfNeeded(force: !readiness.isReady)
+        }
+    }
+
+    private func handleHotkey(
+        _ action: HotkeyAction,
+        releaseTarget suppliedTarget: ReleaseTarget?
+    ) {
+        guard !isTerminating else {
+            return
+        }
+
+        switch action {
+        case .pressed:
+            if !machine.phase.isBusy, machine.phase != .failed {
+                badgeCaretRect = targetProvider.currentBadgeAnchorRect()
+                badgeFieldRect = nil
+                releaseTarget = nil
+            }
+            process(.hotkeyPressed(at: ProcessInfo.processInfo.systemUptime))
+
+        case .released:
+            if machine.phase == .preparing || machine.phase == .listening {
+                captureReleaseTarget(suppliedTarget)
+            }
+            process(.hotkeyReleased(at: ProcessInfo.processInfo.systemUptime))
+
+        case .cancel:
+            process(.cancel)
+        }
+    }
+
+    private func process(_ event: DictationEvent, transcript: String? = nil) {
+        let effects = machine.handle(event)
+        logger.debug("Dictation phase: \(self.machine.phase.rawValue, privacy: .public)")
+
+        for effect in effects {
+            guard apply(effect, transcript: transcript) else {
+                break
+            }
+        }
+    }
+
+    private func apply(
+        _ effect: DictationEffect,
+        transcript: String?
+    ) -> Bool {
+        switch effect {
+        case .beginSession:
+            return beginSession()
+
+        case .finalizeRecording:
+            return finalizeRecording()
+
+        case .cancelSession:
+            cancelSession()
+            return true
+
+        case .deliverTranscript:
+            guard let transcript else {
+                fail("Transcription result was unavailable.")
+                return false
+            }
+            return deliver(transcript)
+
+        case .showBadge(let presentation):
+            presentBadge(presentation)
+            return true
+        }
+    }
+
+    private func beginSession() -> Bool {
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        errorPresentationTask?.cancel()
+        errorPresentationTask = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        maximumDurationTask?.cancel()
+
+        let precedingCleanup = recognizerCleanupTask
+        preloadTask = Task.detached(priority: .userInitiated) { [recognizer] in
+            if let precedingCleanup {
+                await precedingCleanup.value
+            }
+            guard !Task.isCancelled else {
+                return
+            }
+            try? await recognizer.preload()
+        }
+
+        do {
+            try recorder.start()
+            process(.captureStarted)
+        } catch {
+            fail(error)
+            return false
+        }
+
+        maximumDurationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.maximumDuration)
+            } catch {
+                return
+            }
+            guard let self,
+                  generation == sessionGeneration,
+                  machine.phase == .preparing || machine.phase == .listening
+            else {
+                return
+            }
+            captureReleaseTarget(targetProvider.captureFocusedTarget())
+            process(.maximumDurationReached)
+        }
+        return true
+    }
+
+    private func finalizeRecording() -> Bool {
+        maximumDurationTask?.cancel()
+        maximumDurationTask = nil
+
+        let audio: WhisperAudioFile
+        do {
+            audio = try recorder.stop()
+        } catch {
+            fail(error)
+            return false
+        }
+
+        let generation = sessionGeneration
+        recognitionTask = Task { @MainActor [weak self, recognizer] in
+            do {
+                let transcript = try await recognizer.transcribe(audio)
+                guard let self,
+                      generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                preloadTask = nil
+                recognitionTask = nil
+                process(.transcriptReady, transcript: transcript)
+            } catch is CancellationError {
+                audio.delete()
+            } catch {
+                guard let self,
+                      generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                preloadTask = nil
+                recognitionTask = nil
+                fail(error)
+            }
+        }
+        return true
+    }
+
+    private func deliver(_ transcript: String) -> Bool {
+        let result = delivery.deliver(transcript: transcript, to: releaseTarget)
+        releaseTarget = nil
+
+        switch result {
+        case .inserted:
+            logger.info("Dictation inserted")
+            process(.deliveryFinished)
+            return true
+
+        case .clipboardLease(let reason):
+            logger.info(
+                "Dictation held in one-paste clipboard lease: \(reason.rawValue, privacy: .public)"
+            )
+            process(.deliveryFinished)
+            return true
+
+        case .clipboardLeaseAfterPasteFailure:
+            logger.info("Dictation held after automatic paste failed")
+            process(.deliveryFinished)
+            return true
+
+        case .clipboardUnavailable:
+            fail("Clipboard unavailable — try again.")
+            return false
+
+        case .emptyTranscript:
+            fail("No speech detected.")
+            return false
+        }
+    }
+
+    private func cancelSession() {
+        sessionGeneration &+= 1
+        maximumDurationTask?.cancel()
+        maximumDurationTask = nil
+        preloadTask?.cancel()
+        preloadTask = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recorder.cancel()
+        releaseTarget = nil
+
+        let recognizer = recognizer
+        recognizerCleanupTask = Task.detached(priority: .userInitiated) {
+            await recognizer.cancel()
+        }
+    }
+
+    private func fail(_ error: Error) {
+        logger.error("Dictation failed: \(error.localizedDescription, privacy: .public)")
+        fail(userFacingMessage(for: error))
+    }
+
+    private func fail(_ message: String) {
+        process(.failed(message))
+        errorPresentationTask?.cancel()
+        errorPresentationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.errorPresentationDuration)
+            } catch {
+                return
+            }
+            guard let self, machine.phase == .failed else {
+                return
+            }
+            process(.errorPresentationFinished)
+        }
+    }
+
+    private func presentBadge(_ presentation: BadgePresentation) {
+        if presentation == .hidden {
+            badge.hide()
+            badgeCaretRect = nil
+            badgeFieldRect = nil
+            return
+        }
+        badge.present(
+            presentation,
+            caretFrame: badgeCaretRect,
+            fieldFrame: badgeFieldRect
+        )
+    }
+
+    private func captureReleaseTarget(_ target: ReleaseTarget?) {
+        releaseTarget = target
+        if let target {
+            badgeCaretRect = target.caretRect
+            badgeFieldRect = target.fieldRect
+        }
+    }
+
+    private func stopSynchronousServices() {
+        scheduledTerminationTask?.cancel()
+        scheduledTerminationTask = nil
+        maximumDurationTask?.cancel()
+        maximumDurationTask = nil
+        errorPresentationTask?.cancel()
+        errorPresentationTask = nil
+        preloadTask?.cancel()
+        preloadTask = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        hotkeyMonitor.stop()
+        recorder.cancel()
+        badge.hide()
+        clipboard.completePendingRestoration()
+        clipboard.cancelLease()
+        controlServer?.stop()
+        controlServer = nil
+        releaseTarget = nil
+    }
+
+    private var setupReadiness: SetupReadiness {
+        let systemPermissions = SystemPermissionController.preflight()
+        return SetupReadiness(
+            microphoneGranted: microphonePermissionGranted,
+            accessibilityGranted: systemPermissions.accessibility == .granted,
+            inputMonitoringGranted: systemPermissions.inputMonitoring == .granted,
+            modelAvailable: modelAvailable,
+            helperAvailable: helperAvailable
+        )
+    }
+
+    private var runtimeStatus: RuntimeStatus {
+        let readiness = setupReadiness
+        return RuntimeStatus(
+            running: !isTerminating,
+            phase: machine.phase,
+            microphoneGranted: readiness.microphoneGranted,
+            accessibilityGranted: readiness.accessibilityGranted,
+            inputMonitoringGranted: readiness.inputMonitoringGranted,
+            loginItemEnabled: loginItemManager.status.isEnabled,
+            helperAvailable: readiness.helperAvailable,
+            modelAvailable: readiness.modelAvailable,
+            clipboardLeaseActive: delivery.clipboardLeaseActive,
+            lastError: machine.lastError ?? startupError
+        )
+    }
+
+    private var microphonePermissionGranted: Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    private var modelAvailable: Bool {
+        var isDirectory = ObjCBool(false)
+        return FileManager.default.fileExists(
+            atPath: WhisperHotkeyPaths.modelPath,
+            isDirectory: &isDirectory
+        ) && !isDirectory.boolValue
+    }
+
+    private var helperAvailable: Bool {
+        WhisperRuntimeDiscovery.helperCandidates().contains {
+            FileManager.default.isExecutableFile(atPath: $0.path)
+        }
+    }
+
+    private func requestMicrophonePermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            reconcileRuntime(showSetupIfNeeded: false)
+            setupWindowController.refresh()
+
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
+                Task { @MainActor in
+                    self?.reconcileRuntime(showSetupIfNeeded: false)
+                    self?.setupWindowController.refresh()
+                }
+            }
+
+        case .denied, .restricted:
+            openSystemSettings("Privacy_Microphone")
+
+        @unknown default:
+            openSystemSettings("Privacy_Microphone")
+        }
+    }
+
+    private func requestAccessibilityPermission() {
+        _ = SystemPermissionController.requestAccessibility()
+        openSystemSettings("Privacy_Accessibility")
+    }
+
+    private func requestInputMonitoringPermission() {
+        _ = SystemPermissionController.requestInputMonitoring()
+        openSystemSettings("Privacy_ListenEvent")
+    }
+
+    private func openSystemSettings(_ privacyPane: String) {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?\(privacyPane)"
+        ) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func revealModelLocation() {
+        reveal(
+            URL(fileURLWithPath: WhisperHotkeyPaths.modelPath),
+            fallback: FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".cache/whisper", isDirectory: true)
+        )
+    }
+
+    private func revealHelperLocation() {
+        let candidate = WhisperRuntimeDiscovery.helperCandidates().first
+            ?? Bundle.main.executableURL?.deletingLastPathComponent()
+        guard let candidate else {
+            return
+        }
+        reveal(candidate, fallback: candidate.deletingLastPathComponent())
+    }
+
+    private func reveal(_ item: URL, fallback: URL) {
+        let selection = FileManager.default.fileExists(atPath: item.path)
+            ? item
+            : fallback
+        NSWorkspace.shared.activateFileViewerSelecting([selection])
+    }
+
+    private func userFacingMessage(for error: Error) -> String {
+        guard let asrError = error as? WhisperASRError else {
+            return "Dictation failed — see logs."
+        }
+        switch asrError {
+        case .noSpeech:
+            return "No speech detected."
+        case .modelMissing:
+            return "Whisper model missing — run setup."
+        case .helperUnavailable, .commandLineUnavailable:
+            return "Whisper tools missing — run setup."
+        case .microphoneUnavailable, .captureFailed, .noActiveRecording:
+            return "Microphone failed — run setup."
+        case .recognitionTimedOut:
+            return "Transcription timed out."
+        case .helperProtocolFailure, .helperFailed, .commandLineFailed:
+            return "Transcription failed — see logs."
+        }
+    }
+
+    private static let unavailableReadiness = SetupReadiness(
+        microphoneGranted: false,
+        accessibilityGranted: false,
+        inputMonitoringGranted: false,
+        modelAvailable: false,
+        helperAvailable: false
+    )
+}
