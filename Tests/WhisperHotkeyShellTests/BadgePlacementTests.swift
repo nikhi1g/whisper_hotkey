@@ -1,0 +1,50 @@
+import CoreGraphics
+import XCTest
+@testable import WhisperHotkeyShell
+
+final class BadgePlacementTests: XCTestCase {
+    func testPlacesBadgeBesideCaret() {
+        let frame = BadgePlacement.frame(
+            caretFrame: CGRect(x: 100, y: 200, width: 2, height: 20),
+            fieldFrame: nil,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 110, y: 195, width: 100, height: 30))
+    }
+
+    func testFlipsBadgeToLeftAtRightScreenEdge() {
+        let frame = BadgePlacement.frame(
+            caretFrame: CGRect(x: 950, y: 200, width: 2, height: 20),
+            fieldFrame: nil,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertEqual(frame.origin.x, 842)
+        XCTAssertEqual(frame.origin.y, 195)
+    }
+
+    func testFallsBackFromMissingCaretToField() {
+        let frame = BadgePlacement.frame(
+            caretFrame: nil,
+            fieldFrame: CGRect(x: 20, y: 30, width: 300, height: 40),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 328, y: 35, width: 100, height: 30))
+    }
+
+    func testFallsBackToVisibleScreenCornerAndClamps() {
+        let frame = BadgePlacement.frame(
+            caretFrame: nil,
+            fieldFrame: nil,
+            screenFrame: CGRect(x: 100, y: 50, width: 300, height: 200),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 292, y: 58, width: 100, height: 30))
+    }
+}
