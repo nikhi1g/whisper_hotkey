@@ -30,8 +30,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
         targetProvider: targetProvider,
         clipboard: clipboard
-    ) { [weak self] action, releaseTarget in
-        self?.handleHotkey(action, releaseTarget: releaseTarget)
+    ) { [weak self] action, releaseTarget, timestampNanoseconds in
+        self?.handleHotkey(
+            action,
+            releaseTarget: releaseTarget,
+            eventTime: TimeInterval(timestampNanoseconds) / 1_000_000_000
+        )
     }
     private lazy var setupWindowController = SetupWindowController(
         readinessProvider: { [weak self] in
@@ -263,7 +267,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func handleHotkey(
         _ action: HotkeyAction,
-        releaseTarget suppliedTarget: ReleaseTarget?
+        releaseTarget suppliedTarget: ReleaseTarget?,
+        eventTime: TimeInterval
     ) {
         guard !isTerminating else {
             return
@@ -276,13 +281,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 badgeFieldRect = nil
                 releaseTarget = nil
             }
-            process(.hotkeyPressed(at: ProcessInfo.processInfo.systemUptime))
+            process(.hotkeyPressed(at: eventTime))
 
         case .released:
             if machine.phase == .preparing || machine.phase == .listening {
                 captureReleaseTarget(suppliedTarget)
             }
-            process(.hotkeyReleased(at: ProcessInfo.processInfo.systemUptime))
+            process(.hotkeyReleased(at: eventTime))
 
         case .cancel:
             process(.cancel)
