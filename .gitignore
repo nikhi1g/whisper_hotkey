@@ -1,0 +1,16 @@
+.build/
+build/
+dist/
+DerivedData/
+*.app
+*.dSYM/
+*.xcuserstate
+*.xcuserdata/
+.DS_Store
+*.wav
+*.pcm
+*.bin
+*.log
+*.sock
+*.pid
+.swiftpm/
