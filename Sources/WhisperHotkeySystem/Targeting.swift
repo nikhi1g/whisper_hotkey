@@ -19,6 +19,106 @@ public struct SurroundingText: Equatable, Sendable {
     }
 }
 
+enum BoundedTextRead: Equatable {
+    case value(String)
+    case noValue
+    case unavailable
+}
+
+enum SurroundingTextReader {
+    static func read(
+        selectionRange: NSRange,
+        boundedText: (NSRange) -> BoundedTextRead,
+        fullText: () -> String?,
+        selectedText: () -> String?
+    ) -> SurroundingText {
+        if let bounded = readBounded(
+            selectionRange: selectionRange,
+            boundedText: boundedText
+        ) {
+            return bounded
+        }
+
+        if let value = fullText(),
+           let selection = Range(selectionRange, in: value)
+        {
+            return SurroundingText(
+                beforeSelection: value[..<selection.lowerBound].last.map(String.init),
+                selectedText: String(value[selection]),
+                afterSelection: value[selection.upperBound...].first.map(String.init)
+            )
+        }
+
+        let beforeRange = NSRange(
+            location: max(0, selectionRange.location - 1),
+            length: selectionRange.location > 0 ? 1 : 0
+        )
+        let afterRange = NSRange(
+            location: selectionRange.location + selectionRange.length,
+            length: 1
+        )
+        return SurroundingText(
+            beforeSelection: beforeRange.length == 0
+                ? nil
+                : boundedText(beforeRange).value,
+            selectedText: selectedText(),
+            afterSelection: boundedText(afterRange).value
+        )
+    }
+
+    private static func readBounded(
+        selectionRange: NSRange,
+        boundedText: (NSRange) -> BoundedTextRead
+    ) -> SurroundingText? {
+        guard case let .value(selected) = boundedText(selectionRange) else {
+            return nil
+        }
+
+        let before: String?
+        if selectionRange.location == 0 {
+            before = nil
+        } else {
+            let beforeRange = NSRange(
+                location: selectionRange.location - 1,
+                length: 1
+            )
+            guard case let .value(value) = boundedText(beforeRange) else {
+                return nil
+            }
+            before = value
+        }
+
+        let afterRange = NSRange(
+            location: selectionRange.location + selectionRange.length,
+            length: 1
+        )
+        let after: String?
+        switch boundedText(afterRange) {
+        case .value(let value):
+            after = value
+        case .noValue:
+            after = nil
+        case .unavailable:
+            return nil
+        }
+
+        return SurroundingText(
+            beforeSelection: before,
+            selectedText: selected,
+            afterSelection: after
+        )
+    }
+}
+
+private extension BoundedTextRead {
+    var value: String? {
+        guard case let .value(value) = self else {
+            return nil
+        }
+        return value
+    }
+}
+
 public enum TargetTextMode: String, Equatable, Sendable {
     /// The element exposes a selection range, which must remain unchanged.
     case selectionAware
@@ -436,34 +536,17 @@ public final class AccessibilityTargetProvider {
         guard let selectionRange else {
             return nil
         }
-        if let value = copyString(element, attribute: kAXValueAttribute),
-           let selection = Range(selectionRange, in: value)
-        {
-            let before = value[..<selection.lowerBound].last.map(String.init)
-            let selected = String(value[selection])
-            let after = value[selection.upperBound...].first.map(String.init)
-            return SurroundingText(
-                beforeSelection: before,
-                selectedText: selected,
-                afterSelection: after
-            )
-        }
-
-        let selected = copyString(element, attribute: kAXSelectedTextAttribute)
-        let beforeRange = NSRange(
-            location: max(0, selectionRange.location - 1),
-            length: selectionRange.location > 0 ? 1 : 0
-        )
-        let afterRange = NSRange(
-            location: selectionRange.location + selectionRange.length,
-            length: 1
-        )
-        return SurroundingText(
-            beforeSelection: beforeRange.length == 0
-                ? nil
-                : copyString(element, range: beforeRange),
-            selectedText: selected,
-            afterSelection: copyString(element, range: afterRange)
+        return SurroundingTextReader.read(
+            selectionRange: selectionRange,
+            boundedText: {
+                copyBoundedString(element, range: $0)
+            },
+            fullText: {
+                copyString(element, attribute: kAXValueAttribute)
+            },
+            selectedText: {
+                copyString(element, attribute: kAXSelectedTextAttribute)
+            }
         )
     }
 
@@ -684,24 +767,32 @@ private func isAttributeSettable(
     return settable.boolValue
 }
 
-private func copyString(
+private func copyBoundedString(
     _ element: AXUIElement,
     range: NSRange
-) -> String? {
+) -> BoundedTextRead {
     var cfRange = CFRange(location: range.location, length: range.length)
     guard let rangeValue = AXValueCreate(.cfRange, &cfRange) else {
-        return nil
+        return .unavailable
     }
     var value: CFTypeRef?
-    guard AXUIElementCopyParameterizedAttributeValue(
+    let error = AXUIElementCopyParameterizedAttributeValue(
         element,
         kAXStringForRangeParameterizedAttribute as CFString,
         rangeValue,
         &value
-    ) == .success else {
-        return nil
+    )
+    switch error {
+    case .success:
+        guard let string = value as? String else {
+            return .unavailable
+        }
+        return .value(string)
+    case .noValue:
+        return .noValue
+    default:
+        return .unavailable
     }
-    return value as? String
 }
 
 private func copyBounds(

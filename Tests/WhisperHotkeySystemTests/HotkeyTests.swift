@@ -66,6 +66,63 @@ final class HotkeyTests: XCTestCase {
         )
     }
 
+    func testRightCommandSuppressesEveryOtherKeyUntilPhysicalRelease() {
+        var reducer = GlobalInputReducer()
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
+
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyUp, MacVirtualKey.c, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, 56, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.released)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
+            GlobalInputRouting(consume: false, actions: [.copyOrCut])
+        )
+    }
+
+    func testEscapeKeepsOtherKeysSuppressedUntilRightCommandRelease() {
+        var reducer = GlobalInputReducer()
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
+
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.escape, command: true)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.cancel)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.v, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyUp, MacVirtualKey.escape, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, 0, command: true)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, 0, command: false)),
+            GlobalInputRouting(consume: false)
+        )
+        XCTAssertNil(reducer.reset())
+    }
+
     func testResetCancelsOneActiveHold() {
         var reducer = GlobalInputReducer()
         _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
@@ -187,13 +244,13 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         let pasteboard = HotkeyTestPasteboard()
         let clipboard = ClipboardTransactionController(
             pasteboard: pasteboard,
-            restorationDelay: 3_600
+            restorationDelay: 0.001
         )
         XCTAssertTrue(clipboard.installLease("transcript"))
 
         var deliveries: [String] = []
         let delivered = expectation(description: "ordered action delivery")
-        delivered.expectedFulfillmentCount = 3
+        delivered.expectedFulfillmentCount = 4
         clipboard.onLeaseStateChange = { phase in
             deliveries.append(String(describing: phase))
             delivered.fulfill()
@@ -209,6 +266,11 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             keyCode: MacVirtualKey.rightCommand,
             commandIsDown: true,
             timestampNanoseconds: 3_000
+        )
+        let release = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: false,
+            timestampNanoseconds: 3_050
         )
         let syntheticPaste = event(
             keyCode: MacVirtualKey.v,
@@ -230,6 +292,9 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         XCTAssertTrue(
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
         )
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
+        )
         XCTAssertFalse(
             monitor.shouldConsumeTapEvent(type: .keyDown, event: syntheticPaste)
         )
@@ -242,7 +307,10 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         XCTAssertTrue(deliveries.isEmpty)
 
         await fulfillment(of: [delivered], timeout: 1)
-        XCTAssertEqual(deliveries, ["pressed", "restorationPending", "inactive"])
+        XCTAssertEqual(
+            deliveries,
+            ["pressed", "released", "restorationPending", "inactive"]
+        )
     }
 
     private func event(

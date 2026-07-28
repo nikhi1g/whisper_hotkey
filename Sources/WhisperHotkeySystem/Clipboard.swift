@@ -199,6 +199,7 @@ public final class ClipboardTransactionController {
 
     @discardableResult
     public func installLease(_ text: String) -> Bool {
+        generation &+= 1
         cancelLease()
         completeDirectRestoreIfOwned()
 
@@ -244,14 +245,28 @@ public final class ClipboardTransactionController {
     }
 
     public func copyOrCutWillDispatch() {
-        let oldPhase = leaseMachine.phase
-        _ = leaseMachine.copyOrCut()
-        leaseSnapshot = nil
-        pendingDirectRestore = nil
-        generation &+= 1
-        if oldPhase != leaseMachine.phase {
-            notifyLeaseState()
+        let ownedChangeCounts = Set(
+            [
+                leaseMachine.phase == .inactive
+                    ? nil
+                    : leaseMachine.ownedChangeCount,
+                pendingDirectRestore?.ownedChangeCount,
+            ].compactMap { $0 }
+        )
+        guard !ownedChangeCounts.isEmpty else {
+            return
         }
+
+        generation &+= 1
+        let reconciliationGeneration = generation
+        guard ownedChangeCounts.contains(pasteboard.changeCount) else {
+            discardClipboardObligationsForCopyOrCut()
+            return
+        }
+        scheduleCopyOrCutReconciliation(
+            generation: reconciliationGeneration,
+            ownedChangeCounts: ownedChangeCounts
+        )
     }
 
     @discardableResult
@@ -259,6 +274,7 @@ public final class ClipboardTransactionController {
         _ text: String,
         postingPasteWith postPaste: () -> Bool
     ) -> Bool {
+        generation &+= 1
         cancelLease()
         completeDirectRestoreIfOwned()
 
@@ -320,7 +336,47 @@ public final class ClipboardTransactionController {
         }
     }
 
+    private func scheduleCopyOrCutReconciliation(
+        generation reconciliationGeneration: UInt64,
+        ownedChangeCounts: Set<Int>
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            try? await Task.sleep(nanoseconds: restorationDelayNanoseconds)
+            guard reconciliationGeneration == generation else {
+                return
+            }
+            guard ownedChangeCounts.contains(pasteboard.changeCount) else {
+                discardClipboardObligationsForCopyOrCut()
+                return
+            }
+
+            // A no-op copy/cut must not abandon the original clipboard. If a
+            // restoration was already pending, complete it; otherwise retain
+            // the one-paste lease for the next real paste or copy.
+            completeDirectRestoreIfOwned()
+            if leaseMachine.phase == .restorationPending {
+                finishLeaseRestoration()
+            }
+        }
+    }
+
+    private func discardClipboardObligationsForCopyOrCut() {
+        let oldPhase = leaseMachine.phase
+        _ = leaseMachine.copyOrCut()
+        leaseSnapshot = nil
+        pendingDirectRestore = nil
+        if oldPhase != leaseMachine.phase {
+            notifyLeaseState()
+        }
+    }
+
     private func finishLeaseRestoration() {
+        guard leaseMachine.phase == .restorationPending else {
+            return
+        }
         let oldPhase = leaseMachine.phase
         let effect = leaseMachine.finishRestoration(
             currentChangeCount: pasteboard.changeCount

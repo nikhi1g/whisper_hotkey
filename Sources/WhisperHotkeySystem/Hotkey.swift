@@ -60,6 +60,7 @@ public struct GlobalInputRouting: Equatable, Sendable {
 public struct GlobalInputReducer: Sendable {
     public private(set) var rightCommandIsDown = false
     public private(set) var escapeIsBeingConsumed = false
+    private var hotkeyIsActive = false
 
     public init() {}
 
@@ -70,6 +71,13 @@ public struct GlobalInputReducer: Sendable {
 
         if event.keyCode == MacVirtualKey.escape {
             return routeEscape(event)
+        }
+
+        // Right Command is dedicated to dictation for its entire physical
+        // hold. This remains true after Escape cancels the active dictation,
+        // until the matching Right Command release arrives.
+        guard !rightCommandIsDown else {
+            return GlobalInputRouting(consume: true)
         }
 
         guard !event.isSynthetic else {
@@ -93,8 +101,9 @@ public struct GlobalInputReducer: Sendable {
     /// Resets state after an event-tap disable or monitor stop. An active hold
     /// becomes exactly one cancellation.
     public mutating func reset() -> HotkeyAction? {
-        let action: HotkeyAction? = rightCommandIsDown ? .cancel : nil
+        let action: HotkeyAction? = hotkeyIsActive ? .cancel : nil
         rightCommandIsDown = false
+        hotkeyIsActive = false
         escapeIsBeingConsumed = false
         return action
     }
@@ -106,12 +115,21 @@ public struct GlobalInputReducer: Sendable {
         case .flagsChanged:
             if rightCommandIsDown {
                 rightCommandIsDown = false
-                return GlobalInputRouting(consume: true, actions: [.hotkey(.released)])
+                let action: [GlobalInputAction] = hotkeyIsActive
+                    ? [.hotkey(.released)]
+                    : []
+                hotkeyIsActive = false
+                return GlobalInputRouting(consume: true, actions: action)
             }
             guard event.commandIsDown else {
                 return GlobalInputRouting(consume: true)
             }
             rightCommandIsDown = true
+            guard !escapeIsBeingConsumed else {
+                hotkeyIsActive = false
+                return GlobalInputRouting(consume: true)
+            }
+            hotkeyIsActive = true
             return GlobalInputRouting(consume: true, actions: [.hotkey(.pressed)])
 
         case .keyDown:
@@ -119,6 +137,11 @@ public struct GlobalInputReducer: Sendable {
                 return GlobalInputRouting(consume: true)
             }
             rightCommandIsDown = true
+            guard !escapeIsBeingConsumed else {
+                hotkeyIsActive = false
+                return GlobalInputRouting(consume: true)
+            }
+            hotkeyIsActive = true
             return GlobalInputRouting(consume: true, actions: [.hotkey(.pressed)])
 
         case .keyUp:
@@ -126,7 +149,11 @@ public struct GlobalInputReducer: Sendable {
                 return GlobalInputRouting(consume: true)
             }
             rightCommandIsDown = false
-            return GlobalInputRouting(consume: true, actions: [.hotkey(.released)])
+            let action: [GlobalInputAction] = hotkeyIsActive
+                ? [.hotkey(.released)]
+                : []
+            hotkeyIsActive = false
+            return GlobalInputRouting(consume: true, actions: action)
         }
     }
 
@@ -140,7 +167,10 @@ public struct GlobalInputReducer: Sendable {
                 return GlobalInputRouting(consume: false)
             }
             escapeIsBeingConsumed = true
-            rightCommandIsDown = false
+            guard hotkeyIsActive else {
+                return GlobalInputRouting(consume: true)
+            }
+            hotkeyIsActive = false
             return GlobalInputRouting(consume: true, actions: [.hotkey(.cancel)])
 
         case .keyUp:
@@ -151,7 +181,7 @@ public struct GlobalInputReducer: Sendable {
             return GlobalInputRouting(consume: true)
 
         case .flagsChanged:
-            return GlobalInputRouting(consume: false)
+            return GlobalInputRouting(consume: rightCommandIsDown)
         }
     }
 }
