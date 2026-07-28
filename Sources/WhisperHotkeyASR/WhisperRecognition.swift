@@ -481,7 +481,7 @@ public actor WhisperRecognizer {
                 lease: lease
             )
         } catch let error as WhisperCommandLineProcess.Failure
-            where error.isMetalSpecific {
+            where error.shouldRetryWithoutGPU {
             do {
                 return try await WhisperCommandLineProcess.run(
                     executableURL: executableURL,
@@ -713,6 +713,21 @@ enum WhisperCommandLineProcess {
     struct Failure: Error, Equatable, Sendable {
         let status: Int32
         let diagnostic: String
+        let terminationReason: Process.TerminationReason
+
+        init(
+            status: Int32,
+            diagnostic: String,
+            terminationReason: Process.TerminationReason = .exit
+        ) {
+            self.status = status
+            self.diagnostic = diagnostic
+            self.terminationReason = terminationReason
+        }
+
+        var shouldRetryWithoutGPU: Bool {
+            terminationReason == .uncaughtSignal || isMetalSpecific
+        }
 
         var isMetalSpecific: Bool {
             diagnostic.components(separatedBy: .newlines).contains { line in
@@ -807,13 +822,15 @@ enum WhisperCommandLineProcess {
             decoding: outputBuffer.snapshot(),
             as: UTF8.self
         )
-        guard process.terminationStatus == 0 else {
+        guard process.terminationReason == .exit,
+              process.terminationStatus == 0 else {
             throw Failure(
                 status: process.terminationStatus,
                 diagnostic: String(
                     decoding: errorBuffer.snapshot(),
                     as: UTF8.self
-                )
+                ),
+                terminationReason: process.terminationReason
             )
         }
         return output

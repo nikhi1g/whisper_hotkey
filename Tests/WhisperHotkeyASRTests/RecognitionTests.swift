@@ -68,20 +68,34 @@ final class RecognitionTests: XCTestCase {
     }
 
     func testMetalClassifierIgnoresRoutineBackendLoadingForOtherErrors() {
-        XCTAssertFalse(
-            WhisperCommandLineProcess.Failure(
-                status: 1,
-                diagnostic: """
-                load_backend: loaded MTL backend
-                error: failed to open audio file
-                """
-            ).isMetalSpecific
+        let ordinaryFailure = WhisperCommandLineProcess.Failure(
+            status: 1,
+            diagnostic: """
+            load_backend: loaded MTL backend
+            error: failed to open audio file
+            """
         )
+        XCTAssertFalse(ordinaryFailure.isMetalSpecific)
+        XCTAssertFalse(ordinaryFailure.shouldRetryWithoutGPU)
+
         XCTAssertTrue(
             WhisperCommandLineProcess.Failure(
                 status: 1,
                 diagnostic: "ggml_metal_init: error: Metal device failed"
-            ).isMetalSpecific
+            ).shouldRetryWithoutGPU
+        )
+        XCTAssertFalse(
+            WhisperCommandLineProcess.Failure(
+                status: SIGKILL,
+                diagnostic: "load_backend: loaded MTL backend"
+            ).shouldRetryWithoutGPU
+        )
+        XCTAssertTrue(
+            WhisperCommandLineProcess.Failure(
+                status: SIGKILL,
+                diagnostic: "load_backend: loaded MTL backend",
+                terminationReason: .uncaughtSignal
+            ).shouldRetryWithoutGPU
         )
     }
 
@@ -360,6 +374,86 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(transcript, "fallback words")
     }
 
+    func testSignalTerminatedMetalAttemptRetriesOnceWithoutGPU()
+        async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: "#!/bin/sh\nexit 70\n",
+            commandLineScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            for argument in "$@"; do
+                if [ "$argument" = "-ng" ]; then
+                    printf '%s\\n' 'cpu fallback words'
+                    exit 0
+                fi
+            done
+            kill -KILL "$$"
+            """
+        )
+        defer { fixture.delete() }
+        let configuration = WhisperRuntimeConfiguration(
+            helperExecutableURL: nil,
+            commandLineExecutableURL:
+                fixture.configuration.commandLineExecutableURL,
+            modelURL: fixture.configuration.modelURL
+        )
+        let recognizer = WhisperRecognizer(configuration: configuration)
+        let audio = try fixture.makeAudio()
+        let audioDirectory = audio.url.deletingLastPathComponent()
+
+        let transcript = try await recognizer.transcribe(audio)
+
+        XCTAssertEqual(transcript, "cpu fallback words")
+        XCTAssertEqual(try fixture.commandLineAttemptCount(), 2)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: audioDirectory.path)
+        )
+    }
+
+    func testOrdinaryNonMetalExitDoesNotRetryWithoutGPU()
+        async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: "#!/bin/sh\nexit 70\n",
+            commandLineScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            for argument in "$@"; do
+                if [ "$argument" = "-ng" ]; then
+                    printf '%s\\n' 'unexpected retry'
+                    exit 0
+                fi
+            done
+            printf '%s\\n' 'failed to open audio file' >&2
+            exit 17
+            """
+        )
+        defer { fixture.delete() }
+        let configuration = WhisperRuntimeConfiguration(
+            helperExecutableURL: nil,
+            commandLineExecutableURL:
+                fixture.configuration.commandLineExecutableURL,
+            modelURL: fixture.configuration.modelURL
+        )
+        let recognizer = WhisperRecognizer(configuration: configuration)
+        let audio = try fixture.makeAudio()
+        let audioDirectory = audio.url.deletingLastPathComponent()
+
+        do {
+            _ = try await recognizer.transcribe(audio)
+            XCTFail("Expected the ordinary CLI failure.")
+        } catch {
+            XCTAssertEqual(
+                error as? WhisperASRError,
+                .commandLineFailed(17)
+            )
+        }
+
+        XCTAssertEqual(try fixture.commandLineAttemptCount(), 1)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: audioDirectory.path)
+        )
+    }
+
     func testFailedPreloadIsCachedForActiveLeaseBeforeFallback()
         async throws {
         let fixture = try RecognitionFixture(
@@ -548,7 +642,13 @@ private final class RecognitionFixture {
     let root: URL
     let configuration: WhisperRuntimeConfiguration
 
-    init(helperScript: String) throws {
+    init(
+        helperScript: String,
+        commandLineScript: String = """
+        #!/bin/sh
+        printf '%s\\n' 'fallback words'
+        """
+    ) throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "whisper_hotkey-recognition-\(UUID().uuidString)",
@@ -563,12 +663,7 @@ private final class RecognitionFixture {
         let commandLine = root.appendingPathComponent("whisper-cli")
         let model = root.appendingPathComponent("ggml-base.en.bin")
         try Data(helperScript.utf8).write(to: helper)
-        try Data(
-            """
-            #!/bin/sh
-            printf '%s\\n' 'fallback words'
-            """.utf8
-        ).write(to: commandLine)
+        try Data(commandLineScript.utf8).write(to: commandLine)
         try Data([0]).write(to: model)
         for executable in [helper, commandLine] {
             try FileManager.default.setAttributes(
@@ -607,9 +702,21 @@ private final class RecognitionFixture {
     }
 
     func helperAttemptCount() throws -> Int {
+        try attemptCount(
+            executableURL: configuration.helperExecutableURL
+        )
+    }
+
+    func commandLineAttemptCount() throws -> Int {
+        try attemptCount(
+            executableURL: configuration.commandLineExecutableURL
+        )
+    }
+
+    private func attemptCount(executableURL: URL?) throws -> Int {
+        guard let executableURL else { return 0 }
         let attempts = URL(
-            fileURLWithPath:
-                configuration.helperExecutableURL!.path + ".attempts"
+            fileURLWithPath: executableURL.path + ".attempts"
         )
         guard FileManager.default.fileExists(atPath: attempts.path) else {
             return 0
