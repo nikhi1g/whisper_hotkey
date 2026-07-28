@@ -28,6 +28,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private let clipboard = ClipboardTransactionController()
     private let badge = CaretBadgeController()
     private let loginItemManager = LoginItemManager()
+    private var toggleDictationEnabled = UserDefaults.standard.bool(
+        forKey: "toggleDictationEnabled"
+    )
 
     private lazy var delivery = TextDeliveryService(
         targetProvider: targetProvider,
@@ -67,6 +70,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         loginItemManager: loginItemManager
     )
     private lazy var menuBarController = MenuBarController(
+        toggleDictationEnabled: toggleDictationEnabled,
         actions: MenuBarActions(
             showSetup: { [weak self] in
                 guard let self else {
@@ -77,6 +81,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             },
             cancelDictation: { [weak self] in
                 self?.process(.cancel)
+            },
+            toggleDictationMode: { [weak self] in
+                self?.toggleDictationMode()
             },
             quit: {
                 NSApp.terminate(nil)
@@ -113,7 +120,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         guard startControlServer() else {
             return
         }
-        menuBarController.update(.starting)
+        menuBarController.update(
+            .starting,
+            toggleDictationEnabled: toggleDictationEnabled
+        )
         reconcileRuntime(showSetupIfNeeded: true)
         logger.info("Agent started")
     }
@@ -328,6 +338,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         var forceSetup = false
         if readiness.isReady {
             do {
+                hotkeyMonitor.setActivationMode(hotkeyActivationMode)
                 try hotkeyMonitor.start()
                 runtimeReadyForHotkey = true
                 startupError = nil
@@ -367,8 +378,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .pressed:
             if !machine.phase.isBusy, machine.phase != .failed {
-                badgeCaretRect = targetProvider.currentBadgeAnchorRect()
-                badgeFieldRect = nil
+                let anchor = targetProvider.currentBadgeAnchor()
+                badgeCaretRect = anchor.caretRect
+                badgeFieldRect = anchor.fieldRect
                 releaseTarget = nil
             }
             process(.hotkeyPressed(at: eventTime))
@@ -393,6 +405,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 break
             }
         }
+        hotkeyMonitor.synchronizeToggleSession(
+            isActive: machine.phase == .preparing || machine.phase == .listening
+        )
         updateMenuBar()
     }
 
@@ -660,11 +675,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func updateMenuBar() {
         if startupError != nil {
-            menuBarController.update(.failed)
+            menuBarController.update(
+                .failed,
+                toggleDictationEnabled: toggleDictationEnabled
+            )
             return
         }
         guard runtimeReadyForHotkey else {
-            menuBarController.update(.unavailable)
+            menuBarController.update(
+                .unavailable,
+                toggleDictationEnabled: toggleDictationEnabled
+            )
             return
         }
 
@@ -684,7 +705,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         case .failed:
             .failed
         }
-        menuBarController.update(state)
+        menuBarController.update(
+            state,
+            toggleDictationEnabled: toggleDictationEnabled
+        )
+    }
+
+    private var hotkeyActivationMode: HotkeyActivationMode {
+        toggleDictationEnabled ? .toggle : .hold
+    }
+
+    private func toggleDictationMode() {
+        toggleDictationEnabled.toggle()
+        UserDefaults.standard.set(
+            toggleDictationEnabled,
+            forKey: "toggleDictationEnabled"
+        )
+        hotkeyMonitor.setActivationMode(hotkeyActivationMode)
+        updateMenuBar()
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {

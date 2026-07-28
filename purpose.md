@@ -10,18 +10,24 @@ LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time setup window
 handles Microphone, Accessibility, and Input Monitoring permissions.
 
-Right Command is reserved for push-to-talk. Pressing it starts microphone capture
-and asynchronously loads the installed Base English whisper.cpp model. Releasing
-it after at least 250 milliseconds transcribes once, inserts into the editable
-field focused at release, and unloads the model. Escape cancels. A hold lasting
+Right Command is reserved for dictation. Hold-to-talk is the default: pressing
+starts microphone capture and asynchronously loads the installed Base English
+whisper.cpp model, while releasing after at least 250 milliseconds transcribes
+once, inserts into the editable field focused at release, and unloads the model.
+The menu-bar option **Right Command Toggles Dictation** changes this to
+press-to-start and press-again-to-finish, persists across launches, and is
+visibly checked while selected. Escape cancels either mode. A session lasting
 ten minutes finalizes automatically. Right Command presses are ignored while a
 previous dictation is finishing.
 
 Runtime UI consists of a non-activating badge beside the Accessibility caret
-and the persistent menu-bar state icon. The badge shows Listening,
-Transcribing, Busy, or an actionable error. The menu icon distinguishes
-starting, ready, preparing, listening, transcribing, inserting, unavailable,
-and failed states. There is no live text preview or success confirmation.
+and the persistent menu-bar state icon. Standard selection ranges and
+Chromium-style text markers are both used to locate the caret. When an app
+exposes neither caret nor focused-field geometry, the pointer location replaces
+the old screen-corner fallback. The badge shows Listening, Transcribing, Busy,
+or an actionable error. The menu icon distinguishes starting, ready, preparing,
+listening, transcribing, inserting, unavailable, and failed states. There is no
+live text preview or success confirmation.
 
 Insertion replaces the selected text and adds only contextually necessary
 boundary spacing. It uses a temporary pasteboard transaction for compatibility

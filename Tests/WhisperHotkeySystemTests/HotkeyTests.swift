@@ -131,6 +131,74 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.reset())
     }
 
+    func testToggleModeStartsAndStopsOnSuccessivePresses() {
+        var reducer = GlobalInputReducer(activationMode: .toggle)
+
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.pressed)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, 0, command: false)),
+            GlobalInputRouting(consume: false)
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.released)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
+            GlobalInputRouting(consume: true)
+        )
+    }
+
+    func testEscapeCancelsToggleSessionAfterCommandIsReleased() {
+        var reducer = GlobalInputReducer(activationMode: .toggle)
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false))
+
+        XCTAssertEqual(
+            reducer.route(key(.keyDown, MacVirtualKey.escape, command: false)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.cancel)])
+        )
+        XCTAssertEqual(
+            reducer.route(key(.keyUp, MacVirtualKey.escape, command: false)),
+            GlobalInputRouting(consume: true)
+        )
+        XCTAssertNil(reducer.reset())
+    }
+
+    func testChangingModeCancelsActiveToggleAndResetsGesture() {
+        var reducer = GlobalInputReducer(activationMode: .toggle)
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false))
+
+        XCTAssertEqual(reducer.setActivationMode(.hold), .cancel)
+        XCTAssertEqual(reducer.activationMode, .hold)
+        XCTAssertNil(reducer.reset())
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.pressed)])
+        )
+    }
+
+    func testRejectedToggleStartCanBeSynchronizedBackToIdle() {
+        var reducer = GlobalInputReducer(activationMode: .toggle)
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
+        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false))
+        reducer.synchronizeToggleSession(isActive: false)
+
+        XCTAssertNil(reducer.reset())
+        XCTAssertEqual(
+            reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
+            GlobalInputRouting(consume: true, actions: [.hotkey(.pressed)])
+        )
+    }
+
     func testClipboardShortcutsAreObservedButNotConsumed() {
         var reducer = GlobalInputReducer()
 
@@ -200,6 +268,59 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         XCTAssertEqual(deliveries.map(\.0), [.pressed, .released])
         XCTAssertEqual(deliveries.map(\.1), [1_000, 1_250])
         XCTAssertTrue(didCaptureReleaseTarget)
+    }
+
+    func testToggleSecondPressCapturesInsertionTarget() async {
+        var deliveries: [HotkeyAction] = []
+        var targetCaptureCount = 0
+        let delivered = expectation(description: "toggle start and finish")
+        delivered.expectedFulfillmentCount = 2
+        let monitor = GlobalHotkeyMonitor(
+            captureReleaseTarget: {
+                targetCaptureCount += 1
+                return nil
+            },
+            clipboard: ClipboardTransactionController()
+        ) { action, _, _ in
+            deliveries.append(action)
+            delivered.fulfill()
+        }
+        monitor.setActivationMode(.toggle)
+
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(
+                type: .flagsChanged,
+                event: event(
+                    keyCode: MacVirtualKey.rightCommand,
+                    commandIsDown: true,
+                    timestampNanoseconds: 10_000
+                )
+            )
+        )
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(
+                type: .flagsChanged,
+                event: event(
+                    keyCode: MacVirtualKey.rightCommand,
+                    commandIsDown: false,
+                    timestampNanoseconds: 10_100
+                )
+            )
+        )
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(
+                type: .flagsChanged,
+                event: event(
+                    keyCode: MacVirtualKey.rightCommand,
+                    commandIsDown: true,
+                    timestampNanoseconds: 11_000
+                )
+            )
+        )
+
+        await fulfillment(of: [delivered], timeout: 1)
+        XCTAssertEqual(deliveries, [.pressed, .released])
+        XCTAssertEqual(targetCaptureCount, 1)
     }
 
     func testTapDisableCancellationUsesDisablingEventTimestamp() async {

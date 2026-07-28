@@ -16,6 +16,11 @@ public enum GlobalKeyEventKind: Equatable, Sendable {
     case keyUp
 }
 
+public enum HotkeyActivationMode: String, Codable, Equatable, Sendable {
+    case hold
+    case toggle
+}
+
 public struct GlobalKeyEvent: Equatable, Sendable {
     public let kind: GlobalKeyEventKind
     public let keyCode: Int64
@@ -60,9 +65,41 @@ public struct GlobalInputRouting: Equatable, Sendable {
 public struct GlobalInputReducer: Sendable {
     public private(set) var rightCommandIsDown = false
     public private(set) var escapeIsBeingConsumed = false
+    public private(set) var activationMode: HotkeyActivationMode
     private var hotkeyIsActive = false
+    private var toggleSessionIsActive = false
 
-    public init() {}
+    public init(activationMode: HotkeyActivationMode = .hold) {
+        self.activationMode = activationMode
+    }
+
+    /// Reconfiguring the gesture is a cancellation boundary. This avoids
+    /// carrying a half-finished physical hold or toggle session into the new
+    /// interpretation.
+    public mutating func setActivationMode(
+        _ mode: HotkeyActivationMode
+    ) -> HotkeyAction? {
+        guard activationMode != mode else {
+            return nil
+        }
+        let action: HotkeyAction? =
+            hotkeyIsActive || toggleSessionIsActive ? .cancel : nil
+        activationMode = mode
+        rightCommandIsDown = false
+        escapeIsBeingConsumed = false
+        hotkeyIsActive = false
+        toggleSessionIsActive = false
+        return action
+    }
+
+    /// The app state machine remains authoritative if a toggle press is
+    /// rejected because transcription or insertion is already busy.
+    public mutating func synchronizeToggleSession(isActive: Bool) {
+        guard activationMode == .toggle else {
+            return
+        }
+        toggleSessionIsActive = isActive
+    }
 
     public mutating func route(_ event: GlobalKeyEvent) -> GlobalInputRouting {
         if event.keyCode == MacVirtualKey.rightCommand {
@@ -101,14 +138,27 @@ public struct GlobalInputReducer: Sendable {
     /// Resets state after an event-tap disable or monitor stop. An active hold
     /// becomes exactly one cancellation.
     public mutating func reset() -> HotkeyAction? {
-        let action: HotkeyAction? = hotkeyIsActive ? .cancel : nil
+        let action: HotkeyAction? =
+            hotkeyIsActive || toggleSessionIsActive ? .cancel : nil
         rightCommandIsDown = false
         hotkeyIsActive = false
+        toggleSessionIsActive = false
         escapeIsBeingConsumed = false
         return action
     }
 
     private mutating func routeRightCommand(
+        _ event: GlobalKeyEvent
+    ) -> GlobalInputRouting {
+        switch activationMode {
+        case .hold:
+            routeHoldRightCommand(event)
+        case .toggle:
+            routeToggleRightCommand(event)
+        }
+    }
+
+    private mutating func routeHoldRightCommand(
         _ event: GlobalKeyEvent
     ) -> GlobalInputRouting {
         switch event.kind {
@@ -157,20 +207,59 @@ public struct GlobalInputReducer: Sendable {
         }
     }
 
+    private mutating func routeToggleRightCommand(
+        _ event: GlobalKeyEvent
+    ) -> GlobalInputRouting {
+        switch event.kind {
+        case .flagsChanged:
+            if rightCommandIsDown {
+                rightCommandIsDown = false
+                return GlobalInputRouting(consume: true)
+            }
+            guard event.commandIsDown else {
+                return GlobalInputRouting(consume: true)
+            }
+            rightCommandIsDown = true
+            return togglePressRouting()
+
+        case .keyDown:
+            guard !rightCommandIsDown, !event.isAutoRepeat else {
+                return GlobalInputRouting(consume: true)
+            }
+            rightCommandIsDown = true
+            return togglePressRouting()
+
+        case .keyUp:
+            rightCommandIsDown = false
+            return GlobalInputRouting(consume: true)
+        }
+    }
+
+    private mutating func togglePressRouting() -> GlobalInputRouting {
+        guard !escapeIsBeingConsumed else {
+            toggleSessionIsActive = false
+            return GlobalInputRouting(consume: true)
+        }
+        let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
+        toggleSessionIsActive.toggle()
+        return GlobalInputRouting(consume: true, actions: [.hotkey(action)])
+    }
+
     private mutating func routeEscape(_ event: GlobalKeyEvent) -> GlobalInputRouting {
         switch event.kind {
         case .keyDown:
             if escapeIsBeingConsumed {
                 return GlobalInputRouting(consume: true)
             }
-            guard rightCommandIsDown else {
+            guard rightCommandIsDown || toggleSessionIsActive else {
                 return GlobalInputRouting(consume: false)
             }
             escapeIsBeingConsumed = true
-            guard hotkeyIsActive else {
+            guard hotkeyIsActive || toggleSessionIsActive else {
                 return GlobalInputRouting(consume: true)
             }
             hotkeyIsActive = false
+            toggleSessionIsActive = false
             return GlobalInputRouting(consume: true, actions: [.hotkey(.cancel)])
 
         case .keyUp:
@@ -289,6 +378,19 @@ public final class GlobalHotkeyMonitor {
         }
         runLoopSource = nil
         eventTap = nil
+    }
+
+    public func setActivationMode(_ mode: HotkeyActivationMode) {
+        if let action = reducer.setActivationMode(mode) {
+            enqueue(
+                actions: [.hotkey(action)],
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
+        }
+    }
+
+    public func synchronizeToggleSession(isActive: Bool) {
+        reducer.synchronizeToggleSession(isActive: isActive)
     }
 
     func shouldConsumeTapEvent(

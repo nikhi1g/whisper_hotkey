@@ -35,6 +35,17 @@ final class MenuBarControllerTests: XCTestCase {
         XCTAssertFalse(MenuBarState.failed.canCancel)
     }
 
+    func testIdleTitleDescribesSelectedGesture() {
+        XCTAssertEqual(
+            MenuBarState.idle.title(toggleDictationEnabled: false),
+            "Ready — hold Right Command"
+        )
+        XCTAssertEqual(
+            MenuBarState.idle.title(toggleDictationEnabled: true),
+            "Ready — press Right Command"
+        )
+    }
+
     @MainActor
     func testSystemSymbolsExistOnSupportedMacOS() {
         let states: [MenuBarState] = [

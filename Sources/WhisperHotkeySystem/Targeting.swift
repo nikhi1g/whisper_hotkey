@@ -393,28 +393,91 @@ public final class ReleaseTarget {
     }
 }
 
+public struct BadgeAnchorGeometry: Equatable, Sendable {
+    public let caretRect: CGRect?
+    public let fieldRect: CGRect?
+
+    public init(caretRect: CGRect?, fieldRect: CGRect?) {
+        self.caretRect = caretRect
+        self.fieldRect = fieldRect
+    }
+}
+
+enum BadgeAnchorResolver {
+    static func resolve(
+        caretRect: CGRect?,
+        fieldRect: CGRect?,
+        pointerLocation: CGPoint
+    ) -> BadgeAnchorGeometry {
+        if let caret = usable(caretRect) {
+            return BadgeAnchorGeometry(caretRect: caret, fieldRect: usable(fieldRect))
+        }
+
+        if let field = usable(fieldRect) {
+            if field.insetBy(dx: -8, dy: -8).contains(pointerLocation) {
+                return BadgeAnchorGeometry(
+                    caretRect: pointerCaret(at: pointerLocation),
+                    fieldRect: field
+                )
+            }
+            return BadgeAnchorGeometry(caretRect: nil, fieldRect: field)
+        }
+
+        return BadgeAnchorGeometry(
+            caretRect: pointerCaret(at: pointerLocation),
+            fieldRect: nil
+        )
+    }
+
+    private static func pointerCaret(at location: CGPoint) -> CGRect {
+        CGRect(x: location.x, y: location.y - 9, width: 2, height: 18)
+    }
+
+    private static func usable(_ rect: CGRect?) -> CGRect? {
+        guard let rect,
+              !rect.isNull,
+              !rect.isInfinite,
+              rect.width >= 0,
+              rect.height >= 0,
+              rect.width > 0 || rect.height > 0
+        else {
+            return nil
+        }
+        return rect.standardized
+    }
+}
+
 @MainActor
 public final class AccessibilityTargetProvider {
     public init() {}
 
-    /// Returns current caret geometry without retaining a cross-process
-    /// accessibility object. This is suitable for positioning the listening
-    /// badge at press time.
-    public func currentBadgeAnchorRect() -> CGRect? {
+    /// Returns current caret and field geometry without retaining a
+    /// cross-process accessibility object. Chromium-family editors commonly
+    /// expose caret bounds through text markers rather than AXSelectedTextRange,
+    /// so both representations are tried before the pointer fallback.
+    public func currentBadgeAnchor() -> BadgeAnchorGeometry {
         guard let element = focusedElement() else {
-            return nil
+            return BadgeAnchorResolver.resolve(
+                caretRect: nil,
+                fieldRect: nil,
+                pointerLocation: NSEvent.mouseLocation
+            )
         }
         AXUIElementSetMessagingTimeout(element, 0.15)
-        if let selection = copyRange(
+        let selection = copyRange(
             element,
             attribute: kAXSelectedTextRangeAttribute
-        ),
-        let caretRect = copyCaretRect(element, selectionRange: selection),
-        let appKitRect = appKitScreenRect(caretRect)
-        {
-            return appKitRect
-        }
-        return copyElementRect(element).flatMap(appKitScreenRect)
+        )
+        let caretRect = copyCaretRect(
+            element,
+            selectionRange: selection
+        ).flatMap(appKitScreenRect)
+        let fieldRect = copyElementRect(element).flatMap(appKitScreenRect)
+        return BadgeAnchorResolver.resolve(
+            caretRect: caretRect,
+            fieldRect: fieldRect,
+            pointerLocation: NSEvent.mouseLocation
+        )
     }
 
     public func captureFocusedTarget() -> ReleaseTarget? {
@@ -451,17 +514,19 @@ public final class AccessibilityTargetProvider {
     }
 
     private func focusedElement() -> AXUIElement? {
+        if let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+           processIdentifier > 0
+        {
+            let application = AXUIElementCreateApplication(processIdentifier)
+            AXUIElementSetMessagingTimeout(application, 0.15)
+            if let focused = copyFocusedElement(application) {
+                return focused
+            }
+        }
+
         let systemWide = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(systemWide, 0.15)
-        guard let value = copyAttribute(
-            systemWide,
-            attribute: kAXFocusedUIElementAttribute
-        ),
-        CFGetTypeID(value) == AXUIElementGetTypeID()
-        else {
-            return nil
-        }
-        return unsafeDowncast(value, to: AXUIElement.self)
+        return copyFocusedElement(systemWide)
     }
 
     private func inspect(_ element: AXUIElement) -> Inspection {
@@ -503,9 +568,9 @@ public final class AccessibilityTargetProvider {
             ? makeSurroundingText(element: element, selectionRange: selectionRange)
             : nil
         let accessibilityFieldRect = copyElementRect(element)
-        let accessibilityCaretRect = selectionRange.flatMap {
-            copyCaretRect(element, selectionRange: $0)
-        }
+        let accessibilityCaretRect = isSecure
+            ? nil
+            : copyCaretRect(element, selectionRange: selectionRange)
         let primaryScreenFrame = NSScreen.screens.first?.frame
         let fieldRect = accessibilityFieldRect.flatMap {
             appKitScreenRect($0, primaryScreenFrame: primaryScreenFrame)
@@ -552,19 +617,23 @@ public final class AccessibilityTargetProvider {
 
     private func copyCaretRect(
         _ element: AXUIElement,
-        selectionRange: NSRange
+        selectionRange: NSRange?
     ) -> CGRect? {
-        let insertionLocation = selectionRange.location + selectionRange.length
-        if let rect = copyBounds(
-            element,
-            range: NSRange(location: insertionLocation, length: 0)
-        ) {
-            return rect
+        if let selectionRange {
+            let insertionLocation = selectionRange.location + selectionRange.length
+            if let rect = copyBounds(
+                element,
+                range: NSRange(location: insertionLocation, length: 0)
+            ) {
+                return rect
+            }
+            if selectionRange.length > 0,
+               let rect = copyBounds(element, range: selectionRange)
+            {
+                return rect
+            }
         }
-        guard selectionRange.length > 0 else {
-            return nil
-        }
-        return copyBounds(element, range: selectionRange)
+        return copyTextMarkerCaretRect(element)
     }
 
     private func appKitScreenRect(_ accessibilityRect: CGRect) -> CGRect? {
@@ -592,6 +661,22 @@ private struct Inspection {
     let state: CapturedTargetState
     let caretRect: CGRect?
     let fieldRect: CGRect?
+}
+
+private let axFrameAttribute = "AXFrame"
+private let axSelectedTextMarkerRangeAttribute = "AXSelectedTextMarkerRange"
+private let axBoundsForTextMarkerRangeAttribute = "AXBoundsForTextMarkerRange"
+
+private func copyFocusedElement(_ root: AXUIElement) -> AXUIElement? {
+    guard let value = copyAttribute(
+        root,
+        attribute: kAXFocusedUIElementAttribute
+    ),
+    CFGetTypeID(value) == AXUIElementGetTypeID()
+    else {
+        return nil
+    }
+    return unsafeDowncast(value, to: AXUIElement.self)
 }
 
 private func copyAttribute(
@@ -710,6 +795,11 @@ private func copyOptionalRange(
 }
 
 private func copyElementRect(_ element: AXUIElement) -> CGRect? {
+    if let value = copyAttribute(element, attribute: axFrameAttribute),
+       let frame = copyRect(from: value)
+    {
+        return frame
+    }
     guard let position = copyPoint(element, attribute: kAXPositionAttribute),
           let size = copySize(element, attribute: kAXSizeAttribute)
     else {
@@ -750,6 +840,42 @@ private func copySize(
     }
     var size = CGSize.zero
     return AXValueGetValue(axValue, .cgSize, &size) ? size : nil
+}
+
+private func copyTextMarkerCaretRect(_ element: AXUIElement) -> CGRect? {
+    var candidate: AXUIElement? = element
+    for _ in 0..<6 {
+        guard let current = candidate else {
+            break
+        }
+        AXUIElementSetMessagingTimeout(current, 0.08)
+        if let markerRange = copyAttribute(
+            current,
+            attribute: axSelectedTextMarkerRangeAttribute
+        ),
+        let rect = copyParameterizedRect(
+            current,
+            attribute: axBoundsForTextMarkerRangeAttribute,
+            parameter: markerRange
+        ) {
+            return rect
+        }
+
+        guard let parentValue = copyAttribute(
+            current,
+            attribute: kAXParentAttribute
+        ),
+        CFGetTypeID(parentValue) == AXUIElementGetTypeID()
+        else {
+            break
+        }
+        let parent = unsafeDowncast(parentValue, to: AXUIElement.self)
+        guard !CFEqual(parent, current) else {
+            break
+        }
+        candidate = parent
+    }
+    return nil
 }
 
 private func isAttributeSettable(
@@ -810,9 +936,34 @@ private func copyBounds(
         rangeValue,
         &value
     ) == .success,
-    let value,
-    CFGetTypeID(value) == AXValueGetTypeID()
+    let value
     else {
+        return nil
+    }
+    return copyRect(from: value)
+}
+
+private func copyParameterizedRect(
+    _ element: AXUIElement,
+    attribute: String,
+    parameter: CFTypeRef
+) -> CGRect? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyParameterizedAttributeValue(
+        element,
+        attribute as CFString,
+        parameter,
+        &value
+    ) == .success,
+    let value
+    else {
+        return nil
+    }
+    return copyRect(from: value)
+}
+
+private func copyRect(from value: CFTypeRef) -> CGRect? {
+    guard CFGetTypeID(value) == AXValueGetTypeID() else {
         return nil
     }
     let axValue = unsafeDowncast(value, to: AXValue.self)

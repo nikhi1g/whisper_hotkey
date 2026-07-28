@@ -202,7 +202,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
 
         if readiness.isReady, loginStatus == .enabled {
             completionStore.isComplete = true
-            detailLabel.stringValue = "Ready. Hold Right Command anywhere text can be entered."
+            detailLabel.stringValue = "Ready. Use Right Command anywhere text can be entered."
             detailLabel.textColor = .secondaryLabelColor
         } else if loginStatus == .requiresApproval {
             detailLabel.stringValue = "Approve whisper_hotkey in Login Items to finish setup."

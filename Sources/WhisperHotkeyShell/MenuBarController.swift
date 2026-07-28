@@ -35,11 +35,17 @@ public enum MenuBarState: Equatable, Sendable {
     }
 
     public var title: String {
+        title(toggleDictationEnabled: false)
+    }
+
+    public func title(toggleDictationEnabled: Bool) -> String {
         switch self {
         case .starting:
             "Starting…"
         case .idle:
-            "Ready — hold Right Command"
+            toggleDictationEnabled
+                ? "Ready — press Right Command"
+                : "Ready — hold Right Command"
         case .preparing:
             "Preparing microphone…"
         case .listening:
@@ -71,15 +77,18 @@ public enum MenuBarState: Equatable, Sendable {
 public struct MenuBarActions {
     public var showSetup: () -> Void
     public var cancelDictation: () -> Void
+    public var toggleDictationMode: () -> Void
     public var quit: () -> Void
 
     public init(
         showSetup: @escaping () -> Void,
         cancelDictation: @escaping () -> Void,
+        toggleDictationMode: @escaping () -> Void,
         quit: @escaping () -> Void
     ) {
         self.showSetup = showSetup
         self.cancelDictation = cancelDictation
+        self.toggleDictationMode = toggleDictationMode
         self.quit = quit
     }
 }
@@ -98,8 +107,16 @@ public final class MenuBarController: NSObject {
         action: #selector(cancelDictation),
         keyEquivalent: ""
     )
+    private let toggleModeItem = NSMenuItem(
+        title: "Right Command Toggles Dictation",
+        action: #selector(toggleDictationMode),
+        keyEquivalent: ""
+    )
 
-    public init(actions: MenuBarActions) {
+    public init(
+        toggleDictationEnabled: Bool,
+        actions: MenuBarActions
+    ) {
         self.actions = actions
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
@@ -111,6 +128,10 @@ public final class MenuBarController: NSObject {
 
         cancelItem.target = self
         menu.addItem(cancelItem)
+
+        toggleModeItem.target = self
+        toggleModeItem.state = toggleDictationEnabled ? .on : .off
+        menu.addItem(toggleModeItem)
 
         let setupItem = NSMenuItem(
             title: "Open Setup…",
@@ -130,17 +151,24 @@ public final class MenuBarController: NSObject {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
-        update(.starting)
+        update(.starting, toggleDictationEnabled: toggleDictationEnabled)
     }
 
-    public func update(_ state: MenuBarState) {
-        stateItem.title = state.title
+    public func update(
+        _ state: MenuBarState,
+        toggleDictationEnabled: Bool
+    ) {
+        let stateTitle = state.title(
+            toggleDictationEnabled: toggleDictationEnabled
+        )
+        stateItem.title = stateTitle
         cancelItem.isEnabled = state.canCancel
+        toggleModeItem.state = toggleDictationEnabled ? .on : .off
 
         guard let button = statusItem.button else {
             return
         }
-        let description = "whisper_hotkey — \(state.title)"
+        let description = "whisper_hotkey — \(stateTitle)"
         let image = NSImage(
             systemSymbolName: state.symbolName,
             accessibilityDescription: description
@@ -161,6 +189,10 @@ public final class MenuBarController: NSObject {
 
     @objc private func cancelDictation() {
         actions.cancelDictation()
+    }
+
+    @objc private func toggleDictationMode() {
+        actions.toggleDictationMode()
     }
 
     @objc private func quit() {

@@ -1,21 +1,29 @@
 # whisper_hotkey
 
-`whisper_hotkey` is a private, background macOS push-to-talk utility. Hold the
-physical Right Command key, speak, and release to insert a local Base English
-Whisper transcription at the current selection. A hold shorter than 250 ms is
-discarded, Escape cancels, and a ten-minute hold finalizes automatically.
+`whisper_hotkey` is a private, background macOS dictation utility. By default,
+hold the physical Right Command key, speak, and release to insert a local Base
+English Whisper transcription at the current selection. A hold shorter than
+250 ms is discarded, Escape cancels, and a ten-minute session finalizes
+automatically.
 
 The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
-and error states, and its menu offers Cancel Dictation, Open Setup, and Quit.
-A non-activating Listening/Transcribing/Busy/Error badge also appears beside
-the destination caret.
+and error states. Its menu offers Cancel Dictation, Open Setup, Quit, and the
+persistent checked option **Right Command Toggles Dictation**. A non-activating
+Listening/Transcribing/Busy/Error badge also appears beside the destination
+caret.
 
 ## Use
 
 1. Focus an editable field and place the caret or select text to replace.
 2. Hold Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
+
+To dictate without holding the key, enable **Right Command Toggles Dictation**
+in the menu-bar menu. Press Right Command once to start, speak while the
+caret-attached badge says Listening, then press it again to transcribe and
+insert. Ordinary typing remains available between the two presses; Escape
+cancels.
 
 The transcript replaces the release-time selection and adds boundary spaces
 only when the neighboring text needs them. If the destination becomes unsafe or
@@ -26,6 +34,10 @@ restored when it is still safe to do so. A newer copy or cut always wins.
 Password fields and macOS secure-input contexts fail closed. Some applications
 that do not expose a stable editable Accessibility element may use the
 one-paste fallback instead of automatic insertion.
+
+The badge uses both standard macOS selection ranges and Chromium/Electron text
+markers. If an editor exposes neither caret nor field geometry, it anchors near
+the current pointer rather than falling back to a screen corner.
 
 ## Setup and permissions
 

@@ -8,6 +8,7 @@ the MVP artifact is intentionally host-local to this Mac's installed
 Whisper/GGML libraries.
 
 - Hold dedicated Right Command to listen; release to transcribe and insert.
+  A persistent checked menu option switches to press-to-start/press-to-finish.
 - Begin audio capture and Base English model loading together on key-down.
 - Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
 - Show a caret-attached Listening/Transcribing/Busy/Error badge and an
@@ -29,8 +30,9 @@ Whisper/GGML libraries.
 3. `WhisperHotkeySystem` owns the Right Command event tap, release-time
    Accessibility target, caret geometry, context spacing, temporary paste, and
    one-paste clipboard leases.
-4. `WhisperHotkeyShell` owns the badge, menu-bar state UI, first-run permission
-   UI, one-shot login launcher registration, and private local control socket.
+4. `WhisperHotkeyShell` owns the caret-attached badge, persistent mode
+   checkmark, menu-bar state UI, first-run permission UI, one-shot login
+   launcher registration, and private local control socket.
 5. `whisper_hotkey` exposes start, stop, restart, status, cancel, setup,
    enable-login, disable-login, and logs.
 
