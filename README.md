@@ -1,13 +1,15 @@
 # whisper_hotkey
 
-`whisper_hotkey` is a private, headless macOS push-to-talk utility. Hold the
+`whisper_hotkey` is a private, background macOS push-to-talk utility. Hold the
 physical Right Command key, speak, and release to insert a local Base English
 Whisper transcription at the current selection. A hold shorter than 250 ms is
 discarded, Escape cancels, and a ten-minute hold finalizes automatically.
 
-The MVP deliberately has no Dock icon, menu-bar item, live transcript, or
-success notification. Its only runtime UI is a non-activating
-Listening/Transcribing/Busy/Error badge beside the destination caret.
+The app has no Dock icon, live transcript, or success notification. Its
+menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
+and error states, and its menu offers Cancel Dictation, Open Setup, and Quit.
+A non-activating Listening/Transcribing/Busy/Error badge also appears beside
+the destination caret.
 
 ## Use
 
@@ -85,7 +87,8 @@ This build uses the already-installed local stack:
 Audio capture and model preload begin together on key-down. The model helper is
 owned only for that dictation and is terminated after insertion, cancellation,
 or failure. Idle operation is event-driven; no Whisper model, transcription
-helper, polling worker, audio, or transcript history remains resident.
+helper, polling worker, audio, or transcript history remains resident. The
+menu-bar icon is updated only by state transitions.
 
 Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or

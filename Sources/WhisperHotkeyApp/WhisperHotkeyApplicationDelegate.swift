@@ -66,6 +66,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         ),
         loginItemManager: loginItemManager
     )
+    private lazy var menuBarController = MenuBarController(
+        actions: MenuBarActions(
+            showSetup: { [weak self] in
+                guard let self else {
+                    return
+                }
+                _ = self.setupWindowController.showIfNeeded(force: true)
+                self.reconcileRuntime(showSetupIfNeeded: false)
+            },
+            cancelDictation: { [weak self] in
+                self?.process(.cancel)
+            },
+            quit: {
+                NSApp.terminate(nil)
+            }
+        )
+    )
 
     private var machine = DictationStateMachine()
     private var controlServer: ControlServer?
@@ -96,6 +113,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         guard startControlServer() else {
             return
         }
+        menuBarController.update(.starting)
         reconcileRuntime(showSetupIfNeeded: true)
         logger.info("Agent started")
     }
@@ -334,6 +352,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 force: !readiness.isReady || forceSetup
             )
         }
+        updateMenuBar()
     }
 
     private func handleHotkey(
@@ -374,6 +393,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 break
             }
         }
+        updateMenuBar()
     }
 
     private func apply(
@@ -635,6 +655,36 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         clipboard.completePendingRestoration()
         clipboard.cancelLease()
+        updateMenuBar()
+    }
+
+    private func updateMenuBar() {
+        if startupError != nil {
+            menuBarController.update(.failed)
+            return
+        }
+        guard runtimeReadyForHotkey else {
+            menuBarController.update(.unavailable)
+            return
+        }
+
+        let state: MenuBarState = switch machine.phase {
+        case .idle:
+            .idle
+        case .preparing:
+            .preparing
+        case .listening:
+            .listening
+        case .transcribing:
+            .transcribing
+        case .inserting:
+            .inserting
+        case .cancelled:
+            .cancelled
+        case .failed:
+            .failed
+        }
+        menuBarController.update(state)
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {

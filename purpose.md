@@ -3,11 +3,12 @@
 `whisper_hotkey` makes private local dictation available wherever macOS accepts
 text while keeping its always-running cost as close to zero as practical.
 
-The app has no Dock or menu-bar presence. It starts at login as a visible macOS
-background item: a signed, one-shot Service Management LaunchAgent opens the
-main app and immediately exits. The app can be started, stopped, inspected, or
-disabled from the terminal. A one-time setup window handles Microphone,
-Accessibility, and Input Monitoring permissions.
+The app has no Dock presence. A lightweight menu-bar item shows current state
+and offers setup, cancellation, and quit controls without polling. It starts at
+login as a visible macOS background item: a signed, one-shot Service Management
+LaunchAgent opens the main app and immediately exits. The app can be started,
+stopped, inspected, or disabled from the terminal. A one-time setup window
+handles Microphone, Accessibility, and Input Monitoring permissions.
 
 Right Command is reserved for push-to-talk. Pressing it starts microphone capture
 and asynchronously loads the installed Base English whisper.cpp model. Releasing
@@ -16,9 +17,11 @@ field focused at release, and unloads the model. Escape cancels. A hold lasting
 ten minutes finalizes automatically. Right Command presses are ignored while a
 previous dictation is finishing.
 
-Runtime UI is limited to a non-activating badge beside the Accessibility caret:
-Listening, Transcribing, Busy, or an actionable error. There is no live text
-preview or success confirmation.
+Runtime UI consists of a non-activating badge beside the Accessibility caret
+and the persistent menu-bar state icon. The badge shows Listening,
+Transcribing, Busy, or an actionable error. The menu icon distinguishes
+starting, ready, preparing, listening, transcribing, inserting, unavailable,
+and failed states. There is no live text preview or success confirmation.
 
 Insertion replaces the selected text and adds only contextually necessary
 boundary spacing. It uses a temporary pasteboard transaction for compatibility

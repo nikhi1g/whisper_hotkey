@@ -10,9 +10,10 @@ Whisper/GGML libraries.
 - Hold dedicated Right Command to listen; release to transcribe and insert.
 - Begin audio capture and Base English model loading together on key-down.
 - Discard holds shorter than 250 ms; Escape cancels; ten minutes auto-finalizes.
-- Show only a caret-attached Listening/Transcribing/Busy/Error badge.
-- Keep no model, helper, transcript history, menu item, Dock item, or polling
-  worker alive while idle.
+- Show a caret-attached Listening/Transcribing/Busy/Error badge and an
+  event-driven menu-bar state icon with setup, cancel, and quit controls.
+- Keep no model, helper, transcript history, Dock item, or polling worker alive
+  while idle.
 - Register a signed, one-shot native LaunchAgent after one-time permission
   setup. It opens the app at login and exits, leaving no second resident worker.
 
@@ -28,8 +29,8 @@ Whisper/GGML libraries.
 3. `WhisperHotkeySystem` owns the Right Command event tap, release-time
    Accessibility target, caret geometry, context spacing, temporary paste, and
    one-paste clipboard leases.
-4. `WhisperHotkeyShell` owns the badge, first-run permission UI, one-shot login
-   launcher registration, and private local control socket.
+4. `WhisperHotkeyShell` owns the badge, menu-bar state UI, first-run permission
+   UI, one-shot login launcher registration, and private local control socket.
 5. `whisper_hotkey` exposes start, stop, restart, status, cancel, setup,
    enable-login, disable-login, and logs.
 

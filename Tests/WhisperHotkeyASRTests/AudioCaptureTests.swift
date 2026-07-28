@@ -72,7 +72,21 @@ final class AudioCaptureTests: XCTestCase {
             }
         }
 
-        for _ in 0..<10 {
+        let callback = AudioTapInvocation(
+            block: makeWhisperAudioTapHandler(writer: writer),
+            buffer: input
+        )
+        let callbackFinished = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            callback.invoke()
+            callbackFinished.signal()
+        }
+        XCTAssertEqual(
+            callbackFinished.wait(timeout: .now() + 2),
+            .success
+        )
+
+        for _ in 0..<9 {
             writer.consume(input)
         }
         XCTAssertNil(writer.finish())
@@ -120,5 +134,19 @@ final class AudioCaptureTests: XCTestCase {
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: directory.path)
         )
+    }
+}
+
+private final class AudioTapInvocation: @unchecked Sendable {
+    private let block: AVAudioNodeTapBlock
+    private let buffer: AVAudioPCMBuffer
+
+    init(block: @escaping AVAudioNodeTapBlock, buffer: AVAudioPCMBuffer) {
+        self.block = block
+        self.buffer = buffer
+    }
+
+    func invoke() {
+        block(buffer, AVAudioTime())
     }
 }

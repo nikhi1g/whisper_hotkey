@@ -105,13 +105,13 @@ public final class WhisperAudioRecorder {
                 converter: converter,
                 outputFormat: outputFile.processingFormat
             )
+            let tapHandler = makeWhisperAudioTapHandler(writer: writer)
             inputNode.installTap(
                 onBus: 0,
                 bufferSize: 1_024,
-                format: inputFormat
-            ) { buffer, _ in
-                writer.consume(buffer)
-            }
+                format: inputFormat,
+                block: tapHandler
+            )
             inputTapInstalled = true
             self.writer = writer
             self.audioFile = audioFile
@@ -192,6 +192,19 @@ public final class WhisperAudioRecorder {
         guard inputTapInstalled else { return }
         engineBox.engine.inputNode.removeTap(onBus: 0)
         inputTapInstalled = false
+    }
+}
+
+/// AVAudioEngine invokes tap blocks on a real-time audio queue. Constructing
+/// this block inside the recorder's MainActor-isolated `start()` method causes
+/// Swift 6 to retain MainActor isolation and trap when Core Audio calls it.
+/// The writer is lock-protected, so the callback is intentionally constructed
+/// at this nonisolated boundary.
+nonisolated func makeWhisperAudioTapHandler(
+    writer: WhisperWAVWriter
+) -> AVAudioNodeTapBlock {
+    { buffer, _ in
+        writer.consume(buffer)
     }
 }
 

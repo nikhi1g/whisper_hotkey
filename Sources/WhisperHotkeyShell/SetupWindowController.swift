@@ -345,7 +345,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(title)
 
         let subtitle = NSTextField(
-            wrappingLabelWithString: "whisper_hotkey needs these local permissions and files. It has no menu bar or Dock icon."
+            wrappingLabelWithString: "whisper_hotkey needs these local permissions and files. Its menu-bar icon shows status; it has no Dock icon."
         )
         subtitle.textColor = .secondaryLabelColor
         subtitle.maximumNumberOfLines = 2
