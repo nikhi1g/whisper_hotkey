@@ -6,6 +6,12 @@ import Foundation
 private let mainApplicationBundleIdentifier = "local.whisperhotkey.app"
 private let launchTimeout: DispatchTimeInterval = .seconds(10)
 
+private func fail(_ message: String) -> Never {
+    let line = "whisper_hotkey login launcher: \(message)\n"
+    FileHandle.standardError.write(Data(line.utf8))
+    exit(EXIT_FAILURE)
+}
+
 private final class LaunchResult: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
@@ -55,8 +61,21 @@ private func containingApplicationURL(for executableURL: URL) -> URL? {
     }
 
     let applicationURL = contentsDirectory.deletingLastPathComponent()
+    // This executable embeds its own Info.plist for code-signing identity, so
+    // read the outer app metadata directly instead of consulting Bundle caches.
+    let infoURL = contentsDirectory.appendingPathComponent("Info.plist")
+    guard let infoData = try? Data(contentsOf: infoURL),
+          let propertyList = try? PropertyListSerialization.propertyList(
+              from: infoData,
+              options: [],
+              format: nil
+          ),
+          let info = propertyList as? [String: Any]
+    else {
+        return nil
+    }
     guard applicationURL.pathExtension == "app",
-          Bundle(url: applicationURL)?.bundleIdentifier
+          info["CFBundleIdentifier"] as? String
             == mainApplicationBundleIdentifier
     else {
         return nil
@@ -64,10 +83,11 @@ private func containingApplicationURL(for executableURL: URL) -> URL? {
     return applicationURL
 }
 
-guard let launcherURL = executableURL(),
-      let applicationURL = containingApplicationURL(for: launcherURL)
-else {
-    exit(EXIT_FAILURE)
+guard let launcherURL = executableURL() else {
+    fail("could not resolve its executable")
+}
+guard let applicationURL = containingApplicationURL(for: launcherURL) else {
+    fail("could not resolve its signed containing application")
 }
 
 private let completion = DispatchSemaphore(value: 0)
@@ -85,6 +105,6 @@ NSWorkspace.shared.openApplication(
 guard completion.wait(timeout: .now() + launchTimeout) == .success,
       result.succeeded
 else {
-    exit(EXIT_FAILURE)
+    fail("LaunchServices did not open the application")
 }
 exit(EXIT_SUCCESS)
