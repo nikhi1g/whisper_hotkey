@@ -88,6 +88,26 @@ final class ControlTransportTests: XCTestCase {
         XCTAssertEqual(try ControlClient(socketURL: socketURL).send(.status).message, "fresh")
     }
 
+    func testIdleServerDoesNotRetainItselfAndDeinitCleansSocket() throws {
+        let directory = temporaryDirectory()
+        let socketURL = directory.appendingPathComponent("control.sock")
+        var server: ControlServer? = ControlServer(socketURL: socketURL) { _ in
+            ControlResponse(ok: true, message: "unused")
+        }
+        weak let weakServer = server
+        defer {
+            server?.stop()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        try server?.start()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: socketURL.path))
+
+        server = nil
+        XCTAssertNil(weakServer)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
+    }
+
     private func temporaryDirectory() -> URL {
         URL(
             fileURLWithPath: "/private/tmp/wh-shell-\(UUID().uuidString.prefix(8))",

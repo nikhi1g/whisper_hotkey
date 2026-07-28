@@ -91,13 +91,15 @@ public final class ControlServer: @unchecked Sendable {
     public let socketURL: URL
 
     private let handler: Handler
-    private let acceptQueue = DispatchQueue(
+    private let eventQueue = DispatchQueue(
         label: "local.whisperhotkey.control-server",
         qos: .utility
     )
     private let queueKey = DispatchSpecificKey<UInt8>()
     private let stateLock = NSLock()
     private var listenerDescriptor: Int32 = -1
+    private var listenerSource: (any DispatchSourceRead)?
+    private var listenerCancellation: DispatchGroup?
     private var clientDescriptors: Set<Int32> = []
     private var running = false
 
@@ -107,7 +109,7 @@ public final class ControlServer: @unchecked Sendable {
     ) {
         self.socketURL = socketURL
         self.handler = handler
-        acceptQueue.setSpecific(key: queueKey, value: 1)
+        eventQueue.setSpecific(key: queueKey, value: 1)
     }
 
     deinit {
@@ -158,19 +160,36 @@ public final class ControlServer: @unchecked Sendable {
                 guard Darwin.listen(descriptor, SOMAXCONN) == 0 else {
                     throw ControlTransportError.systemCall("listen", errno)
                 }
+                try setNonblocking(descriptor)
             } catch {
                 Darwin.close(descriptor)
                 Darwin.unlink(socketURL.path)
                 throw error
             }
 
-            listenerDescriptor = descriptor
-            running = true
-            stateLock.unlock()
-
-            acceptQueue.async { [weak self] in
-                self?.acceptConnections(listenerDescriptor: descriptor)
+            let cancellation = DispatchGroup()
+            cancellation.enter()
+            let socketPath = socketURL.path
+            let source = DispatchSource.makeReadSource(
+                fileDescriptor: descriptor,
+                queue: eventQueue
+            )
+            source.setEventHandler { [weak self] in
+                self?.acceptAvailableConnections(listenerDescriptor: descriptor)
             }
+            source.setCancelHandler {
+                Darwin.shutdown(descriptor, SHUT_RDWR)
+                Darwin.close(descriptor)
+                Darwin.unlink(socketPath)
+                cancellation.leave()
+            }
+
+            listenerDescriptor = descriptor
+            listenerSource = source
+            listenerCancellation = cancellation
+            running = true
+            source.activate()
+            stateLock.unlock()
         } catch {
             stateLock.unlock()
             throw error
@@ -185,29 +204,42 @@ public final class ControlServer: @unchecked Sendable {
         }
 
         running = false
-        let listener = listenerDescriptor
         listenerDescriptor = -1
-        Darwin.shutdown(listener, SHUT_RDWR)
-        Darwin.close(listener)
+        let source = listenerSource
+        let cancellation = listenerCancellation
+        listenerSource = nil
+        listenerCancellation = nil
         for descriptor in clientDescriptors {
             Darwin.shutdown(descriptor, SHUT_RDWR)
         }
         stateLock.unlock()
 
-        if DispatchQueue.getSpecific(key: queueKey) == nil {
-            acceptQueue.sync {}
+        guard let source else {
+            Darwin.unlink(socketURL.path)
+            return
         }
-        Darwin.unlink(socketURL.path)
+        source.cancel()
+        if DispatchQueue.getSpecific(key: queueKey) == nil {
+            cancellation?.wait()
+        }
     }
 
-    private func acceptConnections(listenerDescriptor: Int32) {
+    private func acceptAvailableConnections(listenerDescriptor: Int32) {
         while true {
             let client = Darwin.accept(listenerDescriptor, nil, nil)
             if client < 0 {
                 if errno == EINTR {
                     continue
                 }
-                break
+                if errno == EAGAIN || errno == EWOULDBLOCK {
+                    return
+                }
+                return
+            }
+
+            guard setBlocking(client) else {
+                Darwin.close(client)
+                continue
             }
 
             setNoSigPipe(client)
@@ -224,7 +256,12 @@ public final class ControlServer: @unchecked Sendable {
             }
 
             Task.detached(priority: .utility) { [weak self] in
-                await self?.serve(client)
+                guard let self else {
+                    Darwin.shutdown(client, SHUT_RDWR)
+                    Darwin.close(client)
+                    return
+                }
+                await self.serve(client)
             }
         }
     }
@@ -321,6 +358,24 @@ public final class ControlServer: @unchecked Sendable {
 }
 
 private let maximumControlMessageSize = 65_536
+
+private func setNonblocking(_ descriptor: Int32) throws {
+    let flags = Darwin.fcntl(descriptor, F_GETFL)
+    guard flags >= 0 else {
+        throw ControlTransportError.systemCall("fcntl", errno)
+    }
+    guard Darwin.fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+        throw ControlTransportError.systemCall("fcntl", errno)
+    }
+}
+
+private func setBlocking(_ descriptor: Int32) -> Bool {
+    let flags = Darwin.fcntl(descriptor, F_GETFL)
+    guard flags >= 0 else {
+        return false
+    }
+    return Darwin.fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) >= 0
+}
 
 private func makeUnixAddress(path: String) throws -> sockaddr_un {
     var address = sockaddr_un()
