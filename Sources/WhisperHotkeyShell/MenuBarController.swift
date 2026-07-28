@@ -1,4 +1,5 @@
 import AppKit
+import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 public enum MenuBarState: Equatable, Sendable {
@@ -84,6 +85,8 @@ public struct MenuBarActions {
     public var copyLastDictation: () -> Void
     public var toggleDictationMode: () -> Void
     public var selectHotkey: (HotkeyKey) -> Void
+    public var selectModel: (DictationModel) -> Void
+    public var selectRecordingLimit: (RecordingLimit) -> Void
     public var quit: () -> Void
 
     public init(
@@ -92,6 +95,8 @@ public struct MenuBarActions {
         copyLastDictation: @escaping () -> Void,
         toggleDictationMode: @escaping () -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
+        selectModel: @escaping (DictationModel) -> Void,
+        selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         quit: @escaping () -> Void
     ) {
         self.showSetup = showSetup
@@ -99,6 +104,8 @@ public struct MenuBarActions {
         self.copyLastDictation = copyLastDictation
         self.toggleDictationMode = toggleDictationMode
         self.selectHotkey = selectHotkey
+        self.selectModel = selectModel
+        self.selectRecordingLimit = selectRecordingLimit
         self.quit = quit
     }
 }
@@ -129,14 +136,23 @@ public final class MenuBarController: NSObject {
     )
     private let hotkeyMenu = NSMenu(title: "Dictation Key")
     private var hotkeyItems: [HotkeyKey: NSMenuItem] = [:]
+    private let modelMenu = NSMenu(title: "Whisper Model")
+    private var modelItems: [DictationModel: NSMenuItem] = [:]
+    private let recordingLimitMenu = NSMenu(title: "Recording Limit")
+    private var recordingLimitItems: [RecordingLimit: NSMenuItem] = [:]
+    private var availableModels: Set<DictationModel>
 
     public init(
         toggleDictationEnabled: Bool,
         selectedHotkey: HotkeyKey,
+        selectedModel: DictationModel,
+        recordingLimit: RecordingLimit,
+        availableModels: Set<DictationModel>,
         hasLastDictation: Bool,
         actions: MenuBarActions
     ) {
         self.actions = actions
+        self.availableModels = availableModels
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -176,6 +192,46 @@ public final class MenuBarController: NSObject {
         }
         menu.addItem(hotkeyItem)
 
+        let modelItem = NSMenuItem(
+            title: "Whisper Model",
+            action: nil,
+            keyEquivalent: ""
+        )
+        modelItem.submenu = modelMenu
+        for model in DictationModel.allCases {
+            let item = NSMenuItem(
+                title: model.menuTitle,
+                action: #selector(selectModel(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = model.rawValue
+            item.state = model == selectedModel ? .on : .off
+            modelMenu.addItem(item)
+            modelItems[model] = item
+        }
+        menu.addItem(modelItem)
+
+        let recordingLimitItem = NSMenuItem(
+            title: "Recording Limit",
+            action: nil,
+            keyEquivalent: ""
+        )
+        recordingLimitItem.submenu = recordingLimitMenu
+        for limit in RecordingLimit.allCases {
+            let item = NSMenuItem(
+                title: limit.displayName,
+                action: #selector(selectRecordingLimit(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = limit.rawValue
+            item.state = limit == recordingLimit ? .on : .off
+            recordingLimitMenu.addItem(item)
+            recordingLimitItems[limit] = item
+        }
+        menu.addItem(recordingLimitItem)
+
         let setupItem = NSMenuItem(
             title: "Open Setup…",
             action: #selector(showSetup),
@@ -198,6 +254,9 @@ public final class MenuBarController: NSObject {
             .starting,
             toggleDictationEnabled: toggleDictationEnabled,
             selectedHotkey: selectedHotkey,
+            selectedModel: selectedModel,
+            recordingLimit: recordingLimit,
+            availableModels: availableModels,
             hasLastDictation: hasLastDictation
         )
     }
@@ -206,8 +265,12 @@ public final class MenuBarController: NSObject {
         _ state: MenuBarState,
         toggleDictationEnabled: Bool,
         selectedHotkey: HotkeyKey,
+        selectedModel: DictationModel,
+        recordingLimit: RecordingLimit,
+        availableModels: Set<DictationModel>,
         hasLastDictation: Bool
     ) {
+        self.availableModels = availableModels
         let stateTitle = state.title(
             toggleDictationEnabled: toggleDictationEnabled,
             hotkey: selectedHotkey
@@ -220,6 +283,18 @@ public final class MenuBarController: NSObject {
         toggleModeItem.isEnabled = !selectedHotkey.requiresToggleMode
         for (hotkey, item) in hotkeyItems {
             item.state = hotkey == selectedHotkey ? .on : .off
+        }
+        for (model, item) in modelItems {
+            let installed = availableModels.contains(model)
+            item.title = installed
+                ? model.menuTitle
+                : "\(model.menuTitle) (Not Installed)"
+            item.state = model == selectedModel ? .on : .off
+            item.isEnabled = installed && !state.canCancel
+        }
+        for (limit, item) in recordingLimitItems {
+            item.state = limit == recordingLimit ? .on : .off
+            item.isEnabled = !state.canCancel
         }
 
         guard let button = statusItem.button else {
@@ -263,6 +338,25 @@ public final class MenuBarController: NSObject {
             return
         }
         actions.selectHotkey(hotkey)
+    }
+
+    @objc private func selectModel(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let model = DictationModel(rawValue: rawValue),
+              availableModels.contains(model)
+        else {
+            return
+        }
+        actions.selectModel(model)
+    }
+
+    @objc private func selectRecordingLimit(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let limit = RecordingLimit(rawValue: rawValue)
+        else {
+            return
+        }
+        actions.selectRecordingLimit(limit)
     }
 
     @objc private func quit() {

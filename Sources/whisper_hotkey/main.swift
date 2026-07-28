@@ -189,9 +189,18 @@ private struct Controller {
             "Accessibility: \(permission(status.accessibilityGranted))",
             "Input Monitoring: \(permission(status.inputMonitoringGranted))",
             "Login Item: \(status.loginItemEnabled ? "enabled" : "disabled")",
-            "Model: \(available(status.modelAvailable))",
+            "Model file: \(available(status.modelAvailable))",
             "Helper: \(available(status.helperAvailable))",
         ]
+        if let model = status.model, !model.isEmpty {
+            lines.append("Selected model: \(model)")
+        }
+        if let limit = status.recordingLimit, !limit.isEmpty {
+            lines.append("Recording limit: \(limit)")
+        }
+        if let threadCount = status.threadCount {
+            lines.append("Whisper threads: \(threadCount)")
+        }
         if let hotkey = status.hotkey, !hotkey.isEmpty {
             let mode = status.hotkeyMode.map { " (\($0))" } ?? ""
             lines.append("Hotkey: \(hotkey)\(mode)")

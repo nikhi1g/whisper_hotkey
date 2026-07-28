@@ -6,15 +6,16 @@ English Whisper transcription at the current selection. The menu can instead
 select either side of Command, Shift, Option, or Control, plus Caps Lock,
 Escape, or Fn/Globe. A selected modifier remains normal when combined with
 another key or a mouse click. A hold shorter than 250 ms is discarded, Escape
-cancels unless it is the selected trigger, and a ten-minute session finalizes
-automatically.
+cancels unless it is the selected trigger. The persistent **Recording Limit**
+submenu chooses an automatic stop from 30 seconds through one hour; ten minutes
+is the default.
 
 The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
-and error states. Its menu offers Cancel Dictation, Open Setup, Quit, and the
-persistent checked **[Key] Toggles Dictation** option and **Dictation Key**
-submenu. A non-activating Listening/Transcribing/Busy/Error badge also appears
-beside the destination caret.
+and error states. Its menu includes persistent checked controls for the gesture,
+dictation key, local Whisper model, and recording limit. While recording, the
+caret badge shows a small audio-reactive waveform and elapsed time. In the final
+30 seconds it switches to elapsed/limit and pulses orange toward deep red.
 
 ## Use
 
@@ -42,9 +43,12 @@ polling worker for this decision.
 
 The transcript is always pasted once into whatever application is focused when
 delivery occurs. In normal text controls this replaces the current selection.
-Boundary spaces are added when Accessibility exposes enough surrounding text;
-missing or opaque target information never blocks delivery. There is no delayed
-clipboard fallback, so keep the intended text field focused until insertion.
+Boundary spaces are added when Accessibility exposes enough surrounding text.
+At the end of a field, or when the following character is opaque, every
+dictation ends with exactly one space so the next dictation or typed word does
+not run into it. Missing target information never blocks delivery. There is no
+delayed clipboard fallback, so keep the intended text field focused until
+insertion.
 Pasting into a non-text control may do nothing or invoke that application's
 ordinary paste behavior.
 
@@ -119,13 +123,27 @@ This build uses the already-installed local stack:
 - `/opt/homebrew/opt/ggml/`
 - `~/.cache/whisper/ggml-base.en.bin`
 
+The model menu offers:
+
+- **Base English (Fast, 141 MB)** — installed default and smallest option.
+- **Small English (More Accurate, 465 MB)** — installed.
+- **Medium English (High Accuracy, 1.5 GB)** — selectable when its local file
+  is present.
+- **Large-v3 Turbo Q5 (Best Balance, 547 MB)** — selectable when its local file
+  is present.
+
+Missing models remain visible but disabled. The app never downloads weights.
+The decoder keeps beam search at width five for accuracy, uses Metal and flash
+attention, and assigns half the available logical CPUs up to eight threads.
+
 In hold mode, audio capture and model preload begin together only after the
 150 ms bare-key dwell. In toggle mode they begin after the first bare-key
 release. The model helper is owned only for that dictation and is terminated
 after insertion, cancellation, or failure. Idle operation is event-driven; no
 Whisper model, transcription helper, polling worker, audio, or transcript
 history remains resident. The menu-bar icon is updated only by state
-transitions.
+transitions. The waveform reads the existing capture buffer at 10 Hz only while
+recording; it adds no idle timer or second audio pipeline.
 
 Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or

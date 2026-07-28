@@ -487,7 +487,7 @@ int main(int argc, char ** argv) {
     if (!context) {
         return emit_error(
             "model_load_failed",
-            "Base English model could not be loaded",
+            "Selected Whisper model could not be loaded",
             70
         );
     }

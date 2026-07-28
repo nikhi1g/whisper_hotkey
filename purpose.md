@@ -27,9 +27,17 @@ macOS exposes its lock-state changes rather than a momentary hold/release pair;
 its normal lock state is otherwise left to macOS. Escape is a dedicated,
 consumed trigger when selected, so cancellation remains available from the menu
 instead of the same key. For every other selection, Escape cancels either mode.
-Changing the selected key cancels an active dictation cleanly. A session lasting
-ten minutes finalizes automatically. Bare gestures are ignored while a previous
-dictation is finishing.
+Changing the selected key cancels an active dictation cleanly. The checked
+**Recording Limit** submenu persists a choice from 30 seconds through one hour;
+ten minutes is the default, and reaching the chosen limit finalizes
+automatically. Bare gestures are ignored while a previous dictation is
+finishing.
+
+The checked **Whisper Model** submenu persists Base English (default), Small
+English, Medium English, or Large-v3 Turbo Q5. Missing local model files remain
+visible but cannot be selected; the app never downloads them. The accuracy-first
+decoder keeps a beam width of five, uses Metal and flash attention, and gives
+whisper.cpp half of the Mac's logical CPUs up to an eight-thread cap.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a
@@ -43,16 +51,22 @@ geometry is feasible only when the destination app exposes one of those
 Accessibility representations. If it does not, the badge snapshots the current
 pointer position when each runtime state begins; it does not poll or follow the
 pointer. This fallback affects presentation only and never validates or changes
-the paste destination. The badge shows Listening, Transcribing, Busy, or an
-actionable error. The menu icon distinguishes starting, ready, preparing,
-listening, transcribing, inserting, unavailable, and failed states. There is no
-live text preview or success confirmation.
+the paste destination. While listening, the badge shows a five-bar waveform
+sampled from the existing audio callback at 10 Hz and an elapsed timer instead
+of status words. During the last 30 seconds it shows elapsed/limit and pulses
+from orange toward deep red. The update task exists only while recording. Other
+badge states show Transcribing, Busy, or an actionable error. The menu icon
+distinguishes starting, ready, preparing, listening, transcribing, inserting,
+unavailable, and failed states. There is no live text preview or success
+confirmation.
 
 Insertion always posts one local Command-V to the currently focused application.
 This naturally replaces the current selection in normal text controls. When
 nearby text is exposed through Accessibility, contextually necessary boundary
-spacing is added; only one character on either side is queried, and missing or
-opaque information never blocks the paste. There is no text-role classification,
+spacing is added; only one character on either side is queried. When there is
+no exposed following character, the insertion ends in exactly one space so the
+next dictation or typed word is separated naturally. Missing or opaque
+information never blocks the paste. There is no text-role classification,
 target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.

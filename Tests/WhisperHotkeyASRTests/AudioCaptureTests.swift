@@ -85,6 +85,8 @@ final class AudioCaptureTests: XCTestCase {
             callbackFinished.wait(timeout: .now() + 2),
             .success
         )
+        XCTAssertGreaterThan(writer.normalizedInputLevel, 0.3)
+        XCTAssertLessThanOrEqual(writer.normalizedInputLevel, 1)
 
         for _ in 0..<9 {
             writer.consume(input)

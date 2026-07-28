@@ -28,7 +28,7 @@ final class DeliveryTests: XCTestCase {
             .inserted
         )
         XCTAssertEqual(poster.postCount, 1)
-        XCTAssertEqual(pasteboard.replacedTexts, ["dictated text"])
+        XCTAssertEqual(pasteboard.replacedTexts, ["dictated text "])
         clipboard.completePendingRestoration()
         XCTAssertEqual(pasteboard.restoredSnapshots, [original])
     }

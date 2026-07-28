@@ -11,7 +11,10 @@ final class RecognitionTests: XCTestCase {
             options: options
         )
 
-        XCTAssertEqual(arguments.value(after: "--threads"), "4")
+        XCTAssertEqual(
+            arguments.value(after: "--threads"),
+            String(WhisperRuntimeDiscovery.recommendedThreadCount())
+        )
         XCTAssertEqual(arguments.value(after: "--strategy"), "beam")
         XCTAssertEqual(arguments.value(after: "--beam-size"), "5")
         XCTAssertEqual(
@@ -58,7 +61,10 @@ final class RecognitionTests: XCTestCase {
 
         XCTAssertFalse(metal.contains("-ng"))
         XCTAssertTrue(cpu.contains("-ng"))
-        XCTAssertEqual(metal.value(after: "-t"), "4")
+        XCTAssertEqual(
+            metal.value(after: "-t"),
+            String(WhisperRuntimeDiscovery.recommendedThreadCount())
+        )
         XCTAssertEqual(metal.value(after: "-bs"), "5")
         XCTAssertTrue(metal.contains("-fa"))
         XCTAssertTrue(metal.contains("-sns"))
@@ -144,7 +150,7 @@ final class RecognitionTests: XCTestCase {
         )
     }
 
-    func testDiscoveryUsesOnlyBaseEnglishModelAndExecutableHelper()
+    func testDiscoveryUsesSelectedEnglishModelAndExecutableHelper()
         throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(
@@ -169,6 +175,7 @@ final class RecognitionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let configuration = try WhisperRuntimeDiscovery.discover(
+            model: .baseEnglish,
             environment: [
                 WhisperRuntimeDiscovery.helperEnvironmentKey: helper.path
             ],
@@ -178,8 +185,60 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(configuration.modelURL, model)
         XCTAssertEqual(configuration.helperExecutableURL, helper)
         XCTAssertEqual(
-            WhisperRuntimeDiscovery.modelURL(homeDirectory: home),
+            WhisperRuntimeDiscovery.modelURL(
+                model: .baseEnglish,
+                homeDirectory: home
+            ),
             model
+        )
+    }
+
+    func testDiscoveryResolvesLargerModelSelection() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let model = WhisperRuntimeDiscovery.modelURL(
+            model: .smallEnglish,
+            homeDirectory: root
+        )
+        try FileManager.default.createDirectory(
+            at: model.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data([0]).write(to: model)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let configuration = try WhisperRuntimeDiscovery.discover(
+            model: .smallEnglish,
+            environment: [:],
+            homeDirectory: root
+        )
+        XCTAssertEqual(configuration.modelURL, model)
+    }
+
+    func testThreadBudgetUsesHalfTheMachineUpToEight() {
+        XCTAssertEqual(
+            WhisperRuntimeDiscovery.recommendedThreadCount(
+                activeProcessorCount: 16
+            ),
+            8
+        )
+        XCTAssertEqual(
+            WhisperRuntimeDiscovery.recommendedThreadCount(
+                activeProcessorCount: 10
+            ),
+            5
+        )
+        XCTAssertEqual(
+            WhisperRuntimeDiscovery.recommendedThreadCount(
+                activeProcessorCount: 8
+            ),
+            4
+        )
+        XCTAssertEqual(
+            WhisperRuntimeDiscovery.recommendedThreadCount(
+                activeProcessorCount: 2
+            ),
+            2
         )
     }
 
@@ -187,6 +246,7 @@ final class RecognitionTests: XCTestCase {
         let home = URL(fileURLWithPath: "/private/missing-home")
         XCTAssertThrowsError(
             try WhisperRuntimeDiscovery.discover(
+                model: .baseEnglish,
                 environment: [:],
                 homeDirectory: home
             )

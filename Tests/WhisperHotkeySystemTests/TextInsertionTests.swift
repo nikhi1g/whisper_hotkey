@@ -59,4 +59,27 @@ final class TextInsertionTests: XCTestCase {
             " world"
         )
     }
+
+    func testAddsOneTrailingSpaceAtEndOfField() {
+        XCTAssertEqual(
+            TextInsertionFormatter.insertionText(
+                transcript: "A complete sentence. ",
+                surroundingText: SurroundingText(
+                    beforeSelection: ".",
+                    afterSelection: nil
+                )
+            ),
+            " A complete sentence. "
+        )
+    }
+
+    func testOpaqueContextStillAddsOneTrailingSpace() {
+        XCTAssertEqual(
+            TextInsertionFormatter.insertionText(
+                transcript: "Next sentence.  ",
+                surroundingText: nil
+            ),
+            "Next sentence. "
+        )
+    }
 }

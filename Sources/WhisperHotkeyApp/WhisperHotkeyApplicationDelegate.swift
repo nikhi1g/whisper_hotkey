@@ -9,7 +9,6 @@ import WhisperHotkeySystem
 
 @MainActor
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
-    private static let maximumDuration: Duration = .seconds(600)
     private static let errorPresentationDuration: Duration = .seconds(2)
 
     private struct PendingRecognizerWork {
@@ -34,6 +33,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var toggleDictationEnabled = UserDefaults.standard.bool(
         forKey: "toggleDictationEnabled"
     )
+    private var selectedModel = DictationModel.selected()
+    private var recordingLimit = RecordingLimit.selected()
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -71,6 +72,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private lazy var menuBarController = MenuBarController(
         toggleDictationEnabled: effectiveToggleDictationEnabled,
         selectedHotkey: selectedHotkey,
+        selectedModel: selectedModel,
+        recordingLimit: recordingLimit,
+        availableModels: availableModels,
         hasLastDictation: false,
         actions: MenuBarActions(
             showSetup: { [weak self] in
@@ -92,6 +96,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectHotkey: { [weak self] hotkey in
                 self?.selectHotkey(hotkey)
             },
+            selectModel: { [weak self] model in
+                self?.selectModel(model)
+            },
+            selectRecordingLimit: { [weak self] limit in
+                self?.selectRecordingLimit(limit)
+            },
             quit: {
                 NSApp.terminate(nil)
             }
@@ -103,6 +113,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var preloadTask: Task<Void, Never>?
     private var recognitionTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
+    private var recordingPresentationTask: Task<Void, Never>?
     private var errorPresentationTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
@@ -131,6 +142,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             .starting,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
+            selectedModel: selectedModel,
+            recordingLimit: recordingLimit,
+            availableModels: availableModels,
             hasLastDictation: lastDictation != nil
         )
         reconcileRuntime(showSetupIfNeeded: true)
@@ -469,14 +483,19 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         do {
             try recorder.start()
             process(.captureStarted)
+            startRecordingPresentation(
+                generation: generation,
+                limit: recordingLimit.seconds
+            )
         } catch {
             fail(error)
             return false
         }
 
+        let maximumDuration = Duration.seconds(recordingLimit.seconds)
         maximumDurationTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: Self.maximumDuration)
+                try await Task.sleep(for: maximumDuration)
             } catch {
                 return
             }
@@ -495,6 +514,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finalizeRecording() -> Bool {
+        stopRecordingPresentation()
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
 
@@ -592,6 +612,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelSession() {
         sessionGeneration &+= 1
+        stopRecordingPresentation()
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
         let cancelledPreload = preloadTask
@@ -650,6 +671,49 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             presentation,
             caretFrame: badgeCaretRect
         )
+        if presentation == .listening {
+            badge.updateListening(
+                elapsed: 0,
+                limit: TimeInterval(recordingLimit.seconds),
+                level: 0
+            )
+        }
+    }
+
+    private func startRecordingPresentation(
+        generation: UInt64,
+        limit: Int
+    ) {
+        recordingPresentationTask?.cancel()
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        recordingPresentationTask = Task { @MainActor [weak self] in
+            var displayedLevel: Float = 0
+            while !Task.isCancelled {
+                guard let self,
+                      generation == sessionGeneration,
+                      machine.phase == .listening
+                else {
+                    return
+                }
+                let sampledLevel = recorder.normalizedInputLevel
+                displayedLevel = max(sampledLevel, displayedLevel * 0.68)
+                badge.updateListening(
+                    elapsed: ProcessInfo.processInfo.systemUptime - startedAt,
+                    limit: TimeInterval(limit),
+                    level: displayedLevel
+                )
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopRecordingPresentation() {
+        recordingPresentationTask?.cancel()
+        recordingPresentationTask = nil
     }
 
     private func captureInsertionContext(
@@ -681,6 +745,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 .failed,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
+                selectedModel: selectedModel,
+                recordingLimit: recordingLimit,
+                availableModels: availableModels,
                 hasLastDictation: lastDictation != nil
             )
             return
@@ -690,6 +757,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 .unavailable,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
+                selectedModel: selectedModel,
+                recordingLimit: recordingLimit,
+                availableModels: availableModels,
                 hasLastDictation: lastDictation != nil
             )
             return
@@ -715,6 +785,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             state,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
+            selectedModel: selectedModel,
+            recordingLimit: recordingLimit,
+            availableModels: availableModels,
             hasLastDictation: lastDictation != nil
         )
     }
@@ -751,6 +824,34 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         updateMenuBar()
     }
 
+    private func selectModel(_ model: DictationModel) {
+        guard !machine.phase.isBusy,
+              modelAvailable(model),
+              selectedModel != model
+        else {
+            return
+        }
+        selectedModel = model
+        UserDefaults.standard.set(
+            model.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.dictationModel
+        )
+        reconcileRuntime(showSetupIfNeeded: false)
+        setupWindowController.refresh()
+    }
+
+    private func selectRecordingLimit(_ limit: RecordingLimit) {
+        guard !machine.phase.isBusy, recordingLimit != limit else {
+            return
+        }
+        recordingLimit = limit
+        UserDefaults.standard.set(
+            limit.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.recordingLimit
+        )
+        updateMenuBar()
+    }
+
     private func copyLastDictation() {
         guard let lastDictation else {
             return
@@ -770,6 +871,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         scheduledTerminationTask = nil
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
+        stopRecordingPresentation()
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
         preloadTask?.cancel()
@@ -811,6 +913,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             modelAvailable: readiness.modelAvailable,
             hotkey: selectedHotkey.displayName,
             hotkeyMode: hotkeyActivationMode.rawValue,
+            model: selectedModel.displayName,
+            recordingLimit: recordingLimit.displayName,
+            threadCount: WhisperRuntimeDiscovery.recommendedThreadCount(),
             lastError: machine.lastError ?? startupError
         )
     }
@@ -820,9 +925,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var modelAvailable: Bool {
+        modelAvailable(selectedModel)
+    }
+
+    private var availableModels: Set<DictationModel> {
+        Set(DictationModel.allCases.filter(modelAvailable))
+    }
+
+    private func modelAvailable(_ model: DictationModel) -> Bool {
         var isDirectory = ObjCBool(false)
         return FileManager.default.fileExists(
-            atPath: WhisperHotkeyPaths.modelPath,
+            atPath: WhisperHotkeyPaths.modelURL(for: model).path,
             isDirectory: &isDirectory
         ) && !isDirectory.boolValue
     }
@@ -876,7 +989,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func revealModelLocation() {
         reveal(
-            URL(fileURLWithPath: WhisperHotkeyPaths.modelPath),
+            WhisperHotkeyPaths.modelURL(for: selectedModel),
             fallback: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/whisper", isDirectory: true)
         )

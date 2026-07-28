@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+ASSETS = ROOT / "Assets"
 DIST = ROOT / "dist"
 APP = DIST / "whisper_hotkey.app"
 CONTENTS = APP / "Contents"
@@ -47,6 +48,7 @@ def write_info_plist() -> None:
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": "whisper_hotkey",
         "CFBundleDisplayName": "whisper_hotkey",
+        "CFBundleIconFile": "AppIcon",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "0.1.0",
         "CFBundleVersion": "1",
@@ -86,6 +88,7 @@ def bundle(products: Path) -> None:
     shutil.copy2(products / LOGIN_LAUNCHER_NAME, MACOS / LOGIN_LAUNCHER_NAME)
     shutil.copy2(products / "whisper_hotkey", DIST / "whisper_hotkey")
     shutil.copy2(ROOT / "purpose.md", RESOURCES / "purpose.md")
+    shutil.copy2(ASSETS / "AppIcon.icns", RESOURCES / "AppIcon.icns")
     write_info_plist()
     write_login_agent_plist()
 

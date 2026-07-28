@@ -15,8 +15,12 @@ Whisper/GGML libraries.
 - In hold mode, use one cancellable 150 ms dwell timer and begin audio capture
   and Base English model loading only when it fires.
 - Discard holds shorter than 250 ms; Escape cancels unless selected as the
-  dedicated trigger; ten minutes auto-finalizes.
-- Show a caret-attached Listening/Transcribing/Busy/Error badge, with a
+  dedicated trigger; persist a 30-second-through-one-hour auto-finalize limit.
+- Persist a local model selection from Base, Small, Medium, and Large-v3 Turbo
+  Q5; never download missing weights. Use accuracy-first beam width five and
+  half the available logical CPUs up to eight threads.
+- Show a caret-attached waveform/timer while listening and textual
+  Transcribing/Busy/Error states, with a
   pointer-position snapshot when exact caret geometry is unavailable, and an
   event-driven menu-bar state icon with setup, cancel, and quit controls.
 - Keep one latest transcript in memory and expose **Copy Last Dictation** as a
@@ -32,7 +36,7 @@ Whisper/GGML libraries.
 
 1. `WhisperHotkeyApp` coordinates the state machine.
 2. `WhisperHotkeyASR` records private 16 kHz mono audio and owns a
-   per-dictation whisper.cpp helper. The helper preloads on press, transcribes
+   per-dictation whisper.cpp helper. The selected helper preloads on press, transcribes
    once on release, and exits. Stock `whisper-cli` provides the Metal then
    Metal-specific CPU fallback.
 3. `WhisperHotkeySystem` owns the configurable bare-key event tap, exact

@@ -27,6 +27,14 @@ public struct WhisperRuntimeConfiguration: Equatable, Sendable {
 public enum WhisperRuntimeDiscovery {
     public static let helperEnvironmentKey = "WHISPER_HOTKEY_HELPER"
 
+    public static func recommendedThreadCount(
+        activeProcessorCount: Int = ProcessInfo.processInfo.activeProcessorCount
+    ) -> Int {
+        let available = max(1, activeProcessorCount)
+        let half = max(1, available / 2)
+        return min(available, min(8, max(4, half)))
+    }
+
     public static func helperCandidates(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundle: Bundle = .main
@@ -52,26 +60,32 @@ public enum WhisperRuntimeDiscovery {
     }
 
     public static func modelURL(
+        model: DictationModel = DictationModel.selected(),
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL {
-        homeDirectory.appendingPathComponent(
-            ".cache/whisper/ggml-base.en.bin"
-        ).standardizedFileURL
+        WhisperHotkeyPaths.modelURL(
+            for: model,
+            homeDirectory: homeDirectory
+        )
     }
 
     public static func discover(
+        model: DictationModel = DictationModel.selected(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundle: Bundle = .main,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
     ) throws -> WhisperRuntimeConfiguration {
-        let model = modelURL(homeDirectory: homeDirectory)
+        let modelURL = modelURL(
+            model: model,
+            homeDirectory: homeDirectory
+        )
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(
-            atPath: model.path,
+            atPath: modelURL.path,
             isDirectory: &isDirectory
         ), !isDirectory.boolValue else {
-            throw WhisperASRError.modelMissing(model.path)
+            throw WhisperASRError.modelMissing(modelURL.path)
         }
 
         let helper = helperCandidates(
@@ -88,7 +102,7 @@ public enum WhisperRuntimeDiscovery {
             commandLineExecutableURL: fileManager.isExecutableFile(
                 atPath: commandLine.path
             ) ? commandLine : nil,
-            modelURL: model
+            modelURL: modelURL
         )
     }
 
@@ -111,9 +125,10 @@ enum WhisperDecodingStrategy: String, Equatable, Sendable {
 struct WhisperRecognitionOptions: Equatable, Sendable {
     var strategy: WhisperDecodingStrategy = .beam
     var beamSize = 5
-    var threadCount = 4
+    var threadCount = WhisperRuntimeDiscovery.recommendedThreadCount()
     var preloadTimeout: TimeInterval = 30
     var transcriptionTimeout: TimeInterval = 120
+
 }
 
 enum WhisperHelperInvocation {

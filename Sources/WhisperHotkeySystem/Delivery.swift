@@ -19,10 +19,15 @@ public enum TextInsertionFormatter {
         {
             insertion.insert(" ", at: insertion.startIndex)
         }
-        if let last = insertion.last,
-           let after = surroundingText?.afterSelection?.first,
-           needsSpace(between: last, and: after)
-        {
+        if let after = surroundingText?.afterSelection?.first {
+            if let last = insertion.last,
+               needsSpace(between: last, and: after) {
+                insertion.append(" ")
+            }
+        } else {
+            // An opaque context or an insertion at the end of a field cannot
+            // expose a following character. Keep consecutive dictations and
+            // subsequent typing naturally separated with exactly one space.
             insertion.append(" ")
         }
         return insertion

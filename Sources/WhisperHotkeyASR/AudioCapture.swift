@@ -54,6 +54,13 @@ public final class WhisperAudioRecorder {
         audioFile != nil && engineBox.engine.isRunning
     }
 
+    /// A normalized 0...1 microphone level for lightweight presentation.
+    /// Reading this value does not touch AVAudioEngine and is useful only while
+    /// recording.
+    public var normalizedInputLevel: Float {
+        writer?.normalizedInputLevel ?? 0
+    }
+
     deinit {
         engineBox.stop(removeInputTap: inputTapInstalled)
         writer?.finish()
@@ -214,6 +221,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
     private var converter: AVAudioConverter?
     private let outputFormat: AVAudioFormat
     private var firstError: Error?
+    private var latestNormalizedInputLevel: Float = 0
 
     init(
         file: AVAudioFile,
@@ -223,6 +231,10 @@ final class WhisperWAVWriter: @unchecked Sendable {
         self.file = file
         self.converter = converter
         self.outputFormat = outputFormat
+    }
+
+    var normalizedInputLevel: Float {
+        lock.withLock { latestNormalizedInputLevel }
     }
 
     func consume(_ input: AVAudioPCMBuffer) {
@@ -265,6 +277,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
                 )
             } else if output.frameLength > 0 {
                 do {
+                    latestNormalizedInputLevel = Self.normalizedLevel(output)
                     try file.write(from: output)
                 } catch {
                     firstError = error
@@ -278,8 +291,39 @@ final class WhisperWAVWriter: @unchecked Sendable {
         lock.withLock {
             file = nil
             converter = nil
+            latestNormalizedInputLevel = 0
             return firstError
         }
+    }
+
+    private static func normalizedLevel(
+        _ buffer: AVAudioPCMBuffer
+    ) -> Float {
+        guard buffer.frameLength > 0,
+              let samples = buffer.floatChannelData?[0]
+        else {
+            return 0
+        }
+
+        // The converted buffer is only about 20 ms of mono audio. Sampling
+        // every fourth frame keeps this callback's meter work negligible.
+        let count = Int(buffer.frameLength)
+        var sum: Double = 0
+        var sampleCount = 0
+        var index = 0
+        while index < count {
+            let sample = Double(samples[index])
+            sum += sample * sample
+            sampleCount += 1
+            index += 4
+        }
+        guard sampleCount > 0, sum > 0 else {
+            return 0
+        }
+
+        let rms = sqrt(sum / Double(sampleCount))
+        let decibels = 20 * log10(max(rms, 0.000_001))
+        return Float(min(1, max(0, (decibels + 55) / 47)))
     }
 }
 

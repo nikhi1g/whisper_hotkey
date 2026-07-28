@@ -189,7 +189,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
         update(
             .model,
             ready: readiness.modelAvailable,
-            missingText: "Base English model not found",
+            missingText: "Selected model not found",
             actionTitle: "Show Location"
         )
         update(
@@ -361,7 +361,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             (.microphone, "Microphone"),
             (.accessibility, "Accessibility"),
             (.inputMonitoring, "Input Monitoring"),
-            (.model, "Base English model"),
+            (.model, "Selected Whisper model"),
             (.helper, "Whisper helper"),
             (.loginItem, "Login Item"),
         ]

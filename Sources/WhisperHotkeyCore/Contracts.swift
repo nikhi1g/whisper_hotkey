@@ -44,6 +44,9 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
     public var modelAvailable: Bool
     public var hotkey: String?
     public var hotkeyMode: String?
+    public var model: String?
+    public var recordingLimit: String?
+    public var threadCount: Int?
     public var lastError: String?
 
     public init(
@@ -57,6 +60,9 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         modelAvailable: Bool,
         hotkey: String? = nil,
         hotkeyMode: String? = nil,
+        model: String? = nil,
+        recordingLimit: String? = nil,
+        threadCount: Int? = nil,
         lastError: String? = nil
     ) {
         self.running = running
@@ -69,6 +75,9 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.modelAvailable = modelAvailable
         self.hotkey = hotkey
         self.hotkeyMode = hotkeyMode
+        self.model = model
+        self.recordingLimit = recordingLimit
+        self.threadCount = threadCount
         self.lastError = lastError
     }
 }
@@ -106,10 +115,21 @@ public struct ControlResponse: Codable, Equatable, Sendable {
 public enum WhisperHotkeyPaths {
     public static let bundleIdentifier = "local.whisperhotkey.app"
     public static let appName = "whisper_hotkey"
-    public static let modelPath = NSString(
-        string: "~/.cache/whisper/ggml-base.en.bin"
-    ).expandingTildeInPath
     public static let whisperCLIPath = "/opt/homebrew/bin/whisper-cli"
+
+    public static func modelURL(
+        for model: DictationModel,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        homeDirectory
+            .appendingPathComponent(".cache/whisper", isDirectory: true)
+            .appendingPathComponent(model.fileName)
+            .standardizedFileURL
+    }
+
+    public static var modelPath: String {
+        modelURL(for: DictationModel.selected()).path
+    }
 
     public static var applicationSupportDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
