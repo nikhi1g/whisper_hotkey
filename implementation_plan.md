@@ -1,29 +1,160 @@
-Yes—this already exists locally, and your Mac has the core pieces installed.
+# Global Dictation MVP — implementation plan
 
-- `whisper.cpp`’s `whisper-cli` and `whisper-stream`
-- Local English Whisper Small (465 MB) and Base (141 MB) models
-- Metal-capable Apple Silicon execution
+## Outcome
 
-BookCLI already uses that exact stack for local dictation with a live partial-transcript preview. It is currently scoped to BookCLI, not system-wide.
+Build a small, local-only macOS menu-bar application that lets the user hold a
+global hotkey, speak, see an unobtrusive live transcript, then release the key
+to insert the final transcript into whichever editable control was focused
+before dictation began.
 
-For a seamless “hold hotkey → see live text → release → insert at cursor in any app” experience, use an existing macOS dictation app rather than extending BookCLI. My recommendation is:
+The first milestone proves the interaction. It deliberately excludes a full
+transcript history, accounts, cloud services, custom vocabulary, launch-at-login,
+and production-grade text cleanup.
 
-1. **Try OpenDictator first** — free, open source (MIT), Apple Silicon, global customizable hotkey, floating live preview, and local insertion at the current cursor. It supports WhisperKit or very-fast Parakeet. [OpenDictator](https://www.opendictator.app/)
+## What is known
 
-2. **If you specifically want to reuse whisper.cpp**, try [local-whisper](https://github.com/luisalima/local-whisper). It is MIT-licensed, uses whisper.cpp, gives a streaming overlay, a global hold-to-talk shortcut, local-only processing, and uses Hammerspoon for the system-wide hotkey/paste integration.
+- Target platform: macOS on Apple Silicon.
+- Desired interaction: press and hold a global hotkey in any text-capable app;
+  show live text preview; release to finish and insert text at the cursor.
+- ASR must run locally. Existing machine context says `whisper.cpp` provides
+  `whisper-cli` and `whisper-stream`, with local English Small (about 465 MB)
+  and Base (about 141 MB) models and Metal acceleration available.
+- The intended MVP may reuse `whisper-stream`; no cloud account, API key, or
+  model download is required to establish the flow.
+- This repository currently has no application source, project file, package
+  manifest, build scripts, tests, or `purpose.md`. The initial Git commit is
+  `f7b2f8b`.
+- `AGENTS.md` describes a separate BookCLI library project and references paths
+  that do not exist here. Its only directly applicable instruction is to commit
+  every repository change. It should be replaced or narrowed before app code is
+  added, rather than treating BookCLI rules as this app's architecture.
 
-3. **For the most polished open-source feature set**, [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac) has global push-to-talk, live streaming preview, per-app workflows—including terminal handling—and cursor insertion. It can use local WhisperKit, Parakeet, and other local engines.
+## MVP decisions
 
-VoiceInk is another mature open-source option with configurable global shortcuts and local transcription, though its convenience distribution is commercial. [VoiceInk](https://github.com/Beingpax/VoiceInk)
+| Area | MVP choice | Why |
+| --- | --- | --- |
+| App shape | Native Swift/AppKit menu-bar app | Small, reliable access to macOS windows, permissions, and pasteboard. |
+| Hotkey | One configurable push-to-talk chord; default decided before implementation | Global, hold/release semantics without a custom keyboard listener where possible. |
+| Audio | `AVAudioEngine`, 16 kHz mono WAV in a private temporary directory | Matches the existing Whisper setup and makes cleanup predictable. |
+| Recognition | Owned `whisper-stream` child process, Small English model by default | Fully local and leverages installed Metal-capable tooling. |
+| Preview | Non-activating floating AppKit panel | Visible without stealing focus from the insertion target. |
+| Insertion | Capture focused app; try Accessibility value replacement, fall back to restoring the pasteboard and sending Cmd-V | Works broadly while preserving the user's clipboard. |
+| Privacy | No network calls and no saved audio/transcript history | The safest useful first release. |
 
-What needs to exist technically:
+## Scope and acceptance criteria
 
-- A menu-bar app that launches at login.
-- Microphone permission.
-- Accessibility permission, required to listen for a global hotkey and insert/paste into the focused app.
-- A floating non-activating overlay for the live preview.
-- Local streaming ASR (WhisperKit is generally best for live partials; your installed `whisper-stream` is viable too).
-- Robust insertion: accessibility text insertion when available, then clipboard paste as a fallback.
-- Care around password/secure-entry fields: macOS deliberately blocks automation/hotkeys in some contexts.
+1. **Shell and permissions**
+   - App launches into the menu bar and explains microphone and Accessibility
+     requirements.
+   - It reports actionable permission state rather than silently failing.
 
-So: no cloud subscription or new model download is strictly needed to prove the workflow. Your installed `whisper-stream` plus `ggml-small.en.bin` can power a small native/Hammerspoon implementation now. But I’d personally trial OpenDictator and TypeWhisper first; if either feels right, there’s little reason to build and maintain another dictation app. MacWhisper also has a global overlay, but that feature requires its paid tier. [MacWhisper Global](https://docs.macwhisper.com/article/16-global)
+2. **Push-to-talk lifecycle**
+   - Holding the chosen shortcut begins capture once; repeated key events do not
+     create multiple sessions.
+   - Releasing it stops capture, terminates owned recognition cleanly, and
+     deletes temporary audio on every outcome (success, cancellation, failure).
+   - Escape cancels and inserts nothing.
+
+3. **Live preview**
+   - A compact overlay reflects partial `whisper-stream` output while speaking.
+   - The overlay does not become key and remains readable over the active app.
+
+4. **Final insertion**
+   - Releasing inserts a trimmed final transcript into TextEdit and at least one
+     browser/editor field.
+   - Empty transcripts and secure/password fields insert nothing.
+   - Clipboard fallback restores the prior clipboard contents when feasible and
+     clearly reports insertion failure.
+
+5. **Minimal control surface**
+   - Menu items: status, choose hotkey, choose Small/Base model, test
+     permissions, and Quit.
+   - Persist only these device-local preferences.
+
+## Delivery sequence
+
+### Phase 0 — establish the project boundary
+
+- Replace the inherited BookCLI-specific `AGENTS.md` with concise dictation-app
+  instructions and add a `.gitignore` for Xcode build products, user settings,
+  recordings, and models.
+- Create an Xcode-native Swift/AppKit app project and a lightweight test target.
+- Add `Info.plist` microphone usage text and a deterministic developer setup
+  note listing the Whisper executable/model locations.
+
+**Exit:** the empty menu-bar app builds, launches, and has no network dependency.
+
+### Phase 1 — audio and recognition spike
+
+- Add an `AudioRecorder` with explicit state transitions: idle → recording →
+  finalizing → idle/cancelled.
+- Add a `WhisperProcess` that owns one process group, parses line-oriented
+  partial output, captures the final text, and has bounded TERM-to-KILL cleanup.
+- Feed live partials to a simple status view before introducing the overlay.
+
+**Exit:** pressing an in-app test control produces partial and final local
+transcripts; no helper remains after stop/cancel.
+
+### Phase 2 — system interaction MVP
+
+- Register the hold-to-talk hotkey, retaining an in-app fallback if the OS
+  rejects the chosen shortcut.
+- Record the foreground app/paste target immediately before recording.
+- Build the non-activating preview overlay and connect hold/release/cancel.
+- Implement insertion, first with an Accessibility-capable focused element and
+  then a carefully scoped pasteboard/Cmd-V fallback.
+
+**Exit:** TextEdit end-to-end demo works: hold → preview → release → text appears
+at the original caret, with the app never taking focus.
+
+### Phase 3 — hardening the MVP
+
+- Handle focus changes, no editable target, denied permissions, process startup
+  failure, and secure fields without leaking text or overwriting the clipboard.
+- Persist the hotkey and model selection.
+- Add focused unit tests for the recording/recognition state machine and manual
+  smoke checks for TextEdit, a browser field, and a terminal.
+
+**Exit:** a signed-local developer build can be used daily for short dictation.
+
+## Architecture sketch
+
+```text
+Global hotkey (down/up)
+        │
+        ▼
+DictationCoordinator ── captures focused target ──► PreviewPanel
+        │                         │                    ▲
+        ├──► AudioRecorder ─► temporary WAV            │ partial text
+        │                         │                    │
+        └──► WhisperProcess ◄─────┴────────────────────┘
+                  │ final text
+                  ▼
+           TextInserter ──► Accessibility API ──► pasteboard/Cmd-V fallback
+```
+
+## Risks to validate early
+
+- The exact output behavior and command-line flags of the locally installed
+  `whisper-stream` are not yet verified; Phase 1 should test it before the UI is
+  built around its output.
+- macOS versions and applications vary in accessibility support. Paste fallback
+  is likely essential; secure-entry behavior must be conservative.
+- Global shortcut registration may conflict with system or third-party shortcuts.
+  The app needs a visible conflict state and reconfiguration path.
+- Whisper Small may be too slow for satisfying partials on some hardware. Base
+  is the fallback benchmark; the MVP should measure first-token and final latency
+  before choosing the default permanently.
+
+## Decisions still needed from you
+
+1. Preferred default hotkey (for example, Right Option, or a chord such as
+   Control-Option-Space). A modifier-only key is ergonomic but may require a
+   lower-level event monitor than a normal chord.
+2. Should release **insert immediately** (recommended), or should it leave the
+   final text in the preview for confirmation/editing first?
+3. Is English-only acceptable for the first MVP? The known installed models are
+   English models.
+4. What minimum macOS version should the app support?
+5. May the MVP use the clipboard as an insertion fallback? It can restore normal
+   text content, but there are edge cases for rich/multi-item clipboard data.
