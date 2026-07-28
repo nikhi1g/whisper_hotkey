@@ -53,12 +53,13 @@ pointer position when each runtime state begins; it does not poll or follow the
 pointer. This fallback affects presentation only and never validates or changes
 the paste destination. While listening, the badge shows a sensitive scrolling
 23-sample waveform read from the existing audio callback at 20 Hz, an elapsed
-timer, a Stop and Insert button, and a Send button. Stop and Insert has the same
-result as hotkey release. Send inserts successfully before posting an unmodified
-Return. The panel remains non-activating, and controller clicks are excluded
-from modifier-chord cancellation. During the last 30 seconds it shows
-elapsed/limit and pulses from orange toward deep red. The update task exists only
-while recording. The panel joins every application, Space, and full-screen set;
+and limit timer, a thin duration-progress track, a Stop and Insert button, and a
+Send button. Stop and Insert has the same result as hotkey release. Send inserts
+successfully before posting an unmodified Return. The panel remains
+non-activating, and controller clicks are excluded from modifier-chord
+cancellation. During the last 30 seconds it pulses from orange toward deep red.
+The update task exists only while recording. The panel joins every application,
+Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
 Space or Stage Manager set. Other badge states show Transcribing, Busy, or an
 actionable error. The menu icon

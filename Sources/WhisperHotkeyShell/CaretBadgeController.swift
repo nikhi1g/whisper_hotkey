@@ -264,7 +264,10 @@ private final class BadgeView: NSView {
     private let stopButton = BadgeActionButton()
     private let sendButton = BadgeActionButton()
     private let warningLayer = CAGradientLayer()
+    private let limitTrackLayer = CALayer()
+    private let limitProgressLayer = CALayer()
     private var listeningIsWarning = false
+    private var listeningProgress: CGFloat = 0
 
     var presentation: BadgePresentation = .hidden {
         didSet {
@@ -274,9 +277,7 @@ private final class BadgeView: NSView {
 
     var preferredSize: CGSize {
         if presentation == .listening {
-            return ListeningBadgeLayout(
-                isWarning: listeningIsWarning
-            ).size
+            return ListeningBadgeLayout().size
         }
         return StatusBadgeLayout.size(
             contentWidth: statusLabel.intrinsicContentSize.width
@@ -295,6 +296,17 @@ private final class BadgeView: NSView {
         warningLayer.startPoint = CGPoint(x: 0, y: 0.5)
         warningLayer.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.insertSublayer(warningLayer, at: 0)
+
+        limitTrackLayer.backgroundColor = NSColor.white
+            .withAlphaComponent(0.10)
+            .cgColor
+        limitTrackLayer.cornerRadius = 0.75
+        limitTrackLayer.isHidden = true
+        layer?.addSublayer(limitTrackLayer)
+
+        limitProgressLayer.backgroundColor = waveformColor.cgColor
+        limitProgressLayer.cornerRadius = 0.75
+        limitTrackLayer.addSublayer(limitProgressLayer)
 
         statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         statusLabel.textColor = .white
@@ -380,9 +392,7 @@ private final class BadgeView: NSView {
             horizontalInset: StatusBadgeLayout.horizontalMargin,
             contentHeight: statusLabel.intrinsicContentSize.height
         )
-        let listeningLayout = ListeningBadgeLayout(
-            isWarning: listeningIsWarning
-        )
+        let listeningLayout = ListeningBadgeLayout()
         waveformView.frame = listeningLayout.waveformFrame
         timeLabel.frame = BadgeTextLayout.centeredFrame(
             in: listeningLayout.timeFrame,
@@ -390,6 +400,14 @@ private final class BadgeView: NSView {
         )
         stopButton.frame = listeningLayout.stopButtonFrame
         sendButton.frame = listeningLayout.sendButtonFrame
+        limitTrackLayer.frame = listeningLayout.limitTrackFrame
+        limitProgressLayer.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: listeningLayout.limitTrackFrame.width
+                * listeningProgress,
+            height: listeningLayout.limitTrackFrame.height
+        )
     }
 
     func updateListening(
@@ -405,9 +423,10 @@ private final class BadgeView: NSView {
             limit: limit
         )
         listeningIsWarning = metrics.isWarning
+        listeningProgress = CGFloat(metrics.progress)
         timeLabel.stringValue = metrics.timeText
         timeLabel.font = .monospacedDigitSystemFont(
-            ofSize: metrics.isWarning ? 10.5 : 12.5,
+            ofSize: 10.5,
             weight: .semibold
         )
         waveformView.level = CGFloat(min(1, max(0, level)))
@@ -417,6 +436,7 @@ private final class BadgeView: NSView {
         guard metrics.isWarning else {
             warningLayer.isHidden = true
             layer?.backgroundColor = normalBackground.cgColor
+            limitProgressLayer.backgroundColor = waveformColor.cgColor
             return
         }
 
@@ -439,6 +459,9 @@ private final class BadgeView: NSView {
             red.withAlphaComponent(0.97).cgColor,
         ]
         warningLayer.isHidden = false
+        limitProgressLayer.backgroundColor = NSColor.white
+            .withAlphaComponent(0.88)
+            .cgColor
     }
 
     private func updatePresentation() {
@@ -447,6 +470,7 @@ private final class BadgeView: NSView {
         timeLabel.isHidden = presentation != .listening
         stopButton.isHidden = presentation != .listening
         sendButton.isHidden = presentation != .listening
+        limitTrackLayer.isHidden = presentation != .listening
         warningLayer.isHidden = true
         layer?.backgroundColor = normalBackground.cgColor
 
@@ -454,6 +478,7 @@ private final class BadgeView: NSView {
         case .listening:
             statusLabel.stringValue = ""
             listeningIsWarning = false
+            listeningProgress = 0
             waveformView.reset()
             updateListening(elapsed: 0, limit: 600, level: 0)
         case .transcribing:
@@ -474,6 +499,15 @@ private final class BadgeView: NSView {
 
     private var normalBackground: NSColor {
         NSColor(calibratedRed: 0.12, green: 0.14, blue: 0.17, alpha: 0.95)
+    }
+
+    private var waveformColor: NSColor {
+        NSColor(
+            calibratedRed: 0.53,
+            green: 0.76,
+            blue: 1,
+            alpha: 1
+        )
     }
 
     private func configureActionButton(
@@ -510,13 +544,14 @@ struct ListeningBadgeLayout: Equatable {
     let timeFrame: CGRect
     let stopButtonFrame: CGRect
     let sendButtonFrame: CGRect
+    let limitTrackFrame: CGRect
 
-    init(isWarning: Bool) {
+    init() {
         let height: CGFloat = 42
         let horizontalMargin: CGFloat = 10
         let waveformWidth: CGFloat = 100
         let waveformHeight: CGFloat = 24
-        let timeWidth: CGFloat = isWarning ? 92 : 42
+        let timeWidth: CGFloat = 108
         let stopDiameter: CGFloat = 34
         let sendDiameter: CGFloat = 36
         let contentGap: CGFloat = 4
@@ -553,6 +588,12 @@ struct ListeningBadgeLayout: Equatable {
         size = CGSize(
             width: sendButtonFrame.maxX + horizontalMargin,
             height: height
+        )
+        limitTrackFrame = CGRect(
+            x: horizontalMargin,
+            y: 2,
+            width: size.width - horizontalMargin * 2,
+            height: 1.5
         )
     }
 }
@@ -599,6 +640,7 @@ public struct ListeningBadgeMetrics: Equatable, Sendable {
     public let accessibilityText: String
     public let isWarning: Bool
     public let warningProgress: Double
+    public let progress: Double
 
     public init(elapsed: TimeInterval, limit: TimeInterval) {
         let safeLimit = max(1, limit)
@@ -606,15 +648,13 @@ public struct ListeningBadgeMetrics: Equatable, Sendable {
         let remaining = max(0, safeLimit - safeElapsed)
         isWarning = remaining <= 30
         warningProgress = isWarning ? min(1, max(0, 1 - remaining / 30)) : 0
+        progress = min(1, max(0, safeElapsed / safeLimit))
 
         let elapsedText = Self.format(safeElapsed)
         let limitText = Self.format(safeLimit)
-        timeText = isWarning
-            ? "\(elapsedText) / \(limitText)"
-            : elapsedText
-        accessibilityText = isWarning
-            ? "\(elapsedText) of \(limitText)"
-            : elapsedText
+        let remainingText = Self.format(remaining)
+        timeText = "\(elapsedText) / \(limitText)"
+        accessibilityText = "\(elapsedText) of \(limitText), \(remainingText) remaining"
     }
 
     private static func format(_ interval: TimeInterval) -> String {

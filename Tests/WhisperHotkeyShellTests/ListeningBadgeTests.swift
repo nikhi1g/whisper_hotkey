@@ -1,12 +1,18 @@
+import AppKit
 import XCTest
 @testable import WhisperHotkeyShell
 
 final class ListeningBadgeTests: XCTestCase {
-    func testNormalTimerShowsElapsedOnly() {
+    func testNormalTimerAlwaysShowsElapsedAndLimit() {
         let metrics = ListeningBadgeMetrics(elapsed: 65.9, limit: 600)
-        XCTAssertEqual(metrics.timeText, "1:05")
+        XCTAssertEqual(metrics.timeText, "1:05 / 10:00")
+        XCTAssertEqual(
+            metrics.accessibilityText,
+            "1:05 of 10:00, 8:54 remaining"
+        )
         XCTAssertFalse(metrics.isWarning)
         XCTAssertEqual(metrics.warningProgress, 0)
+        XCTAssertEqual(metrics.progress, 65.9 / 600, accuracy: 0.001)
     }
 
     func testFinalThirtySecondsShowsFractionAndProgress() {
@@ -20,6 +26,34 @@ final class ListeningBadgeTests: XCTestCase {
         let metrics = ListeningBadgeMetrics(elapsed: 3_575, limit: 3_600)
         XCTAssertEqual(metrics.timeText, "59:35 / 1:00:00")
         XCTAssertTrue(metrics.isWarning)
+    }
+
+    func testLimitProgressClampsAtBothEnds() {
+        XCTAssertEqual(
+            ListeningBadgeMetrics(elapsed: -10, limit: 300).progress,
+            0
+        )
+        let completed = ListeningBadgeMetrics(elapsed: 400, limit: 300)
+        XCTAssertEqual(completed.progress, 1)
+        XCTAssertEqual(completed.timeText, "5:00 / 5:00")
+        XCTAssertEqual(
+            completed.accessibilityText,
+            "5:00 of 5:00, 0:00 remaining"
+        )
+    }
+
+    @MainActor
+    func testLongestVisibleLimitFitsItsCenteredTimerCell() {
+        let label = NSTextField(labelWithString: "59:35 / 1:00:00")
+        label.font = .monospacedDigitSystemFont(
+            ofSize: 10.5,
+            weight: .semibold
+        )
+
+        XCTAssertLessThanOrEqual(
+            ceil(label.intrinsicContentSize.width),
+            ListeningBadgeLayout().timeFrame.width
+        )
     }
 
     @MainActor
@@ -122,8 +156,8 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     func testCompactListeningLayoutHasTightSquareControls() {
-        let layout = ListeningBadgeLayout(isWarning: false)
-        XCTAssertEqual(layout.size, CGSize(width: 244, height: 42))
+        let layout = ListeningBadgeLayout()
+        XCTAssertEqual(layout.size, CGSize(width: 310, height: 42))
         XCTAssertEqual(layout.waveformFrame.minX, 10)
         XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 10)
         XCTAssertEqual(
@@ -146,14 +180,13 @@ final class ListeningBadgeTests: XCTestCase {
             layout.sendButtonFrame.width,
             layout.sendButtonFrame.height
         )
-        XCTAssertGreaterThan(
-            ListeningBadgeLayout(isWarning: true).size.width,
-            layout.size.width
-        )
+        XCTAssertEqual(layout.limitTrackFrame.minX, 10)
+        XCTAssertEqual(layout.size.width - layout.limitTrackFrame.maxX, 10)
+        XCTAssertEqual(layout.limitTrackFrame.height, 1.5)
     }
 
     func testEveryBadgeLabelIsGeometricallyCenteredWithMargins() {
-        let listening = ListeningBadgeLayout(isWarning: false)
+        let listening = ListeningBadgeLayout()
         let timerFrame = BadgeTextLayout.centeredFrame(
             in: listening.timeFrame,
             contentHeight: 15.2

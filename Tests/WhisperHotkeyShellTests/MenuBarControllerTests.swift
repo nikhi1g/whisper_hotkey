@@ -52,6 +52,17 @@ final class MenuBarControllerTests: XCTestCase {
         )
     }
 
+    func testRecordingLimitParentTitleExposesSelection() {
+        XCTAssertEqual(
+            RecordingLimitMenuPresentation.title(for: .seconds30),
+            "Recording Limit: 30 Seconds"
+        )
+        XCTAssertEqual(
+            RecordingLimitMenuPresentation.title(for: .hour1),
+            "Recording Limit: 1 Hour"
+        )
+    }
+
     @MainActor
     func testSystemSymbolsExistOnSupportedMacOS() {
         let states: [MenuBarState] = [

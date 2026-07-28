@@ -19,9 +19,10 @@ and error states. Its menu includes persistent checked controls for the gesture,
 dictation key, local Whisper model, and recording limit. While recording, the
 caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
 Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
-and then presses Return. In the final 30 seconds the badge switches to
-elapsed/limit and pulses orange toward deep red. The normal recording badge is
-compact; its timer and two circular controls sit directly beside the waveform.
+and then presses Return. The badge continuously shows elapsed/limit time and a
+thin progress track, making its automatic stopping point visible throughout the
+recording. In the final 30 seconds it pulses orange toward deep red. Its timer
+and two circular controls sit directly beside the waveform.
 
 ## Quick start
 

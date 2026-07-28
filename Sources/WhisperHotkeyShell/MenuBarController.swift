@@ -139,6 +139,11 @@ public final class MenuBarController: NSObject {
     private let modelMenu = NSMenu(title: "Whisper Model")
     private var modelItems: [DictationModel: NSMenuItem] = [:]
     private let recordingLimitMenu = NSMenu(title: "Recording Limit")
+    private let recordingLimitItem = NSMenuItem(
+        title: "Recording Limit",
+        action: nil,
+        keyEquivalent: ""
+    )
     private var recordingLimitItems: [RecordingLimit: NSMenuItem] = [:]
     private var availableModels: Set<DictationModel>
 
@@ -212,11 +217,6 @@ public final class MenuBarController: NSObject {
         }
         menu.addItem(modelItem)
 
-        let recordingLimitItem = NSMenuItem(
-            title: "Recording Limit",
-            action: nil,
-            keyEquivalent: ""
-        )
         recordingLimitItem.submenu = recordingLimitMenu
         for limit in RecordingLimit.allCases {
             let item = NSMenuItem(
@@ -296,6 +296,9 @@ public final class MenuBarController: NSObject {
             item.state = limit == recordingLimit ? .on : .off
             item.isEnabled = !state.canCancel
         }
+        recordingLimitItem.title = RecordingLimitMenuPresentation.title(
+            for: recordingLimit
+        )
 
         guard let button = statusItem.button else {
             return
@@ -361,5 +364,11 @@ public final class MenuBarController: NSObject {
 
     @objc private func quit() {
         actions.quit()
+    }
+}
+
+enum RecordingLimitMenuPresentation {
+    static func title(for limit: RecordingLimit) -> String {
+        "Recording Limit: \(limit.displayName)"
     }
 }

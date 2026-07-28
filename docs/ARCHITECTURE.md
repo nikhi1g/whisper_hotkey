@@ -56,7 +56,9 @@ markers, and otherwise anchors to the pointer. It is non-activating, so Stop and
 Send do not steal destination focus. Stop and hotkey release post Command-V.
 Send inserts successfully, then posts an unmodified Return. Its recording panel
 joins all applications, Spaces, and full-screen sets; periodic recording updates
-repair inactive-Space or unexpectedly ordered-out panel state.
+repair inactive-Space or unexpectedly ordered-out panel state. Those existing
+20 Hz updates also drive the continuously visible elapsed/limit label and thin
+duration-progress track; no additional timer or polling loop is used.
 
 ## Privacy and ownership
 
