@@ -360,6 +360,53 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(transcript, "fallback words")
     }
 
+    func testFailedPreloadIsCachedForActiveLeaseBeforeFallback()
+        async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            printf '%s\\n' '{"event":"error","code":"model_load_failed","message":"load failed"}'
+            """
+        )
+        defer { fixture.delete() }
+        var options = WhisperRecognitionOptions()
+        options.preloadTimeout = 1
+        options.transcriptionTimeout = 1
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration,
+            options: options
+        )
+
+        do {
+            try await recognizer.preload()
+            XCTFail("Expected the helper preload failure.")
+        } catch {
+            XCTAssertEqual(
+                error as? WhisperASRError,
+                .helperFailed("model preload failed")
+            )
+        }
+
+        let transcript = try await recognizer.transcribe(
+            fixture.makeAudio()
+        )
+        XCTAssertEqual(transcript, "fallback words")
+        XCTAssertEqual(try fixture.helperAttemptCount(), 1)
+
+        do {
+            try await recognizer.preload()
+            XCTFail("A new lease should make one fresh helper attempt.")
+        } catch {
+            XCTAssertEqual(
+                error as? WhisperASRError,
+                .helperFailed("model preload failed")
+            )
+        }
+        XCTAssertEqual(try fixture.helperAttemptCount(), 2)
+        await recognizer.cancel()
+    }
+
     func testFailureDeletesAudioWithoutPublishingHelperDiagnostic()
         async throws {
         let fixture = try RecognitionFixture(
@@ -438,6 +485,53 @@ final class RecognitionTests: XCTestCase {
             "Shutdown must not return while a helper descendant survives."
         )
     }
+
+    func testShutdownTerminalStateRejectsLateWorkAndDeletesAudio()
+        async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf launched > "${0}.attempts"
+            printf '%s\\n' '{"event":"ready"}'
+            sleep 30
+            """
+        )
+        defer { fixture.delete() }
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration
+        )
+        await recognizer.shutdown()
+        await recognizer.cancel()
+
+        do {
+            try await recognizer.preload()
+            XCTFail("Preload must remain rejected after shutdown.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error).")
+        }
+
+        let audio = try fixture.makeAudio()
+        let audioDirectory = audio.url.deletingLastPathComponent()
+        do {
+            _ = try await recognizer.transcribe(audio)
+            XCTFail("Transcription must remain rejected after shutdown.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error).")
+        }
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: audioDirectory.path),
+            "Rejected transcription must still remove its private audio."
+        )
+        XCTAssertEqual(
+            try fixture.helperAttemptCount(),
+            0
+        )
+        let readiness = await recognizer.readiness
+        XCTAssertEqual(readiness, .idle)
+    }
 }
 
 private extension Array where Element == String {
@@ -510,5 +604,16 @@ private final class RecognitionFixture {
 
     func delete() {
         try? FileManager.default.removeItem(at: root)
+    }
+
+    func helperAttemptCount() throws -> Int {
+        let attempts = URL(
+            fileURLWithPath:
+                configuration.helperExecutableURL!.path + ".attempts"
+        )
+        guard FileManager.default.fileExists(atPath: attempts.path) else {
+            return 0
+        }
+        return try Data(contentsOf: attempts).count
     }
 }

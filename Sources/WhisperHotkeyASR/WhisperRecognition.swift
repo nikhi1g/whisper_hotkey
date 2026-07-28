@@ -224,7 +224,9 @@ public actor WhisperRecognizer {
     private var activeConfiguration: WhisperRuntimeConfiguration?
     private var preloadTask: Task<WhisperHelperSession, Error>?
     private var helperSession: WhisperHelperSession?
+    private var cachedHelperFailure: CachedHelperFailure?
     private var generation = UUID()
+    private var isShutDown = false
 
     public init(configuration: WhisperRuntimeConfiguration? = nil) {
         suppliedConfiguration = configuration
@@ -246,13 +248,13 @@ public actor WhisperRecognizer {
     }
 
     public func preload() async throws {
-        _ = ensureLease()
+        _ = try ensureLease()
         _ = try await preparedHelper()
     }
 
     public func transcribe(_ audio: WhisperAudioFile) async throws -> String {
         defer { audio.delete() }
-        let lease = ensureLease()
+        let lease = try ensureLease()
         defer { finishDictation(lease) }
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -301,11 +303,13 @@ public actor WhisperRecognizer {
         activeLease = nil
         preloadTask = nil
         helperSession = nil
+        cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle
     }
 
     public func shutdown() async {
+        isShutDown = true
         generation = UUID()
         let pendingPreload = preloadTask
         let activeSession = helperSession
@@ -322,11 +326,17 @@ public actor WhisperRecognizer {
         activeLease = nil
         preloadTask = nil
         helperSession = nil
+        cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle
     }
 
     private func preparedHelper() async throws -> WhisperHelperSession {
+        let lease = try ensureLease()
+        if let cachedHelperFailure,
+           cachedHelperFailure.lease == lease {
+            throw cachedHelperFailure.error
+        }
         if let helperSession, readiness == .ready {
             return helperSession
         }
@@ -337,12 +347,19 @@ public actor WhisperRecognizer {
             task = preloadTask
             taskGeneration = generation
         } else {
-            let configuration = try resolvedConfiguration()
-            guard let helperURL = configuration.helperExecutableURL else {
-                readiness = .failed
-                throw WhisperASRError.helperUnavailable
+            let configuration: WhisperRuntimeConfiguration
+            do {
+                configuration = try resolvedConfiguration()
+            } catch let error as WhisperASRError {
+                cacheHelperFailure(error, lease: lease)
+                throw error
             }
-            let lease = ensureLease()
+            guard let helperURL = configuration.helperExecutableURL else {
+                let error = WhisperASRError.helperUnavailable
+                cacheHelperFailure(error, lease: lease)
+                readiness = .failed
+                throw error
+            }
             readiness = .loading
             let newGeneration = UUID()
             generation = newGeneration
@@ -370,12 +387,16 @@ public actor WhisperRecognizer {
                 throw CancellationError()
             }
             helperSession = session
+            cachedHelperFailure = nil
             readiness = .ready
             return session
         } catch {
             if generation == taskGeneration {
                 preloadTask = nil
                 helperSession = nil
+                if let error = error as? WhisperASRError {
+                    cacheHelperFailure(error, lease: lease)
+                }
                 readiness = .failed
             }
             throw error
@@ -392,13 +413,28 @@ public actor WhisperRecognizer {
         return configuration
     }
 
-    private func ensureLease() -> OwnedProcessController.Lease {
+    private func ensureLease() throws -> OwnedProcessController.Lease {
+        guard !isShutDown else {
+            throw CancellationError()
+        }
         if let activeLease {
             return activeLease
         }
         let lease = processController.beginDictation()
         activeLease = lease
+        cachedHelperFailure = nil
         return lease
+    }
+
+    private func cacheHelperFailure(
+        _ error: WhisperASRError,
+        lease: OwnedProcessController.Lease
+    ) {
+        guard activeLease == lease, !isShutDown else { return }
+        cachedHelperFailure = CachedHelperFailure(
+            lease: lease,
+            error: error
+        )
     }
 
     private func finishDictation(_ lease: OwnedProcessController.Lease) {
@@ -409,6 +445,7 @@ public actor WhisperRecognizer {
         activeLease = nil
         helperSession = nil
         preloadTask = nil
+        cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle
     }
@@ -465,6 +502,11 @@ public actor WhisperRecognizer {
             throw WhisperASRError.commandLineFailed(error.status)
         }
     }
+}
+
+private struct CachedHelperFailure: Sendable {
+    let lease: OwnedProcessController.Lease
+    let error: WhisperASRError
 }
 
 private final class WhisperHelperSession: @unchecked Sendable {
