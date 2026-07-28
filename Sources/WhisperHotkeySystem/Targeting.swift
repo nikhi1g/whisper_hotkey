@@ -19,12 +19,80 @@ public struct SurroundingText: Equatable, Sendable {
     }
 }
 
+public enum TargetTextMode: String, Equatable, Sendable {
+    /// The element exposes a selection range, which must remain unchanged.
+    case selectionAware
+    /// A known editable text role accepts keyboard input but exposes no range.
+    case opaque
+    case unavailable
+}
+
+enum TargetEditabilityPolicy {
+    /// Classifies an AX target without relying on application identity or
+    /// localized descriptions. Opaque fallback is deliberately limited to the
+    /// two standard text-entry roles.
+    static func textMode(
+        role: String?,
+        subrole: String?,
+        subroleIsReliable: Bool,
+        isEnabled: Bool,
+        selectionRange: NSRange?,
+        selectionRangeIsReliable: Bool,
+        selectionRangeIsSettable: Bool
+    ) -> TargetTextMode {
+        guard subroleIsReliable,
+              selectionRangeIsReliable,
+              isEnabled,
+              let role,
+              subrole != kAXSecureTextFieldSubrole
+        else {
+            return .unavailable
+        }
+
+        if selectionRange != nil,
+           opaqueTextRoles.contains(role) || selectionRangeIsSettable
+        {
+            return .selectionAware
+        }
+
+        guard selectionRange == nil, opaqueTextRoles.contains(role) else {
+            return .unavailable
+        }
+        return .opaque
+    }
+
+    private static let opaqueTextRoles: Set<String> = [
+        kAXTextFieldRole,
+        kAXTextAreaRole,
+    ]
+}
+
 public struct CapturedTargetState: Equatable, Sendable {
     public let processIdentifier: pid_t
+    public let role: String?
+    public let subrole: String?
+    public let textMode: TargetTextMode
     public let selectionRange: NSRange?
     public let isSecure: Bool
-    public let isEditable: Bool
     public let surroundingText: SurroundingText?
+
+    public init(
+        processIdentifier: pid_t,
+        role: String?,
+        subrole: String?,
+        textMode: TargetTextMode,
+        selectionRange: NSRange?,
+        isSecure: Bool,
+        surroundingText: SurroundingText?
+    ) {
+        self.processIdentifier = processIdentifier
+        self.role = role
+        self.subrole = subrole
+        self.textMode = textMode
+        self.selectionRange = selectionRange
+        self.isSecure = isSecure
+        self.surroundingText = surroundingText
+    }
 
     public init(
         processIdentifier: pid_t,
@@ -33,21 +101,51 @@ public struct CapturedTargetState: Equatable, Sendable {
         isEditable: Bool,
         surroundingText: SurroundingText?
     ) {
-        self.processIdentifier = processIdentifier
-        self.selectionRange = selectionRange
-        self.isSecure = isSecure
-        self.isEditable = isEditable
-        self.surroundingText = surroundingText
+        self.init(
+            processIdentifier: processIdentifier,
+            role: nil,
+            subrole: nil,
+            textMode: isEditable ? .selectionAware : .unavailable,
+            selectionRange: selectionRange,
+            isSecure: isSecure,
+            surroundingText: surroundingText
+        )
+    }
+
+    public var isEditable: Bool {
+        textMode != .unavailable
     }
 }
 
 public struct CurrentTargetState: Equatable, Sendable {
     public let processIdentifier: pid_t
     public let isSameElement: Bool
+    public let role: String?
+    public let subrole: String?
+    public let textMode: TargetTextMode
     public let selectionRange: NSRange?
     public let isSecure: Bool
-    public let isEditable: Bool
     public let surroundingText: SurroundingText?
+
+    public init(
+        processIdentifier: pid_t,
+        isSameElement: Bool,
+        role: String?,
+        subrole: String?,
+        textMode: TargetTextMode,
+        selectionRange: NSRange?,
+        isSecure: Bool,
+        surroundingText: SurroundingText?
+    ) {
+        self.processIdentifier = processIdentifier
+        self.isSameElement = isSameElement
+        self.role = role
+        self.subrole = subrole
+        self.textMode = textMode
+        self.selectionRange = selectionRange
+        self.isSecure = isSecure
+        self.surroundingText = surroundingText
+    }
 
     public init(
         processIdentifier: pid_t,
@@ -57,12 +155,20 @@ public struct CurrentTargetState: Equatable, Sendable {
         isEditable: Bool,
         surroundingText: SurroundingText?
     ) {
-        self.processIdentifier = processIdentifier
-        self.isSameElement = isSameElement
-        self.selectionRange = selectionRange
-        self.isSecure = isSecure
-        self.isEditable = isEditable
-        self.surroundingText = surroundingText
+        self.init(
+            processIdentifier: processIdentifier,
+            isSameElement: isSameElement,
+            role: nil,
+            subrole: nil,
+            textMode: isEditable ? .selectionAware : .unavailable,
+            selectionRange: selectionRange,
+            isSecure: isSecure,
+            surroundingText: surroundingText
+        )
+    }
+
+    public var isEditable: Bool {
+        textMode != .unavailable
     }
 }
 
@@ -70,6 +176,7 @@ public enum TargetInvalidReason: String, Equatable, Sendable {
     case missing
     case focusChanged
     case secure
+    case targetAttributesChanged
     case notEditable
     case selectionUnavailable
     case selectionChanged
@@ -89,7 +196,9 @@ public enum TargetValidator {
         guard let current else {
             return .invalid(.missing)
         }
-        guard current.isSameElement,
+        guard captured.processIdentifier > 0,
+              current.processIdentifier > 0,
+              current.isSameElement,
               current.processIdentifier == captured.processIdentifier
         else {
             return .invalid(.focusChanged)
@@ -97,8 +206,44 @@ public enum TargetValidator {
         guard !captured.isSecure, !current.isSecure else {
             return .invalid(.secure)
         }
-        guard captured.isEditable, current.isEditable else {
+        guard captured.role == current.role,
+              captured.subrole == current.subrole
+        else {
+            return .invalid(.targetAttributesChanged)
+        }
+        guard captured.textMode != .unavailable,
+              current.textMode != .unavailable
+        else {
             return .invalid(.notEditable)
+        }
+        guard captured.textMode == current.textMode else {
+            return .invalid(.targetAttributesChanged)
+        }
+        guard captured.textMode == .selectionAware else {
+            guard captured.selectionRange == nil,
+                  current.selectionRange == nil,
+                  TargetEditabilityPolicy.textMode(
+                    role: captured.role,
+                    subrole: captured.subrole,
+                    subroleIsReliable: true,
+                    isEnabled: true,
+                    selectionRange: nil,
+                    selectionRangeIsReliable: true,
+                    selectionRangeIsSettable: false
+                  ) == .opaque,
+                  TargetEditabilityPolicy.textMode(
+                    role: current.role,
+                    subrole: current.subrole,
+                    subroleIsReliable: true,
+                    isEnabled: true,
+                    selectionRange: nil,
+                    selectionRangeIsReliable: true,
+                    selectionRangeIsSettable: false
+                  ) == .opaque
+            else {
+                return .invalid(.targetAttributesChanged)
+            }
+            return .valid
         }
         guard let capturedRange = captured.selectionRange,
               let currentRange = current.selectionRange
@@ -195,9 +340,11 @@ public final class AccessibilityTargetProvider {
             current: CurrentTargetState(
                 processIdentifier: current.processIdentifier,
                 isSameElement: CFEqual(target.element, focused),
+                role: current.role,
+                subrole: current.subrole,
+                textMode: current.textMode,
                 selectionRange: current.selectionRange,
                 isSecure: current.isSecure,
-                isEditable: current.isEditable,
                 surroundingText: current.surroundingText
             )
         )
@@ -221,22 +368,40 @@ public final class AccessibilityTargetProvider {
         AXUIElementSetMessagingTimeout(element, 0.15)
 
         var processIdentifier: pid_t = 0
-        AXUIElementGetPid(element, &processIdentifier)
+        let hasValidProcess = AXUIElementGetPid(element, &processIdentifier) == .success
+            && processIdentifier > 0
 
-        let subrole = copyString(element, attribute: kAXSubroleAttribute)
-        let isSecure = subrole == kAXSecureTextFieldSubrole
-        let isEnabled = copyBool(element, attribute: kAXEnabledAttribute) ?? true
-        let selectionRange = isSecure ? nil : copyRange(
+        let role = copyString(element, attribute: kAXRoleAttribute)
+        let subroleRead = copyOptionalString(
             element,
-            attribute: kAXSelectedTextRangeAttribute
+            attribute: kAXSubroleAttribute
         )
-        let isEditable = !isSecure
-            && isEnabled
-            && selectionRange != nil
+        let subrole = subroleRead.value
+        let isSecure = subrole == kAXSecureTextFieldSubrole
+        let enabledRead = copyOptionalBool(element, attribute: kAXEnabledAttribute)
+        let isEnabled = enabledRead.isReliable
+            ? enabledRead.value ?? true
+            : false
+        let selectionRangeRead = isSecure
+            ? (value: nil, isReliable: true)
+            : copyOptionalRange(element, attribute: kAXSelectedTextRangeAttribute)
+        let selectionRange = selectionRangeRead.value
+        let selectionRangeIsSettable = selectionRange != nil
             && isAttributeSettable(element, attribute: kAXSelectedTextRangeAttribute)
-        let surroundingText = isSecure
-            ? nil
-            : makeSurroundingText(element: element, selectionRange: selectionRange)
+        let textMode = hasValidProcess
+            ? TargetEditabilityPolicy.textMode(
+                role: role,
+                subrole: subrole,
+                subroleIsReliable: subroleRead.isReliable,
+                isEnabled: isEnabled,
+                selectionRange: selectionRange,
+                selectionRangeIsReliable: selectionRangeRead.isReliable,
+                selectionRangeIsSettable: selectionRangeIsSettable
+            )
+            : .unavailable
+        let selectionContext = textMode == .selectionAware
+            ? makeSurroundingText(element: element, selectionRange: selectionRange)
+            : nil
         let accessibilityFieldRect = copyElementRect(element)
         let accessibilityCaretRect = selectionRange.flatMap {
             copyCaretRect(element, selectionRange: $0)
@@ -252,10 +417,12 @@ public final class AccessibilityTargetProvider {
         return Inspection(
             state: CapturedTargetState(
                 processIdentifier: processIdentifier,
+                role: role,
+                subrole: subrole,
+                textMode: textMode,
                 selectionRange: selectionRange,
                 isSecure: isSecure,
-                isEditable: isEditable,
-                surroundingText: surroundingText
+                surroundingText: selectionContext
             ),
             caretRect: caretRect,
             fieldRect: fieldRect
@@ -366,34 +533,97 @@ private func copyString(
     copyAttribute(element, attribute: attribute) as? String
 }
 
-private func copyBool(
+private func copyOptionalString(
     _ element: AXUIElement,
     attribute: String
-) -> Bool? {
-    copyAttribute(element, attribute: attribute) as? Bool
+) -> (value: String?, isReliable: Bool) {
+    var value: CFTypeRef?
+    let error = AXUIElementCopyAttributeValue(
+        element,
+        attribute as CFString,
+        &value
+    )
+    switch error {
+    case .success:
+        guard let string = value as? String else {
+            return (nil, false)
+        }
+        return (string, true)
+    case .noValue, .attributeUnsupported:
+        return (nil, true)
+    default:
+        return (nil, false)
+    }
+}
+
+private func copyOptionalBool(
+    _ element: AXUIElement,
+    attribute: String
+) -> (value: Bool?, isReliable: Bool) {
+    var value: CFTypeRef?
+    let error = AXUIElementCopyAttributeValue(
+        element,
+        attribute as CFString,
+        &value
+    )
+    switch error {
+    case .success:
+        guard let bool = value as? Bool else {
+            return (nil, false)
+        }
+        return (bool, true)
+    case .noValue, .attributeUnsupported:
+        return (nil, true)
+    default:
+        return (nil, false)
+    }
 }
 
 private func copyRange(
     _ element: AXUIElement,
     attribute: String
 ) -> NSRange? {
-    guard let value = copyAttribute(element, attribute: attribute),
+    copyOptionalRange(element, attribute: attribute).value
+}
+
+private func copyOptionalRange(
+    _ element: AXUIElement,
+    attribute: String
+) -> (value: NSRange?, isReliable: Bool) {
+    var value: CFTypeRef?
+    let error = AXUIElementCopyAttributeValue(
+        element,
+        attribute as CFString,
+        &value
+    )
+    switch error {
+    case .noValue, .attributeUnsupported:
+        return (nil, true)
+    case .success:
+        break
+    default:
+        return (nil, false)
+    }
+    guard let value,
           CFGetTypeID(value) == AXValueGetTypeID()
     else {
-        return nil
+        return (nil, false)
     }
     let axValue = unsafeDowncast(value, to: AXValue.self)
     guard AXValueGetType(axValue) == .cfRange else {
-        return nil
+        return (nil, false)
     }
     var range = CFRange()
     guard AXValueGetValue(axValue, .cfRange, &range),
           range.location >= 0,
           range.length >= 0
     else {
-        return nil
+        return (nil, false)
     }
-    return NSRange(location: range.location, length: range.length)
+    return (
+        NSRange(location: range.location, length: range.length),
+        true
+    )
 }
 
 private func copyElementRect(_ element: AXUIElement) -> CGRect? {

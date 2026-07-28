@@ -165,26 +165,46 @@ public enum GlobalHotkeyMonitorError: Error, Equatable, Sendable {
 public final class GlobalHotkeyMonitor {
     public typealias Handler = @MainActor (
         _ action: HotkeyAction,
-        _ releaseTarget: ReleaseTarget?
+        _ releaseTarget: ReleaseTarget?,
+        _ eventTimestampNanoseconds: UInt64
     ) -> Void
+
+    private struct PendingInputEvent {
+        let actions: [GlobalInputAction]
+        let timestampNanoseconds: UInt64
+    }
 
     /// Synthetic key events are tagged so this monitor never treats the
     /// service's own Cmd-V as the manual paste that consumes a lease.
     public static let syntheticEventMarker: Int64 = 0x5748_4B59
 
-    private let targetProvider: AccessibilityTargetProvider
+    private let captureReleaseTarget: @MainActor () -> ReleaseTarget?
     private let clipboard: ClipboardTransactionController
     private let handler: Handler
     private var reducer = GlobalInputReducer()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var pendingInputEvents: [PendingInputEvent] = []
+    private var deliveryIsScheduled = false
 
     public init(
         targetProvider: AccessibilityTargetProvider,
         clipboard: ClipboardTransactionController,
         handler: @escaping Handler
     ) {
-        self.targetProvider = targetProvider
+        captureReleaseTarget = {
+            targetProvider.captureFocusedTarget()
+        }
+        self.clipboard = clipboard
+        self.handler = handler
+    }
+
+    init(
+        captureReleaseTarget: @escaping @MainActor () -> ReleaseTarget?,
+        clipboard: ClipboardTransactionController,
+        handler: @escaping Handler
+    ) {
+        self.captureReleaseTarget = captureReleaseTarget
         self.clipboard = clipboard
         self.handler = handler
     }
@@ -225,7 +245,10 @@ public final class GlobalHotkeyMonitor {
 
     public func stop() {
         if let action = reducer.reset() {
-            handler(action, nil)
+            enqueue(
+                actions: [.hotkey(action)],
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
         }
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
@@ -238,7 +261,7 @@ public final class GlobalHotkeyMonitor {
         eventTap = nil
     }
 
-    fileprivate func shouldConsumeTapEvent(
+    func shouldConsumeTapEvent(
         type: CGEventType,
         event: CGEvent
     ) -> Bool {
@@ -247,7 +270,10 @@ public final class GlobalHotkeyMonitor {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             if let action = reducer.reset() {
-                handler(action, nil)
+                enqueue(
+                    actions: [.hotkey(action)],
+                    timestampNanoseconds: event.timestamp
+                )
             }
             return false
         }
@@ -264,19 +290,63 @@ public final class GlobalHotkeyMonitor {
                 == Self.syntheticEventMarker
         )
         let routing = reducer.route(rawEvent)
-        for action in routing.actions {
+        enqueue(
+            actions: routing.actions,
+            timestampNanoseconds: event.timestamp
+        )
+        return routing.consume
+    }
+
+    /// Event-tap callbacks must finish promptly. Delivery is deferred to an
+    /// explicitly ordered queue so audio startup and AX inspection never run
+    /// inside the tap callback while the physical event timestamp is retained.
+    private func enqueue(
+        actions: [GlobalInputAction],
+        timestampNanoseconds: UInt64
+    ) {
+        guard !actions.isEmpty else {
+            return
+        }
+        pendingInputEvents.append(
+            PendingInputEvent(
+                actions: actions,
+                timestampNanoseconds: timestampNanoseconds
+            )
+        )
+        guard !deliveryIsScheduled else {
+            return
+        }
+        deliveryIsScheduled = true
+        Task { @MainActor [self] in
+            drainPendingInputEvents()
+        }
+    }
+
+    private func drainPendingInputEvents() {
+        while !pendingInputEvents.isEmpty {
+            let pending = pendingInputEvents.removeFirst()
+            deliver(pending)
+        }
+        deliveryIsScheduled = false
+    }
+
+    private func deliver(_ pending: PendingInputEvent) {
+        for action in pending.actions {
             switch action {
             case .hotkey(.released):
-                handler(.released, targetProvider.captureFocusedTarget())
+                handler(
+                    .released,
+                    captureReleaseTarget(),
+                    pending.timestampNanoseconds
+                )
             case let .hotkey(hotkeyAction):
-                handler(hotkeyAction, nil)
+                handler(hotkeyAction, nil, pending.timestampNanoseconds)
             case .manualPaste:
                 clipboard.manualPasteWillDispatch()
             case .copyOrCut:
                 clipboard.copyOrCutWillDispatch()
             }
         }
-        return routing.consume
     }
 
     deinit {

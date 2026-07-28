@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 import WhisperHotkeyCore
 @testable import WhisperHotkeySystem
@@ -98,5 +99,190 @@ final class HotkeyTests: XCTestCase {
             commandIsDown: command,
             isAutoRepeat: isAutoRepeat
         )
+    }
+}
+
+@MainActor
+final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
+    func testHotkeyDeliveryIsDeferredOrderedAndUsesPhysicalTimestamps() async {
+        var deliveries: [(HotkeyAction, UInt64)] = []
+        var didCaptureReleaseTarget = false
+        let delivered = expectation(description: "ordered hotkey delivery")
+        delivered.expectedFulfillmentCount = 2
+        let monitor = GlobalHotkeyMonitor(
+            captureReleaseTarget: {
+                didCaptureReleaseTarget = true
+                return nil
+            },
+            clipboard: ClipboardTransactionController()
+        ) { action, _, timestampNanoseconds in
+            deliveries.append((action, timestampNanoseconds))
+            delivered.fulfill()
+        }
+        let press = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: true,
+            timestampNanoseconds: 1_000
+        )
+        let release = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: false,
+            timestampNanoseconds: 1_250
+        )
+
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
+        )
+        XCTAssertTrue(deliveries.isEmpty)
+        XCTAssertFalse(didCaptureReleaseTarget)
+
+        await fulfillment(of: [delivered], timeout: 1)
+        XCTAssertEqual(deliveries.map(\.0), [.pressed, .released])
+        XCTAssertEqual(deliveries.map(\.1), [1_000, 1_250])
+        XCTAssertTrue(didCaptureReleaseTarget)
+    }
+
+    func testTapDisableCancellationUsesDisablingEventTimestamp() async {
+        var deliveries: [(HotkeyAction, UInt64)] = []
+        let delivered = expectation(description: "press and cancellation")
+        delivered.expectedFulfillmentCount = 2
+        let monitor = GlobalHotkeyMonitor(
+            captureReleaseTarget: { nil },
+            clipboard: ClipboardTransactionController()
+        ) { action, _, timestampNanoseconds in
+            deliveries.append((action, timestampNanoseconds))
+            delivered.fulfill()
+        }
+        let press = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: true,
+            timestampNanoseconds: 2_000
+        )
+        let disabled = event(
+            keyCode: 0,
+            commandIsDown: false,
+            timestampNanoseconds: 2_100
+        )
+
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(
+                type: .tapDisabledByTimeout,
+                event: disabled
+            )
+        )
+        XCTAssertTrue(deliveries.isEmpty)
+
+        await fulfillment(of: [delivered], timeout: 1)
+        XCTAssertEqual(deliveries.map(\.0), [.pressed, .cancel])
+        XCTAssertEqual(deliveries.map(\.1), [2_000, 2_100])
+    }
+
+    func testClipboardNotificationsRemainOrderedAndSyntheticPasteIsIgnored() async {
+        let pasteboard = HotkeyTestPasteboard()
+        let clipboard = ClipboardTransactionController(
+            pasteboard: pasteboard,
+            restorationDelay: 3_600
+        )
+        XCTAssertTrue(clipboard.installLease("transcript"))
+
+        var deliveries: [String] = []
+        let delivered = expectation(description: "ordered action delivery")
+        delivered.expectedFulfillmentCount = 3
+        clipboard.onLeaseStateChange = { phase in
+            deliveries.append(String(describing: phase))
+            delivered.fulfill()
+        }
+        let monitor = GlobalHotkeyMonitor(
+            captureReleaseTarget: { nil },
+            clipboard: clipboard
+        ) { action, _, _ in
+            deliveries.append(String(describing: action))
+            delivered.fulfill()
+        }
+        let press = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: true,
+            timestampNanoseconds: 3_000
+        )
+        let syntheticPaste = event(
+            keyCode: MacVirtualKey.v,
+            commandIsDown: true,
+            timestampNanoseconds: 3_100,
+            synthetic: true
+        )
+        let manualPaste = event(
+            keyCode: MacVirtualKey.v,
+            commandIsDown: true,
+            timestampNanoseconds: 3_200
+        )
+        let copy = event(
+            keyCode: MacVirtualKey.c,
+            commandIsDown: true,
+            timestampNanoseconds: 3_300
+        )
+
+        XCTAssertTrue(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .keyDown, event: syntheticPaste)
+        )
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .keyDown, event: manualPaste)
+        )
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .keyDown, event: copy)
+        )
+        XCTAssertTrue(deliveries.isEmpty)
+
+        await fulfillment(of: [delivered], timeout: 1)
+        XCTAssertEqual(deliveries, ["pressed", "restorationPending", "inactive"])
+    }
+
+    private func event(
+        keyCode: Int64,
+        commandIsDown: Bool,
+        timestampNanoseconds: UInt64,
+        synthetic: Bool = false
+    ) -> CGEvent {
+        let event = CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: CGKeyCode(keyCode),
+            keyDown: commandIsDown
+        )!
+        event.flags = commandIsDown ? .maskCommand : []
+        event.timestamp = timestampNanoseconds
+        if synthetic {
+            event.setIntegerValueField(
+                .eventSourceUserData,
+                value: GlobalHotkeyMonitor.syntheticEventMarker
+            )
+        }
+        return event
+    }
+}
+
+@MainActor
+private final class HotkeyTestPasteboard: PasteboardAccess {
+    private(set) var changeCount = 1
+
+    func snapshotReadableContents() -> ClipboardSnapshot {
+        ClipboardSnapshot(items: [])
+    }
+
+    func replaceContents(withPlainText _: String) -> Int? {
+        changeCount += 1
+        return changeCount
+    }
+
+    func restore(_: ClipboardSnapshot) -> Int {
+        changeCount += 1
+        return changeCount
     }
 }
