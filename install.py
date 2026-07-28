@@ -34,7 +34,7 @@ def running_pids() -> list[int]:
         [
             "/usr/bin/pgrep",
             "-f",
-            f"^{re.escape(str(INSTALLED_EXECUTABLE))}(?:\\s|$)",
+            f"^{re.escape(str(INSTALLED_EXECUTABLE))}([[:space:]]|$)",
         ],
         capture_output=True,
         text=True,
