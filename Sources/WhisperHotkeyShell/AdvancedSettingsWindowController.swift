@@ -63,6 +63,21 @@ enum DictationModePresentation {
     }
 }
 
+enum DictationModelPresentation {
+    static func chipTitle(for model: DictationModel) -> String {
+        switch model {
+        case .baseEnglish:
+            "Base"
+        case .smallEnglish:
+            "Small"
+        case .mediumEnglish:
+            "Medium"
+        case .largeV3TurboQ5:
+            "Turbo"
+        }
+    }
+}
+
 @MainActor
 public final class AdvancedSettingsWindowController:
     NSWindowController,
@@ -74,8 +89,8 @@ public final class AdvancedSettingsWindowController:
     private let actions: AdvancedSettingsActions
     private let loginItemManager: LoginItemManager
     private let hotkeyPopup = NSPopUpButton()
-    private let modePopup = NSPopUpButton()
-    private let modelPopup = NSPopUpButton()
+    private let modeControl = NSSegmentedControl()
+    private let modelControl = NSSegmentedControl()
     private let recordingLimitPopup = NSPopUpButton()
     private let loginItemToggle = NSButton(
         checkboxWithTitle: "Open automatically",
@@ -101,16 +116,16 @@ public final class AdvancedSettingsWindowController:
         self.loginItemManager = loginItemManager
         super.init(window: nil)
 
-        configurePopups()
+        configureControls()
         configureLoginItemControls()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 390),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 470),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Advanced Settings for whisper_hotkey"
+        window.title = "Settings for whisper_hotkey"
         window.isReleasedWhenClosed = false
         window.animationBehavior = .utilityWindow
         window.center()
@@ -152,36 +167,33 @@ public final class AdvancedSettingsWindowController:
     public func refresh() {
         let state = stateProvider()
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
-        select(rawValue: state.activationMode.rawValue, in: modePopup)
-        select(rawValue: state.selectedModel.rawValue, in: modelPopup)
+        select(mode: state.activationMode)
+        select(model: state.selectedModel)
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
-        modePopup.isEnabled = state.configurationEnabled
-        modelPopup.isEnabled = state.configurationEnabled
+        modeControl.isEnabled = state.configurationEnabled
+        modelControl.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
 
-        for item in modelPopup.itemArray {
-            guard let rawValue = item.representedObject as? String,
-                  let model = DictationModel(rawValue: rawValue)
-            else {
-                continue
-            }
+        for (index, model) in DictationModel.allCases.enumerated() {
             let installed = state.availableModels.contains(model)
-            item.title = installed
-                ? model.menuTitle
-                : "\(model.menuTitle) (Not Installed)"
-            item.isEnabled = installed
+            modelControl.setEnabled(
+                state.configurationEnabled && installed,
+                forSegment: index
+            )
+            modelControl.setToolTip(
+                installed ? model.menuTitle : "\(model.menuTitle): Not Installed",
+                forSegment: index
+            )
         }
 
-        for item in modePopup.itemArray {
-            guard let rawValue = item.representedObject as? String,
-                  let mode = HotkeyActivationMode(rawValue: rawValue)
-            else {
-                continue
-            }
-            item.isEnabled = state.configurationEnabled
-                && (mode != .hold || !state.selectedHotkey.requiresToggleMode)
+        for (index, mode) in dictationModes.enumerated() {
+            modeControl.setEnabled(
+                state.configurationEnabled
+                    && (mode != .hold || !state.selectedHotkey.requiresToggleMode),
+                forSegment: index
+            )
         }
 
         let loginStatus = loginItemManager.status
@@ -213,11 +225,16 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func selectDictationMode(_ sender: NSPopUpButton) {
+    @objc private func selectDictationMode(_ sender: NSSegmentedControl) {
         let state = stateProvider()
         guard state.configurationEnabled,
-              let rawValue = sender.selectedItem?.representedObject as? String,
-              let mode = HotkeyActivationMode(rawValue: rawValue),
+              dictationModes.indices.contains(sender.selectedSegment)
+        else {
+            refresh()
+            return
+        }
+        let mode = dictationModes[sender.selectedSegment]
+        guard
               mode != .hold || !state.selectedHotkey.requiresToggleMode
         else {
             refresh()
@@ -228,11 +245,16 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func selectModel(_ sender: NSPopUpButton) {
+    @objc private func selectModel(_ sender: NSSegmentedControl) {
         let state = stateProvider()
         guard state.configurationEnabled,
-              let rawValue = sender.selectedItem?.representedObject as? String,
-              let model = DictationModel(rawValue: rawValue),
+              DictationModel.allCases.indices.contains(sender.selectedSegment)
+        else {
+            refresh()
+            return
+        }
+        let model = DictationModel.allCases[sender.selectedSegment]
+        guard
               state.availableModels.contains(model)
         else {
             refresh()
@@ -279,7 +301,11 @@ public final class AdvancedSettingsWindowController:
         loginItemManager.openLoginItemsSettings()
     }
 
-    private func configurePopups() {
+    private var dictationModes: [HotkeyActivationMode] {
+        [.hold, .toggle, .pause]
+    }
+
+    private func configureControls() {
         configure(
             hotkeyPopup,
             values: HotkeyKey.allCases.map {
@@ -288,17 +314,15 @@ public final class AdvancedSettingsWindowController:
             action: #selector(selectHotkey(_:))
         )
         configure(
-            modePopup,
-            values: [HotkeyActivationMode.hold, .toggle, .pause].map {
-                (DictationModePresentation.optionTitle(for: $0), $0.rawValue)
-            },
+            modeControl,
+            labels: dictationModes.map(DictationModePresentation.optionTitle),
             action: #selector(selectDictationMode(_:))
         )
         configure(
-            modelPopup,
-            values: DictationModel.allCases.map {
-                ($0.menuTitle, $0.rawValue)
-            },
+            modelControl,
+            labels: DictationModel.allCases.map(
+                DictationModelPresentation.chipTitle
+            ),
             action: #selector(selectModel(_:))
         )
         configure(
@@ -321,6 +345,22 @@ public final class AdvancedSettingsWindowController:
         for value in values {
             popup.addItem(withTitle: value.title)
             popup.lastItem?.representedObject = value.rawValue
+        }
+    }
+
+    private func configure(
+        _ control: NSSegmentedControl,
+        labels: [String],
+        action: Selector
+    ) {
+        control.segmentCount = labels.count
+        control.trackingMode = .selectOne
+        control.segmentStyle = .rounded
+        control.controlSize = .regular
+        control.target = self
+        control.action = action
+        for (index, label) in labels.enumerated() {
+            control.setLabel(label, forSegment: index)
         }
     }
 
@@ -395,43 +435,66 @@ public final class AdvancedSettingsWindowController:
         popup.selectItem(at: index)
     }
 
+    private func select(mode: HotkeyActivationMode) {
+        guard let index = dictationModes.firstIndex(of: mode) else {
+            return
+        }
+        modeControl.selectedSegment = index
+    }
+
+    private func select(model: DictationModel) {
+        guard let index = DictationModel.allCases.firstIndex(of: model) else {
+            return
+        }
+        modelControl.selectedSegment = index
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(stack)
 
-        let title = NSTextField(labelWithString: "Advanced settings")
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
+        let title = NSTextField(labelWithString: "Settings")
+        title.font = .systemFont(ofSize: 22, weight: .semibold)
         stack.addArrangedSubview(title)
 
         let subtitle = NSTextField(
             wrappingLabelWithString:
-                "Configure persistent dictation behavior. Setup permissions remain separate."
+                "Dictation preferences apply immediately and stay on this Mac."
         )
         subtitle.textColor = .secondaryLabelColor
         subtitle.maximumNumberOfLines = 2
         stack.addArrangedSubview(subtitle)
+        stack.setCustomSpacing(22, after: subtitle)
 
-        let grid = NSGridView()
-        grid.columnSpacing = 16
-        grid.rowSpacing = 12
-        grid.xPlacement = .fill
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        addRow(to: grid, title: "Dictation key", control: hotkeyPopup)
-        addRow(to: grid, title: "Input behavior", control: modePopup)
-        addRow(to: grid, title: "Whisper model", control: modelPopup)
-        addRow(to: grid, title: "Recording limit", control: recordingLimitPopup)
-        grid.column(at: 0).width = 125
-        grid.column(at: 1).width = 335
-        stack.addArrangedSubview(grid)
+        let inputTitle = makeSectionTitle("INPUT")
+        stack.addArrangedSubview(inputTitle)
+        let inputGrid = makeGrid()
+        addRow(to: inputGrid, title: "Dictation key", control: hotkeyPopup)
+        addRow(to: inputGrid, title: "Behavior", control: modeControl)
+        sizeColumns(in: inputGrid)
+        stack.addArrangedSubview(inputGrid)
+        stack.setCustomSpacing(20, after: inputGrid)
 
-        let separator = NSBox()
-        separator.boxType = .separator
-        stack.addArrangedSubview(separator)
+        let recognitionTitle = makeSectionTitle("RECOGNITION")
+        stack.addArrangedSubview(recognitionTitle)
+        let recognitionGrid = makeGrid()
+        addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        addRow(
+            to: recognitionGrid,
+            title: "Recording limit",
+            control: recordingLimitPopup
+        )
+        sizeColumns(in: recognitionGrid)
+        stack.addArrangedSubview(recognitionGrid)
+        stack.setCustomSpacing(20, after: recognitionGrid)
+
+        let startupTitle = makeSectionTitle("STARTUP")
+        stack.addArrangedSubview(startupTitle)
 
         let loginControls = NSStackView(
             views: [
@@ -443,26 +506,57 @@ public final class AdvancedSettingsWindowController:
         loginControls.orientation = .horizontal
         loginControls.alignment = .centerY
         loginControls.spacing = 10
-        addRow(to: grid, title: "Open at login", control: loginControls)
+        let startupGrid = makeGrid()
+        addRow(to: startupGrid, title: "Open at login", control: loginControls)
+        sizeColumns(in: startupGrid)
+        stack.addArrangedSubview(startupGrid)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        stack.addArrangedSubview(separator)
+        stack.setCustomSpacing(12, after: separator)
 
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.maximumNumberOfLines = 2
         stack.addArrangedSubview(detailLabel)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 28),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -28),
-            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -32),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 26),
             stack.bottomAnchor.constraint(
                 lessThanOrEqualTo: root.bottomAnchor,
-                constant: -22
+                constant: -24
             ),
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            grid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
             detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         return root
+    }
+
+    private func makeSectionTitle(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .tertiaryLabelColor
+        return label
+    }
+
+    private func makeGrid() -> NSGridView {
+        let grid = NSGridView()
+        grid.columnSpacing = 18
+        grid.rowSpacing = 12
+        grid.xPlacement = .fill
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        return grid
+    }
+
+    private func sizeColumns(in grid: NSGridView) {
+        grid.column(at: 0).width = 112
+        grid.column(at: 1).width = 426
     }
 
     private func addRow(
@@ -480,11 +574,18 @@ public final class AdvancedSettingsWindowController:
     }
 
     var selectedModeForTesting: HotkeyActivationMode? {
-        selectedValue(in: modePopup)
+        guard dictationModes.indices.contains(modeControl.selectedSegment) else {
+            return nil
+        }
+        return dictationModes[modeControl.selectedSegment]
     }
 
     var selectedModelForTesting: DictationModel? {
-        selectedValue(in: modelPopup)
+        guard DictationModel.allCases.indices.contains(modelControl.selectedSegment)
+        else {
+            return nil
+        }
+        return DictationModel.allCases[modelControl.selectedSegment]
     }
 
     var selectedLimitForTesting: RecordingLimit? {
@@ -493,31 +594,60 @@ public final class AdvancedSettingsWindowController:
 
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
-            && modelPopup.isEnabled
+            && modelControl.isEnabled
             && recordingLimitPopup.isEnabled
     }
 
     var modeControlEnabledForTesting: Bool {
-        modePopup.isEnabled
+        modeControl.isEnabled
+    }
+
+    var usesChipSelectionForTesting: Bool {
+        modeControl.segmentStyle == .rounded
+            && modeControl.trackingMode == .selectOne
+            && modelControl.segmentStyle == .rounded
+            && modelControl.trackingMode == .selectOne
+    }
+
+    var controlsFitWindowForTesting: Bool {
+        guard let contentView = window?.contentView else {
+            return false
+        }
+        contentView.layoutSubtreeIfNeeded()
+        return [
+            hotkeyPopup,
+            modeControl,
+            modelControl,
+            recordingLimitPopup,
+            loginItemToggle,
+            detailLabel,
+        ].allSatisfy { view in
+            let frame = view.convert(view.bounds, to: contentView)
+            return frame.width > 0
+                && frame.height > 0
+                && contentView.bounds.contains(frame)
+        }
     }
 
     func modelIsEnabledForTesting(_ model: DictationModel) -> Bool? {
-        modelPopup.itemArray.first(where: {
-            $0.representedObject as? String == model.rawValue
-        })?.isEnabled
+        guard let index = DictationModel.allCases.firstIndex(of: model) else {
+            return nil
+        }
+        return modelControl.isEnabled(forSegment: index)
     }
 
     func modelTitleForTesting(_ model: DictationModel) -> String? {
-        modelPopup.itemArray.first(where: {
-            $0.representedObject as? String == model.rawValue
-        })?.title
+        guard let index = DictationModel.allCases.firstIndex(of: model) else {
+            return nil
+        }
+        return modelControl.toolTip(forSegment: index)
     }
 
     var optionCountsForTesting: [Int] {
         [
             hotkeyPopup.numberOfItems,
-            modePopup.numberOfItems,
-            modelPopup.numberOfItems,
+            modeControl.segmentCount,
+            modelControl.segmentCount,
             recordingLimitPopup.numberOfItems,
         ]
     }
@@ -544,13 +674,13 @@ public final class AdvancedSettingsWindowController:
     }
 
     func selectModeForTesting(_ mode: HotkeyActivationMode) {
-        select(rawValue: mode.rawValue, in: modePopup)
-        selectDictationMode(modePopup)
+        select(mode: mode)
+        selectDictationMode(modeControl)
     }
 
     func selectModelForTesting(_ model: DictationModel) {
-        select(rawValue: model.rawValue, in: modelPopup)
-        selectModel(modelPopup)
+        select(model: model)
+        selectModel(modelControl)
     }
 
     func selectLimitForTesting(_ limit: RecordingLimit) {

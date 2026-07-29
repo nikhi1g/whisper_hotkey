@@ -5,7 +5,7 @@ whisper.cpp.
 
 `whisper_hotkey` is a background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
-English Whisper transcription at the current selection. Advanced Settings can
+English Whisper transcription at the current selection. Settings can
 instead select either side of Command, Shift, Option, or Control, plus Caps Lock
 or Fn/Globe. A selected modifier remains normal when combined with another key
 or a mouse click. A hold shorter than 250 ms is discarded. Escape always cancels
@@ -18,7 +18,7 @@ The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
 and error states. Its compact menu keeps only immediate actions; persistent
 key, gesture, model, duration, and Open at Login controls live in a separate
-native **Advanced Settings…** window. While recording, the caret badge shows a
+native **Settings…** window. While recording, the caret badge shows a
 scrolling audio-reactive waveform, elapsed time, **Stop and Insert**, and
 **Send**. Stop and Insert behaves like hotkey release; Send inserts and then
 presses Return. While dictating, Escape aborts and inserts nothing; Return or
@@ -74,7 +74,7 @@ Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
 2. Hold bare Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
 
-Open **Advanced Settings…**, choose a **Dictation key**, then choose **Press and
+Open **Settings…**, choose a **Dictation key**, then choose **Press and
 Hold**, **Toggle**, or **Pause Mode** under **Input behavior**. In Toggle mode,
 tap and release the selected key once to start, speak while the badge waveform
 is active, then tap and release it again to transcribe and insert. Pause Mode
@@ -193,7 +193,7 @@ The installed runtime uses:
 - `/opt/homebrew/opt/ggml/`
 - `~/.cache/whisper/ggml-base.en.bin`
 
-The Advanced Settings model picker offers:
+The Settings model picker presents four one-click chips:
 
 - **Base English (Fast, 141 MB)**: installed default and smallest option.
 - **Small English (More Accurate, 465 MB)**: installed.

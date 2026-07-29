@@ -33,11 +33,13 @@ the phrase, and reuses the loaded helper until the active session ends.
 The next decode is conditioned on at most 240 trailing characters from the
 current session, sent through the helper's private JSON-line stdin channel.
 
-The status menu contains only immediate actions. A lazy native Advanced Settings
+The status menu contains only immediate actions. A lazy native Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login
 controls; AppDelegate remains the preference source of truth. The window is
 created on first use, refreshes through application/state events, and never
-polls. Setup remains a separate permissions-and-files repair surface.
+polls. Behavior and model choices use one-click segmented chips; longer option
+sets retain native pop-up controls. Setup remains a separate
+permissions-and-files repair surface.
 
 ## Module boundaries
 
@@ -46,7 +48,7 @@ polls. Setup remains a separate permissions-and-files repair surface.
 | `WhisperHotkeyCore` | State machine, contracts, model and limit preferences |
 | `WhisperHotkeyASR` | Capture, helper lifecycle, whisper.cpp invocation, sanitization |
 | `WhisperHotkeySystem` | Global input, Accessibility, pasteboard, Command-V/Return |
-| `WhisperHotkeyShell` | Menu, Setup and Advanced Settings, badge, login item, local control socket |
+| `WhisperHotkeyShell` | Menu, Setup and Settings, badge, login item, local control socket |
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
 | `whisper_hotkey` | Terminal control client |
 | `WhisperModelHelper` | Session-owned C++ bridge that can decode ordered WAV chunks with one model load |

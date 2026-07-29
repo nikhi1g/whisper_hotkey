@@ -20,6 +20,13 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
     }
 
+    func testModelChipTitlesStayCompact() {
+        XCTAssertEqual(
+            DictationModel.allCases.map(DictationModelPresentation.chipTitle),
+            ["Base", "Small", "Medium", "Turbo"]
+        )
+    }
+
     @MainActor
     func testPopulatesSelectionsAndMarksUnavailableModels() {
         let box = AdvancedSettingsStateBox(
@@ -44,17 +51,19 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.modelIsEnabledForTesting(.mediumEnglish), false)
         XCTAssertEqual(
             controller.modelTitleForTesting(.mediumEnglish),
-            "\(DictationModel.mediumEnglish.menuTitle) (Not Installed)"
+            "\(DictationModel.mediumEnglish.menuTitle): Not Installed"
         )
+        XCTAssertTrue(controller.usesChipSelectionForTesting)
+        XCTAssertTrue(controller.controlsFitWindowForTesting)
         XCTAssertTrue(controller.loginItemIsOnForTesting)
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 540, height: 390)
+            CGSize(width: 620, height: 470)
         )
         XCTAssertEqual(
             controller.window?.title,
-            "Advanced Settings for whisper_hotkey"
+            "Settings for whisper_hotkey"
         )
     }
 

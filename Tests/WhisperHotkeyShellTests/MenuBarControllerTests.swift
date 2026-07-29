@@ -129,7 +129,7 @@ final class MenuBarControllerTests: XCTestCase {
                 "Starting…",
                 "",
                 "Open Setup…",
-                "Advanced Settings…",
+                "Settings…",
                 "",
                 "Restart whisper_hotkey",
                 "Quit whisper_hotkey",
@@ -148,7 +148,7 @@ final class MenuBarControllerTests: XCTestCase {
             controller.menuItemTitlesForTesting.contains("Recording Limit")
         )
 
-        controller.activateMenuItemForTesting(titled: "Advanced Settings…")
+        controller.activateMenuItemForTesting(titled: "Settings…")
         XCTAssertEqual(advancedSettingsCount, 1)
     }
 
@@ -187,7 +187,7 @@ final class MenuBarControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             controller.menuItemIsEnabledForTesting(
-                titled: "Advanced Settings…"
+                titled: "Settings…"
             ),
             false
         )

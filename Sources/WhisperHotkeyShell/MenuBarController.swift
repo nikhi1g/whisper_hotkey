@@ -128,7 +128,7 @@ public final class MenuBarController: NSObject {
         keyEquivalent: ""
     )
     private let advancedSettingsItem = NSMenuItem(
-        title: "Advanced Settings…",
+        title: "Settings…",
         action: #selector(showAdvancedSettings),
         keyEquivalent: ","
     )

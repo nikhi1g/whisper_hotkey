@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Simplified the user-facing settings name to Settings throughout the UI
+- Replaced the three-choice behavior and four-choice model menus with one-click
+  segmented chips
+- Reorganized Settings into clear Input, Recognition, and Startup sections
+
 ## 2.5.0: 2026-07-28
 
 Live Flow release.
@@ -38,7 +43,7 @@ Live Flow release.
 Major interaction and reliability release.
 
 - Added explicit Press and Hold and Toggle dictation modes
-- Added a focused Advanced Settings window while keeping the menu compact
+- Added a focused Settings window while keeping the menu compact
 - Added an in-menu Restart action
 - Added silence detection so empty recordings do not produce hallucinated text
 - Reworked the recording controller into a compact, fixed-size, borderless HUD

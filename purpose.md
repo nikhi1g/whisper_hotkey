@@ -4,7 +4,7 @@
 text while keeping its always-running cost as close to zero as practical.
 
 The app has no Dock presence. A lightweight menu-bar item shows current state
-and offers only immediate actions: setup, Advanced Settings, cancellation,
+and offers only immediate actions: setup, Settings, cancellation,
 copying the last dictation, restart, and quit. Configuration pickers do not
 expand the status menu.
 Restart appears immediately before Quit, completes normal cleanup, and uses the
@@ -14,10 +14,10 @@ login as a visible macOS background item: a signed, one-shot Service Management
 LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time Setup window
 handles Microphone, Accessibility, and Input Monitoring permissions. A separate
-lazy Advanced Settings window owns persistent behavior and launch preferences;
+lazy Settings window owns persistent behavior and launch preferences;
 it is not constructed until opened and has no polling task.
 
-Advanced Settings' **Dictation key** picker selects Right/Left Command, Shift,
+The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Command is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
@@ -28,8 +28,9 @@ at least 250 milliseconds transcribes once, pastes at the current focus, and
 unloads the model. A faster tap does nothing.
 
 The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
-**Pause Mode** choices. The selected mode persists across launches. Toggle
-changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
+**Pause Mode** choices. The selected mode persists across launches. The three
+choices appear as one-click segmented chips, avoiding an extra menu interaction.
+Toggle changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
 and remains between 300 and 750 milliseconds. One uninterrupted private WAV
@@ -55,7 +56,7 @@ migrates to Right Command. Return and keypad Enter act exactly like Send: they
 finalize, insert, and then post one unmodified Return. These keys are consumed
 only for an active dictation; ordinary Escape and Return remain untouched.
 Cancellation and audio discard are also available from the menu.
-Advanced Settings and Setup controls are disabled during active dictation so
+Settings and Setup controls are disabled during active dictation so
 they cannot steal the destination focus. The **Recording limit** picker persists
 a choice from 30 seconds through one hour; ten minutes is the default, and
 reaching the chosen limit finalizes automatically. Bare gestures are ignored
@@ -63,7 +64,9 @@ while a previous dictation is finishing.
 
 The **Whisper model** picker persists Base English (default), Small English,
 Medium English, or Large-v3 Turbo Q5. Missing local model files remain visible
-but cannot be selected; the app never downloads them. The accuracy-first decoder
+as muted model chips but cannot be selected; the app never downloads them. The
+full model description is available from each chip's native help text. The
+accuracy-first decoder
 keeps a beam width of five, uses Metal and flash attention, and gives whisper.cpp
 half of the Mac's logical CPUs up to an eight-thread cap. **Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
