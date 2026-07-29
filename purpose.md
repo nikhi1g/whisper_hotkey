@@ -30,16 +30,20 @@ unloads the model. A faster tap does nothing.
 The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
 **Pause Mode** choices. The selected mode persists across launches. Toggle
 changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
-uses that same gesture but treats roughly 850 milliseconds of silence following
-confirmed speech as a phrase boundary. It immediately rotates to a fresh
-private WAV, transcribes and pastes completed phrases in strict order, and keeps
-listening until the user stops the session. It reuses one loaded helper during
-the active session. Every later phrase receives a private, bounded 240-character
+uses that same gesture and learns a bounded pause threshold from resumed,
+sub-boundary pauses in the user's current cadence. It starts at 850 milliseconds
+and remains between 650 and 1,250 milliseconds. One uninterrupted private WAV
+retains the complete session while the same converted samples feed a small
+current inference segment. A phrase boundary rotates only that segment—never
+the microphone or full recording—then transcribes and pastes phrases in strict
+order. It reuses one loaded helper during the active session. Every later phrase
+receives a private, bounded 240-character
 tail of the current session as its initial Whisper prompt so punctuation and
 casing can follow the preceding phrase instead of treating every pause as a new
 utterance. The prompt travels only over the owned helper's stdin, is never a
 process argument, and does not grow with session length. The app retains no
-model or audio worker at idle. Caps Lock
+model or audio worker at idle. Full audio and inference segments are deleted on
+stop, cancellation, failure, or termination. Caps Lock
 cannot use Press and Hold because macOS exposes its lock-state changes rather
 than a momentary hold/release pair; it can use Toggle or Pause Mode.
 Its normal lock state is otherwise left to macOS. Escape is reserved as an

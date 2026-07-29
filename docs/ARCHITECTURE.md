@@ -24,9 +24,12 @@ At idle, only the event tap, menu item, local control socket, and app process
 remain. There is no audio engine, loaded model, helper, polling worker, or
 transcript history. During dictation, capture and model preload begin together.
 Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
-helper, and deletes the private audio directory. Pause Mode instead rotates the
-WAV after 850 milliseconds of post-speech silence, serially transcribes and
-pastes each phrase, and reuses the loaded helper until the active session ends.
+helper, and deletes the private audio directory. Pause Mode retains one
+uninterrupted full-session WAV and writes a parallel current inference segment
+from the already-converted callback buffer. Its pause threshold begins at
+850 milliseconds and adapts within 650–1,250 milliseconds from resumed pauses.
+A boundary rotates only the inference segment, serially transcribes and pastes
+the phrase, and reuses the loaded helper until the active session ends.
 The next decode is conditioned on at most 240 trailing characters from the
 current session, sent through the helper's private JSON-line stdin channel.
 
@@ -59,9 +62,11 @@ idle → preparing → listening → transcribing → inserting → idle
 The input reducer distinguishes a bare modifier gesture from normal shortcuts.
 Hold mode uses one cancellable 150 ms timer; toggle and Pause modes use
 successive bare presses. Pause boundaries come from the recorder's existing
-speech-energy detector. Capture rotates and resumes during the silence, while
-recognition tasks form a strict serial chain so phrases can never paste out of
-order. Because the next task starts only after the prior result is accepted, it
+speech-energy detector. The detector maintains a bounded exponential estimate
+of the user's sub-boundary pauses; no new timer or audio analysis pass exists.
+The microphone and complete recording remain uninterrupted while segment
+snapshots feed recognition tasks in a strict serial chain, so phrases can never
+paste out of order. Because the next task starts only after the prior result is accepted, it
 can use a bounded prior-text prompt to preserve continuation punctuation and
 casing. Effects are serialized through the main-actor state machine, and a
 generation number rejects stale recognition results.
@@ -82,6 +87,8 @@ duration-progress track; no additional timer or polling loop is used.
 ## Privacy and ownership
 
 - Temporary audio uses a mode-0700 directory and mode-0600 WAV.
+- Pause Mode retains complete session audio only until that active session ends;
+  the full WAV and every inference segment share the same cleanup guarantees.
 - Audio and transcripts never enter logs or network requests.
 - The app has no model downloader or cloud speech client.
 - `run.sh` explicitly downloads selected models and verifies pinned checksums.

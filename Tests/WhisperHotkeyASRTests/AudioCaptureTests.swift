@@ -17,6 +17,18 @@ final class AudioCaptureTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("dictation.wav")
+        let segmentDirectory = directory.appendingPathComponent(
+            "segment",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: segmentDirectory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let segmentURL = segmentDirectory.appendingPathComponent(
+            "dictation.wav"
+        )
 
         let inputFormat = try XCTUnwrap(
             AVAudioFormat(
@@ -40,6 +52,16 @@ final class AudioCaptureTests: XCTestCase {
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
+        let segmentFile = try AVAudioFile(
+            forWriting: segmentURL,
+            settings: fileFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let segmentAudioFile = WhisperAudioFile(
+            url: segmentURL,
+            directoryURL: segmentDirectory
+        )
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o600],
             ofItemAtPath: url.path
@@ -50,6 +72,8 @@ final class AudioCaptureTests: XCTestCase {
         )
         let writer = WhisperWAVWriter(
             file: try XCTUnwrap(outputFile),
+            segmentFile: segmentFile,
+            segmentAudioFile: segmentAudioFile,
             converter: converter,
             outputFormat: processingFormat
         )
@@ -92,7 +116,50 @@ final class AudioCaptureTests: XCTestCase {
             writer.consume(input)
         }
         XCTAssertEqual(writer.speechPresence, .present)
-        XCTAssertNil(writer.finish())
+        let nextSegmentDirectory = directory.appendingPathComponent(
+            "next-segment",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: nextSegmentDirectory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let nextSegmentURL = nextSegmentDirectory.appendingPathComponent(
+            "dictation.wav"
+        )
+        let nextSegmentFile = try AVAudioFile(
+            forWriting: nextSegmentURL,
+            settings: fileFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let nextSegmentAudio = WhisperAudioFile(
+            url: nextSegmentURL,
+            directoryURL: nextSegmentDirectory
+        )
+        let completedSegment = try writer.rotateSegment(
+            to: nextSegmentFile,
+            audioFile: nextSegmentAudio
+        )
+        XCTAssertEqual(completedSegment.speechPresence, .present)
+        XCTAssertEqual(writer.trailingSilenceDuration, 0)
+
+        for _ in 0..<5 {
+            writer.consume(input)
+        }
+        let finishResult = writer.finishRetainingSegment()
+        XCTAssertNil(finishResult.error)
+        XCTAssertEqual(finishResult.segment?.speechPresence, .present)
+        let completedSegmentFile = try AVAudioFile(
+            forReading: completedSegment.url
+        )
+        XCTAssertEqual(
+            completedSegmentFile.fileFormat.commonFormat,
+            .pcmFormatInt16
+        )
+        completedSegment.delete()
+        finishResult.segment?.delete()
         outputFile = nil
 
         let written = try AVAudioFile(forReading: url)
@@ -215,6 +282,48 @@ final class AudioCaptureTests: XCTestCase {
             sampleRate: 16_000
         )
         XCTAssertEqual(detector.trailingSilenceDuration, 0)
+    }
+
+    func testPauseBoundaryLearnsCadenceWithinStrictBounds() {
+        var detector = WhisperSpeechActivityDetector()
+        XCTAssertEqual(
+            detector.pauseBoundarySilence,
+            WhisperSpeechActivityDetector.defaultPauseBoundary
+        )
+
+        for _ in 0..<5 {
+            detector.observe(
+                decibels: -40,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        for _ in 0..<20 {
+            detector.observe(
+                decibels: -70,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        detector.observe(
+            decibels: -40,
+            frameCount: 320,
+            sampleRate: 16_000
+        )
+
+        XCTAssertEqual(
+            detector.pauseBoundarySilence,
+            0.75,
+            accuracy: 0.001
+        )
+        let next = detector.nextSegmentPreservingCadence()
+        XCTAssertEqual(
+            next.pauseBoundarySilence,
+            detector.pauseBoundarySilence,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(next.trailingSilenceDuration, 0)
+        XCTAssertEqual(next.presence, .absent)
     }
 }
 

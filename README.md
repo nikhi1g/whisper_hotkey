@@ -71,8 +71,10 @@ Hold**, **Toggle**, or **Pause Mode** under **Input behavior**. In Toggle mode,
 tap and release the selected key once to start, speak while the badge waveform
 is active, then tap and release it again to transcribe and insert. Pause Mode
 uses the same start/stop gesture but automatically transcribes and pastes each
-phrase after about 850 milliseconds of silence, then keeps listening. This gives
-live, phrase-by-phrase typing without sending audio to a service. Each decode
+phrase after a natural pause, then keeps listening. The boundary begins at
+850 milliseconds and adapts between 650 and 1,250 milliseconds from the
+short pauses in the user's current speaking cadence. This gives live,
+phrase-by-phrase typing without sending audio to a service. Each decode
 receives only the final 240 characters of the current session as private local
 context, helping Whisper preserve mid-sentence casing and punctuation across
 pause boundaries without unbounded context growth. The badge's
@@ -202,9 +204,12 @@ In hold mode, audio capture and model preload begin together only after the
 bare-key release. A normal dictation owns the model helper only until its one
 insertion. Pause Mode reuses one helper and loaded model for its ordered phrase
 chunks, then terminates it when the session stops, is cancelled, reaches its
-limit, or fails. Capture restarts during the detected silence before the prior
-chunk is decoded, minimizing missed speech. Its bounded context reaches the
-helper over the private stdin protocol, never as a process argument. Idle
+limit, or fails. One uninterrupted private WAV retains the complete active
+session. The existing audio callback writes a second lightweight inference
+segment from the same converted samples; a pause rotates only that segment, so
+the microphone never stops and no speech can fall into a restart gap. The full
+recording and every segment are deleted when the session ends. Bounded text
+context reaches the helper over private stdin, never as a process argument. Idle
 operation is event-driven; no
 Whisper model, transcription helper, polling worker, audio, or transcript
 history remains resident. The menu-bar icon is updated only by state

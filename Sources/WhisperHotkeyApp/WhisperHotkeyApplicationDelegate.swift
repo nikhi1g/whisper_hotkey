@@ -11,7 +11,6 @@ import WhisperHotkeySystem
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let errorPresentationDuration: Duration = .seconds(2)
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
-    private static let pauseBoundarySilence: TimeInterval = 0.85
     private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
         selectedHotkey: .rightCommand,
         activationMode: .hold,
@@ -525,7 +524,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
         do {
-            try recorder.start()
+            try recorder.start(pauseSegmentation: isPauseMode)
             process(.captureStarted)
             startRecordingPresentation(
                 generation: generation,
@@ -633,20 +632,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finalizePauseSession() -> Bool {
-        let finalAudio: WhisperAudioFile
+        let recording: WhisperAudioFile
+        let finalSegment: WhisperAudioFile
         do {
-            finalAudio = try recorder.stop()
+            let result = try recorder.stopPauseSession()
+            recording = result.recording
+            finalSegment = result.finalSegment
         } catch {
             fail(error)
             return false
         }
-        enqueuePauseChunkIfNeeded(finalAudio)
+        enqueuePauseChunkIfNeeded(finalSegment)
 
         let generation = sessionGeneration
         let precedingRecognition = recognitionTask
         let sessionPreload = preloadTask
         let shouldSubmit = completionBehavior == .insertAndSubmit
         recognitionTask = Task { @MainActor [weak self, recognizer] in
+            defer { recording.delete() }
             if let precedingRecognition {
                 await precedingRecognition.value
             }
@@ -705,8 +708,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         let audio: WhisperAudioFile
         do {
-            audio = try recorder.stop()
-            try recorder.start()
+            audio = try recorder.rotatePauseSegment()
         } catch {
             fail(error)
             return
@@ -933,7 +935,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 )
                 if isPauseMode,
                    recorder.trailingSilenceDuration
-                    >= Self.pauseBoundarySilence
+                    >= recorder.pauseBoundarySilence
                 {
                     flushPauseChunkAndContinue()
                 }

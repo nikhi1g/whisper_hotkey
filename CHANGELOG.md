@@ -7,6 +7,8 @@
   preserving zero model/audio-worker residency at idle
 - Added bounded local prior-phrase context for continuation punctuation and
   casing across Pause Mode chunks
+- Kept Pause Mode capture uninterrupted in one private full-session recording
+  while rotating lightweight inference segments at adaptive cadence boundaries
 - Made Escape unambiguously abort active dictation, discard its private audio,
   cancel recognition, and insert nothing
 - Reserved Escape for cancellation and migrated legacy Escape triggers to Right

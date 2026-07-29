@@ -90,6 +90,13 @@ public final class WhisperAudioRecorder {
         writer?.trailingSilenceDuration ?? 0
     }
 
+    /// The current cadence-aware pause boundary. It is learned only from the
+    /// existing audio callback and remains bounded for predictable latency.
+    public var pauseBoundarySilence: TimeInterval {
+        writer?.pauseBoundarySilence
+            ?? WhisperSpeechActivityDetector.defaultPauseBoundary
+    }
+
     deinit {
         engineBox.stop(removeInputTap: inputTapInstalled)
         writer?.finish()
@@ -97,9 +104,10 @@ public final class WhisperAudioRecorder {
     }
 
     @discardableResult
-    public func start() throws -> URL {
+    public func start(pauseSegmentation: Bool = false) throws -> URL {
         cancel()
         let audioFile = try makePrivateAudioFile()
+        var segmentAudioFile: WhisperAudioFile?
 
         do {
             let inputNode = engineBox.engine.inputNode
@@ -127,6 +135,17 @@ public final class WhisperAudioRecorder {
                 [.posixPermissions: 0o600],
                 ofItemAtPath: audioFile.url.path
             )
+            let segmentFile: AVAudioFile?
+            if pauseSegmentation {
+                let newSegmentAudioFile = try makePrivateAudioFile()
+                segmentAudioFile = newSegmentAudioFile
+                segmentFile = try makeOutputFile(
+                    for: newSegmentAudioFile,
+                    settings: outputFile.fileFormat.settings
+                )
+            } else {
+                segmentFile = nil
+            }
             guard let converter = AVAudioConverter(
                 from: inputFormat,
                 to: outputFile.processingFormat
@@ -138,6 +157,8 @@ public final class WhisperAudioRecorder {
 
             let writer = WhisperWAVWriter(
                 file: outputFile,
+                segmentFile: segmentFile,
+                segmentAudioFile: segmentAudioFile,
                 converter: converter,
                 outputFormat: outputFile.processingFormat
             )
@@ -151,6 +172,7 @@ public final class WhisperAudioRecorder {
             inputTapInstalled = true
             self.writer = writer
             self.audioFile = audioFile
+            segmentAudioFile = nil
             engineBox.engine.prepare()
             try engineBox.engine.start()
             return audioFile.url
@@ -161,6 +183,7 @@ public final class WhisperAudioRecorder {
             writer = nil
             self.audioFile = nil
             audioFile.delete()
+            segmentAudioFile?.delete()
             if let error = error as? WhisperASRError {
                 throw error
             }
@@ -189,6 +212,60 @@ public final class WhisperAudioRecorder {
         }
         audioFile.setSpeechPresence(speechPresence)
         return audioFile
+    }
+
+    /// Rotates only the inference segment while the uninterrupted private
+    /// session recording and microphone engine continue running.
+    public func rotatePauseSegment() throws -> WhisperAudioFile {
+        guard let writer, audioFile != nil, engineBox.engine.isRunning else {
+            throw WhisperASRError.noActiveRecording
+        }
+        let nextAudio = try makePrivateAudioFile()
+        do {
+            let nextFile = try makeOutputFile(
+                for: nextAudio,
+                settings: writer.outputFileSettings
+            )
+            return try writer.rotateSegment(
+                to: nextFile,
+                audioFile: nextAudio
+            )
+        } catch {
+            nextAudio.delete()
+            if let error = error as? WhisperASRError {
+                throw error
+            }
+            throw WhisperASRError.captureFailed(
+                "Could not rotate the pause transcription segment."
+            )
+        }
+    }
+
+    /// Stops one continuous Pause Mode recording and returns both the complete
+    /// private session audio and its untranscribed final segment.
+    public func stopPauseSession() throws -> (
+        recording: WhisperAudioFile,
+        finalSegment: WhisperAudioFile
+    ) {
+        guard let audioFile, let writer else {
+            throw WhisperASRError.noActiveRecording
+        }
+        engineBox.engine.stop()
+        removeInputTap()
+        let speechPresence = writer.speechPresence
+        let result = writer.finishRetainingSegment()
+        self.writer = nil
+        self.audioFile = nil
+
+        guard result.error == nil, let finalSegment = result.segment else {
+            audioFile.delete()
+            result.segment?.delete()
+            throw WhisperASRError.captureFailed(
+                "Writing microphone audio failed."
+            )
+        }
+        audioFile.setSpeechPresence(speechPresence)
+        return (audioFile, finalSegment)
     }
 
     public func cancel() {
@@ -226,6 +303,23 @@ public final class WhisperAudioRecorder {
         }
     }
 
+    private func makeOutputFile(
+        for audioFile: WhisperAudioFile,
+        settings: [String: Any]
+    ) throws -> AVAudioFile {
+        let file = try AVAudioFile(
+            forWriting: audioFile.url,
+            settings: settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: audioFile.url.path
+        )
+        return file
+    }
+
     private func removeInputTap() {
         guard inputTapInstalled else { return }
         engineBox.engine.inputNode.removeTap(onBus: 0)
@@ -249,20 +343,33 @@ nonisolated func makeWhisperAudioTapHandler(
 final class WhisperWAVWriter: @unchecked Sendable {
     private let lock = NSLock()
     private var file: AVAudioFile?
+    private var segmentFile: AVAudioFile?
+    private var segmentAudioFile: WhisperAudioFile?
     private var converter: AVAudioConverter?
     private let outputFormat: AVAudioFormat
+    private let fileSettings: [String: Any]
     private var firstError: Error?
     private var latestNormalizedInputLevel: Float = 0
-    private var speechDetector = WhisperSpeechActivityDetector()
+    private var sessionSpeechDetector = WhisperSpeechActivityDetector()
+    private var segmentSpeechDetector = WhisperSpeechActivityDetector()
 
     init(
         file: AVAudioFile,
+        segmentFile: AVAudioFile?,
+        segmentAudioFile: WhisperAudioFile?,
         converter: AVAudioConverter,
         outputFormat: AVAudioFormat
     ) {
         self.file = file
+        self.segmentFile = segmentFile
+        self.segmentAudioFile = segmentAudioFile
         self.converter = converter
         self.outputFormat = outputFormat
+        fileSettings = file.fileFormat.settings
+    }
+
+    var outputFileSettings: [String: Any] {
+        fileSettings
     }
 
     var normalizedInputLevel: Float {
@@ -270,16 +377,22 @@ final class WhisperWAVWriter: @unchecked Sendable {
     }
 
     var speechPresence: WhisperSpeechPresence {
-        lock.withLock { speechDetector.presence }
+        lock.withLock { sessionSpeechDetector.presence }
     }
 
     var trailingSilenceDuration: TimeInterval {
-        lock.withLock { speechDetector.trailingSilenceDuration }
+        lock.withLock { segmentSpeechDetector.trailingSilenceDuration }
+    }
+
+    var pauseBoundarySilence: TimeInterval {
+        lock.withLock { segmentSpeechDetector.pauseBoundarySilence }
     }
 
     func consume(_ input: AVAudioPCMBuffer) {
         lock.withLock {
-            guard firstError == nil, let file, let converter else { return }
+            guard firstError == nil, let file, let converter else {
+                return
+            }
             let ratio = outputFormat.sampleRate / input.format.sampleRate
             let capacity = AVAudioFrameCount(
                 ceil(Double(input.frameLength) * ratio)
@@ -319,12 +432,18 @@ final class WhisperWAVWriter: @unchecked Sendable {
                 do {
                     let measurement = Self.levelMeasurement(output)
                     latestNormalizedInputLevel = measurement.normalizedLevel
-                    speechDetector.observe(
+                    sessionSpeechDetector.observe(
+                        decibels: measurement.decibels,
+                        frameCount: Int(output.frameLength),
+                        sampleRate: output.format.sampleRate
+                    )
+                    segmentSpeechDetector.observe(
                         decibels: measurement.decibels,
                         frameCount: Int(output.frameLength),
                         sampleRate: output.format.sampleRate
                     )
                     try file.write(from: output)
+                    try segmentFile?.write(from: output)
                 } catch {
                     firstError = error
                 }
@@ -334,11 +453,63 @@ final class WhisperWAVWriter: @unchecked Sendable {
 
     @discardableResult
     func finish() -> Error? {
+        let result = finish(retainSegment: false)
+        return result.error
+    }
+
+    func finishRetainingSegment() -> (
+        error: Error?,
+        segment: WhisperAudioFile?
+    ) {
+        finish(retainSegment: true)
+    }
+
+    func rotateSegment(
+        to nextFile: AVAudioFile,
+        audioFile nextAudioFile: WhisperAudioFile
+    ) throws -> WhisperAudioFile {
+        try lock.withLock {
+            if firstError != nil {
+                throw WhisperASRError.captureFailed(
+                    "Writing microphone audio failed."
+                )
+            }
+            guard let completedAudioFile = segmentAudioFile else {
+                throw WhisperASRError.noActiveRecording
+            }
+            segmentFile = nil
+            completedAudioFile.setSpeechPresence(
+                segmentSpeechDetector.presence
+            )
+            segmentFile = nextFile
+            segmentAudioFile = nextAudioFile
+            segmentSpeechDetector =
+                segmentSpeechDetector.nextSegmentPreservingCadence()
+            return completedAudioFile
+        }
+    }
+
+    private func finish(retainSegment: Bool) -> (
+        error: Error?,
+        segment: WhisperAudioFile?
+    ) {
         lock.withLock {
             file = nil
+            segmentFile = nil
             converter = nil
             latestNormalizedInputLevel = 0
-            return firstError
+            let finalSegment = segmentAudioFile
+            segmentAudioFile = nil
+            finalSegment?.setSpeechPresence(
+                segmentSpeechDetector.presence
+            )
+            if !retainSegment {
+                finalSegment?.delete()
+            }
+            return (
+                firstError,
+                retainSegment ? finalSegment : nil
+            )
         }
     }
 
@@ -392,10 +563,15 @@ private struct WhisperAudioLevelMeasurement {
 struct WhisperSpeechActivityDetector: Equatable {
     static let minimumSpeechDecibels = -48.0
     static let minimumSpeechDuration = 0.10
+    static let defaultPauseBoundary = 0.85
+    static let minimumPauseBoundary = 0.65
+    static let maximumPauseBoundary = 1.25
+    static let pauseMargin = 0.35
 
     private var currentSpeechDuration = 0.0
     private var longestSpeechDuration = 0.0
     private(set) var trailingSilenceDuration = 0.0
+    private var typicalPauseDuration: TimeInterval?
     private var observedAudio = false
 
     mutating func observe(
@@ -409,6 +585,7 @@ struct WhisperSpeechActivityDetector: Equatable {
         observedAudio = true
         let duration = Double(frameCount) / sampleRate
         if decibels >= Self.minimumSpeechDecibels {
+            learnFromCompletedPause()
             currentSpeechDuration += duration
             longestSpeechDuration = max(
                 longestSpeechDuration,
@@ -423,6 +600,19 @@ struct WhisperSpeechActivityDetector: Equatable {
         }
     }
 
+    var pauseBoundarySilence: TimeInterval {
+        guard let typicalPauseDuration else {
+            return Self.defaultPauseBoundary
+        }
+        return min(
+            Self.maximumPauseBoundary,
+            max(
+                Self.minimumPauseBoundary,
+                typicalPauseDuration + Self.pauseMargin
+            )
+        )
+    }
+
     var presence: WhisperSpeechPresence {
         guard observedAudio else {
             return .absent
@@ -430,6 +620,27 @@ struct WhisperSpeechActivityDetector: Equatable {
         return longestSpeechDuration >= Self.minimumSpeechDuration
             ? .present
             : .absent
+    }
+
+    func nextSegmentPreservingCadence() -> Self {
+        var next = Self()
+        next.typicalPauseDuration = typicalPauseDuration
+        return next
+    }
+
+    private mutating func learnFromCompletedPause() {
+        guard trailingSilenceDuration >= 0.12 else {
+            trailingSilenceDuration = 0
+            return
+        }
+        if let typicalPauseDuration {
+            self.typicalPauseDuration =
+                typicalPauseDuration * 0.75
+                + trailingSilenceDuration * 0.25
+        } else {
+            typicalPauseDuration = trailingSilenceDuration
+        }
+        trailingSilenceDuration = 0
     }
 }
 
