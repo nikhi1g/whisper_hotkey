@@ -200,7 +200,7 @@ Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or
 transcript text. No model is downloaded and no network request is made.
 
-The Swift package requires macOS 14. Version 1.0.0 is source-distributed for
+The Swift package requires macOS 14. Version 2.0.0 is source-distributed for
 Apple Silicon because the helper links to the user's Homebrew whisper.cpp/GGML
 installation. A notarized universal binary is not currently published.
 
