@@ -20,14 +20,14 @@ key, gesture, model, duration, and Open at Login controls live in a separate
 native **Advanced Settings…** window. While recording, the caret badge shows a
 scrolling audio-reactive waveform, elapsed time, **Stop and Insert**, and
 **Send**. Stop and Insert behaves like hotkey release; Send inserts and then
-presses Return. The badge continuously shows elapsed/limit time and a thin
-progress track, making its automatic stopping point visible throughout the
-recording. The badge uses a borderless flat surface with a restrained system
-shadow and no gradients. In the final 30 seconds one solid warning color pulses
-and deepens from orange toward red. Its timer and two circular controls sit
-directly beside the waveform. Its compact outer frame keeps the same position,
-width, and height while it changes from listening to transcribing or another
-status, so the badge never jumps or collapses around shorter text.
+presses Return. The badge normally shows only elapsed time. In the final minute,
+it switches to a remaining-time countdown whose text shifts from orange to red
+and reveals the thin limit track; shorter limits use their full duration for the
+warning. The badge uses a borderless flat surface with a restrained system
+shadow and no gradients. Its timer and two circular controls sit directly beside
+the waveform. Its compact outer frame keeps the same position, width, and height
+while it changes from listening to transcribing or another status, so the badge
+never jumps or collapses around shorter text.
 The same microphone levels provide a lightweight voice-activity gate: sustained
 speech proceeds to Whisper, while silence and brief key or click transients are
 discarded as no speech instead of being decoded into a hallucinated phrase.

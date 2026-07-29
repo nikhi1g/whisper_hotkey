@@ -66,8 +66,11 @@ shrink for short status text, or resize during the session. Screen-edge clamping
 keeps the complete badge visible. This fallback affects presentation only and
 never validates or changes the paste destination. While listening, the compact
 badge shows a sensitive scrolling 23-sample waveform read from the existing
-audio callback at 20 Hz, an elapsed and limit timer, a thin duration-progress
-track, a Stop and Insert button, and a Send button. Stop and Insert has the same
+audio callback at 20 Hz, elapsed time, a Stop and Insert button, and a Send
+button. The recording limit stays hidden until its final minute; then elapsed
+time becomes a remaining-time countdown, its text shifts continuously from
+orange to red, and the thin limit track appears. Limits shorter than one minute
+use their complete duration for that warning shift. Stop and Insert has the same
 result as hotkey release. Send inserts successfully before posting an unmodified
 Return. The same unsmoothed audio callback feeds a zero-idle-cost energy gate:
 Whisper runs only after at least 100 milliseconds of contiguous speech-like
@@ -76,8 +79,7 @@ as no speech, so Whisper cannot invent a phrase from an empty recording. The
 panel remains
 non-activating, and controller clicks are excluded from modifier-chord
 cancellation. The badge has no outline or gradient; a restrained system shadow
-separates it from the destination. During the last 30 seconds one solid warning
-color pulses and deepens from orange toward red.
+separates it from the destination.
 The update task exists only while recording. The panel joins every application,
 Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive

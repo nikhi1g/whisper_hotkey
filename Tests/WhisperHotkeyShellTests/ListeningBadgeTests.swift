@@ -3,29 +3,55 @@ import XCTest
 @testable import WhisperHotkeyShell
 
 final class ListeningBadgeTests: XCTestCase {
-    func testNormalTimerAlwaysShowsElapsedAndLimit() {
+    func testNormalTimerShowsOnlyElapsedTime() {
         let metrics = ListeningBadgeMetrics(elapsed: 65.9, limit: 600)
-        XCTAssertEqual(metrics.timeText, "1:05 / 10:00")
+        XCTAssertEqual(metrics.timeText, "1:05")
         XCTAssertEqual(
             metrics.accessibilityText,
-            "1:05 of 10:00, 8:54 remaining"
+            "1:05 of 10:00, 8:55 remaining"
         )
         XCTAssertFalse(metrics.isWarning)
         XCTAssertEqual(metrics.warningProgress, 0)
         XCTAssertEqual(metrics.progress, 65.9 / 600, accuracy: 0.001)
     }
 
-    func testFinalThirtySecondsShowsFractionAndProgress() {
+    func testFinalMinuteShowsRemainingCountdownAndWarningProgress() {
         let metrics = ListeningBadgeMetrics(elapsed: 575, limit: 600)
-        XCTAssertEqual(metrics.timeText, "9:35 / 10:00")
+        XCTAssertEqual(metrics.timeText, "0:25 left")
         XCTAssertTrue(metrics.isWarning)
-        XCTAssertEqual(metrics.warningProgress, 1.0 / 6.0, accuracy: 0.001)
+        XCTAssertEqual(metrics.warningProgress, 35.0 / 60.0, accuracy: 0.001)
+
+        let beforeWarning = ListeningBadgeMetrics(
+            elapsed: 539.9,
+            limit: 600
+        )
+        XCTAssertEqual(beforeWarning.timeText, "8:59")
+        XCTAssertFalse(beforeWarning.isWarning)
+
+        let warningBoundary = ListeningBadgeMetrics(
+            elapsed: 540,
+            limit: 600
+        )
+        XCTAssertEqual(warningBoundary.timeText, "1:00 left")
+        XCTAssertTrue(warningBoundary.isWarning)
+        XCTAssertEqual(warningBoundary.warningProgress, 0)
     }
 
-    func testHourLimitUsesHourClock() {
+    func testHourLimitUsesCompactFinalMinuteCountdown() {
         let metrics = ListeningBadgeMetrics(elapsed: 3_575, limit: 3_600)
-        XCTAssertEqual(metrics.timeText, "59:35 / 1:00:00")
+        XCTAssertEqual(metrics.timeText, "0:25 left")
         XCTAssertTrue(metrics.isWarning)
+    }
+
+    func testThirtySecondLimitUsesItsWholeDurationForWarningShift() {
+        let start = ListeningBadgeMetrics(elapsed: 0, limit: 30)
+        XCTAssertEqual(start.timeText, "0:30 left")
+        XCTAssertTrue(start.isWarning)
+        XCTAssertEqual(start.warningProgress, 0)
+
+        let halfway = ListeningBadgeMetrics(elapsed: 15, limit: 30)
+        XCTAssertEqual(halfway.timeText, "0:15 left")
+        XCTAssertEqual(halfway.warningProgress, 0.5)
     }
 
     func testLimitProgressClampsAtBothEnds() {
@@ -35,7 +61,7 @@ final class ListeningBadgeTests: XCTestCase {
         )
         let completed = ListeningBadgeMetrics(elapsed: 400, limit: 300)
         XCTAssertEqual(completed.progress, 1)
-        XCTAssertEqual(completed.timeText, "5:00 / 5:00")
+        XCTAssertEqual(completed.timeText, "0:00 left")
         XCTAssertEqual(
             completed.accessibilityText,
             "5:00 of 5:00, 0:00 remaining"
@@ -43,8 +69,8 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
-    func testLongestVisibleLimitFitsItsCenteredTimerCell() {
-        let label = NSTextField(labelWithString: "59:35 / 1:00:00")
+    func testLongestVisibleCountdownFitsItsCenteredTimerCell() {
+        let label = NSTextField(labelWithString: "1:00 left")
         label.font = .monospacedDigitSystemFont(
             ofSize: 10.5,
             weight: .semibold
@@ -54,6 +80,41 @@ final class ListeningBadgeTests: XCTestCase {
             ceil(label.intrinsicContentSize.width),
             ListeningBadgeLayout().timeFrame.width
         )
+    }
+
+    @MainActor
+    func testLimitTrackAppearsOnlyDuringFinalMinute() {
+        let controller = CaretBadgeController()
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        controller.updateListening(elapsed: 10, limit: 300, level: 0.3)
+        XCTAssertEqual(controller.listeningTextForTesting, "0:10")
+        XCTAssertFalse(controller.limitTrackIsVisibleForTesting)
+
+        controller.updateListening(elapsed: 245, limit: 300, level: 0.3)
+        XCTAssertEqual(controller.listeningTextForTesting, "0:55 left")
+        XCTAssertTrue(controller.limitTrackIsVisibleForTesting)
+        let orange = try? XCTUnwrap(
+            controller.listeningTimerColorForTesting.usingColorSpace(
+                .deviceRGB
+            )
+        )
+
+        controller.updateListening(elapsed: 299, limit: 300, level: 0.3)
+        let nearRed = try? XCTUnwrap(
+            controller.listeningTimerColorForTesting.usingColorSpace(
+                .deviceRGB
+            )
+        )
+        XCTAssertGreaterThan(
+            orange?.greenComponent ?? 0,
+            nearRed?.greenComponent ?? 1
+        )
+        controller.hide()
     }
 
     @MainActor
@@ -313,7 +374,7 @@ final class ListeningBadgeTests: XCTestCase {
 
     func testCompactListeningLayoutHasTightSquareControls() {
         let layout = ListeningBadgeLayout()
-        XCTAssertEqual(layout.size, CGSize(width: 258, height: 44))
+        XCTAssertEqual(layout.size, CGSize(width: 232, height: 44))
         XCTAssertEqual(layout.waveformFrame.minX, 10)
         XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 10)
         XCTAssertEqual(

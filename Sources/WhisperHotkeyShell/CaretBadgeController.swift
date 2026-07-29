@@ -281,6 +281,18 @@ public final class CaretBadgeController {
         )
     }
 
+    var listeningTextForTesting: String {
+        badgeView.listeningTextForTesting
+    }
+
+    var limitTrackIsVisibleForTesting: Bool {
+        badgeView.limitTrackIsVisibleForTesting
+    }
+
+    var listeningTimerColorForTesting: NSColor {
+        badgeView.listeningTimerColorForTesting
+    }
+
     private static func hasGradientLayer(_ layer: CALayer?) -> Bool {
         guard let layer else {
             return false
@@ -493,7 +505,7 @@ private final class BadgeView: NSView {
             elapsed: elapsed,
             limit: limit
         )
-        listeningProgress = CGFloat(metrics.progress)
+        listeningProgress = CGFloat(metrics.warningProgress)
         timeLabel.stringValue = metrics.timeText
         timeLabel.font = .monospacedDigitSystemFont(
             ofSize: 10.5,
@@ -505,35 +517,32 @@ private final class BadgeView: NSView {
 
         guard metrics.isWarning else {
             layer?.backgroundColor = normalBackground.cgColor
+            timeLabel.textColor = .white
+            limitTrackLayer.isHidden = true
             limitProgressLayer.backgroundColor = waveformColor.cgColor
             return
         }
 
-        let pulse = (sin(elapsed * .pi * 3) + 1) / 2
-        let intensity = min(
-            1,
-            metrics.warningProgress * 0.75 + pulse * 0.25
-        )
+        limitTrackLayer.isHidden = false
         let orange = NSColor(
-            calibratedRed: 0.88,
-            green: 0.31,
-            blue: 0.08,
-            alpha: 0.96
+            calibratedRed: 1,
+            green: 0.62,
+            blue: 0.24,
+            alpha: 1
         )
         let deepRed = NSColor(
-            calibratedRed: 0.38,
-            green: 0.02,
-            blue: 0.04,
-            alpha: 0.97
+            calibratedRed: 1,
+            green: 0.24,
+            blue: 0.29,
+            alpha: 1
         )
         let warningColor = orange.blended(
-            withFraction: intensity,
+            withFraction: metrics.warningProgress,
             of: deepRed
         ) ?? deepRed
-        layer?.backgroundColor = warningColor.cgColor
-        limitProgressLayer.backgroundColor = NSColor.white
-            .withAlphaComponent(0.88)
-            .cgColor
+        layer?.backgroundColor = normalBackground.cgColor
+        timeLabel.textColor = warningColor
+        limitProgressLayer.backgroundColor = warningColor.cgColor
     }
 
     private func updatePresentation() {
@@ -606,6 +615,18 @@ private final class BadgeView: NSView {
         button.layer?.cornerRadius = size / 2
         button.layer?.masksToBounds = true
     }
+
+    var listeningTextForTesting: String {
+        timeLabel.stringValue
+    }
+
+    var limitTrackIsVisibleForTesting: Bool {
+        !limitTrackLayer.isHidden
+    }
+
+    var listeningTimerColorForTesting: NSColor {
+        timeLabel.textColor ?? .clear
+    }
 }
 
 struct ListeningBadgeLayout: Equatable {
@@ -621,7 +642,7 @@ struct ListeningBadgeLayout: Equatable {
         let horizontalMargin: CGFloat = 10
         let waveformWidth: CGFloat = 76
         let waveformHeight: CGFloat = 22
-        let timeWidth: CGFloat = 90
+        let timeWidth: CGFloat = 64
         let stopDiameter: CGFloat = 32
         let sendDiameter: CGFloat = 34
         let contentGap: CGFloat = 2
@@ -708,14 +729,17 @@ public struct ListeningBadgeMetrics: Equatable, Sendable {
         let safeLimit = max(1, limit)
         let safeElapsed = min(max(0, elapsed), safeLimit)
         let remaining = max(0, safeLimit - safeElapsed)
-        isWarning = remaining <= 30
-        warningProgress = isWarning ? min(1, max(0, 1 - remaining / 30)) : 0
+        let warningWindow = min(60, safeLimit)
+        isWarning = remaining <= warningWindow
+        warningProgress = isWarning
+            ? min(1, max(0, 1 - remaining / warningWindow))
+            : 0
         progress = min(1, max(0, safeElapsed / safeLimit))
 
         let elapsedText = Self.format(safeElapsed)
         let limitText = Self.format(safeLimit)
-        let remainingText = Self.format(remaining)
-        timeText = "\(elapsedText) / \(limitText)"
+        let remainingText = Self.formatRemaining(remaining)
+        timeText = isWarning ? "\(remainingText) left" : elapsedText
         accessibilityText = "\(elapsedText) of \(limitText), \(remainingText) remaining"
     }
 
@@ -733,6 +757,10 @@ public struct ListeningBadgeMetrics: Equatable, Sendable {
             )
         }
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private static func formatRemaining(_ interval: TimeInterval) -> String {
+        format(interval.rounded(.up))
     }
 }
 
