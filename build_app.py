@@ -52,7 +52,7 @@ def write_info_plist() -> None:
         "CFBundleIconFile": "AppIcon",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": VERSION,
-        "CFBundleVersion": "1",
+        "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "14.0",
         "LSUIElement": True,
         "NSHighResolutionCapable": True,

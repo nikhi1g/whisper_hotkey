@@ -38,6 +38,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private let recorder = WhisperAudioRecorder()
     private let recognizer = WhisperRecognizer()
     private let contextProvider = AccessibilityContextProvider()
+    private lazy var badgeFocusMonitor = AccessibilityFocusMonitor {
+        [weak self] in
+        self?.refreshBadgeAnchorAfterFocusChange()
+    }
     private let clipboard = ClipboardTransactionController()
     private let loginItemManager = LoginItemManager()
     private lazy var badge = CaretBadgeController(
@@ -920,6 +924,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         limit: Int
     ) {
         recordingPresentationTask?.cancel()
+        badgeFocusMonitor.start()
         let startedAt = ProcessInfo.processInfo.systemUptime
         recordingPresentationTask = Task { @MainActor [weak self] in
             var displayedLevel: Float = 0
@@ -953,8 +958,27 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopRecordingPresentation() {
+        badgeFocusMonitor.stop()
         recordingPresentationTask?.cancel()
         recordingPresentationTask = nil
+    }
+
+    private func refreshBadgeAnchorAfterFocusChange() {
+        guard
+            machine.phase == .listening,
+            badge.acceptsAutomaticAnchorUpdates
+        else {
+            return
+        }
+        let anchor = contextProvider.currentBadgeAnchor()
+        guard badge.updateAutomaticAnchor(
+            caretFrame: anchor.caretRect,
+            fieldFrame: anchor.fieldRect
+        ) else {
+            return
+        }
+        badgeCaretRect = anchor.caretRect
+        badgeFieldRect = anchor.fieldRect
     }
 
     private func finishFromBadge(_ behavior: CompletionBehavior) {

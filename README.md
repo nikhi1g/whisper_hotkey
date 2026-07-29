@@ -37,7 +37,9 @@ independently clickable. When Accessibility exposes the focused field, the badge
 starts above that complete field rather than covering its text, flipping below
 only when the top display edge leaves no room. Oversized terminal containers are
 ignored in favor of the exact local caret, keeping the badge near the active
-prompt instead of at the top of the terminal window.
+prompt instead of at the top of the terminal window. Until manually dragged, an
+active badge follows focused text controls through an event-driven Accessibility
+observer. Dragging locks its position for that dictation only.
 The same microphone levels provide a lightweight voice-activity gate: sustained
 speech proceeds to Whisper, while silence and brief key or click transients are
 discarded as no speech instead of being decoded into a hallucinated phrase.
@@ -226,7 +228,7 @@ Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or
 transcript text. No model is downloaded and no network request is made.
 
-The Swift package requires macOS 14. Version 2.0.0 is source-distributed for
+The Swift package requires macOS 14. Version 2.5.0 is source-distributed for
 Apple Silicon because the helper links to the user's Homebrew whisper.cpp/GGML
 installation. A notarized universal binary is not currently published.
 

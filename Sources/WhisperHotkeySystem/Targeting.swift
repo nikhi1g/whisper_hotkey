@@ -198,6 +198,152 @@ public final class AccessibilityContextProvider {
     }
 }
 
+/// Event-driven focused-control monitoring used only during active dictation.
+/// It installs no timer and performs no Accessibility geometry query itself.
+@MainActor
+public final class AccessibilityFocusMonitor: NSObject {
+    private let onFocusChange: @MainActor () -> Void
+    private var observer: AXObserver?
+    private var observedApplication: AXUIElement?
+    public private(set) var isMonitoring = false
+
+    public init(onFocusChange: @escaping @MainActor () -> Void) {
+        self.onFocusChange = onFocusChange
+        super.init()
+    }
+
+    public func start() {
+        guard !isMonitoring else {
+            return
+        }
+        isMonitoring = true
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(frontmostApplicationDidChange),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+        observeFrontmostApplication(notify: false)
+    }
+
+    public func stop() {
+        guard isMonitoring else {
+            return
+        }
+        isMonitoring = false
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        removeAccessibilityObserver()
+    }
+
+    @objc private func frontmostApplicationDidChange(
+        _ notification: Notification
+    ) {
+        guard isMonitoring else {
+            return
+        }
+        observeFrontmostApplication(notify: true)
+    }
+
+    fileprivate func focusedElementDidChange() {
+        guard isMonitoring else {
+            return
+        }
+        onFocusChange()
+    }
+
+    private func observeFrontmostApplication(notify: Bool) {
+        removeAccessibilityObserver()
+        guard
+            isMonitoring,
+            let processIdentifier = NSWorkspace.shared
+                .frontmostApplication?.processIdentifier,
+            processIdentifier > 0
+        else {
+            if notify {
+                onFocusChange()
+            }
+            return
+        }
+
+        var newObserver: AXObserver?
+        guard AXObserverCreate(
+            processIdentifier,
+            accessibilityFocusedElementChanged,
+            &newObserver
+        ) == .success,
+        let newObserver
+        else {
+            if notify {
+                onFocusChange()
+            }
+            return
+        }
+
+        let application = AXUIElementCreateApplication(processIdentifier)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard AXObserverAddNotification(
+            newObserver,
+            application,
+            kAXFocusedUIElementChangedNotification as CFString,
+            refcon
+        ) == .success
+        else {
+            if notify {
+                onFocusChange()
+            }
+            return
+        }
+
+        observer = newObserver
+        observedApplication = application
+        CFRunLoopAddSource(
+            CFRunLoopGetMain(),
+            AXObserverGetRunLoopSource(newObserver),
+            .commonModes
+        )
+        if notify {
+            onFocusChange()
+        }
+    }
+
+    private func removeAccessibilityObserver() {
+        guard let observer else {
+            observedApplication = nil
+            return
+        }
+        if let observedApplication {
+            AXObserverRemoveNotification(
+                observer,
+                observedApplication,
+                kAXFocusedUIElementChangedNotification as CFString
+            )
+        }
+        CFRunLoopRemoveSource(
+            CFRunLoopGetMain(),
+            AXObserverGetRunLoopSource(observer),
+            .commonModes
+        )
+        self.observer = nil
+        observedApplication = nil
+    }
+}
+
+private let accessibilityFocusedElementChanged: AXObserverCallback = {
+    _, _, notification, refcon in
+    guard
+        notification as String == kAXFocusedUIElementChangedNotification,
+        let refcon
+    else {
+        return
+    }
+    let monitor = Unmanaged<AccessibilityFocusMonitor>
+        .fromOpaque(refcon)
+        .takeUnretainedValue()
+    Task { @MainActor [weak monitor] in
+        monitor?.focusedElementDidChange()
+    }
+}
+
 private let axSelectedTextMarkerRangeAttribute = "AXSelectedTextMarkerRange"
 private let axBoundsForTextMarkerRangeAttribute = "AXBoundsForTextMarkerRange"
 

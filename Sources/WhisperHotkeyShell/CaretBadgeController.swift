@@ -37,6 +37,7 @@ public final class CaretBadgeController {
     private var lastScreenFrame: CGRect?
     private var lastPointerFallback: CGPoint?
     private var sessionPanelOrigin: CGPoint?
+    private var sessionPositionWasDragged = false
     private var lastVisibilityAssertion = TimeInterval.zero
 
     public init(actions: CaretBadgeActions = .none) {
@@ -104,6 +105,7 @@ public final class CaretBadgeController {
             lastScreenFrame = nil
             lastPointerFallback = nil
             sessionPanelOrigin = nil
+            sessionPositionWasDragged = false
         }
 
         if lastScreenFrame == nil {
@@ -196,8 +198,56 @@ public final class CaretBadgeController {
             screenFrame: visibleFrame,
             badgeSize: badgeView.preferredSize
         )
+        sessionPositionWasDragged = true
         sessionPanelOrigin = frame.origin
         panel.setFrameOrigin(frame.origin)
+    }
+
+    public var acceptsAutomaticAnchorUpdates: Bool {
+        badgeView.presentation == .listening
+            && !sessionPositionWasDragged
+    }
+
+    @discardableResult
+    public func updateAutomaticAnchor(
+        caretFrame: CGRect?,
+        fieldFrame: CGRect?,
+        screenFrame: CGRect? = nil
+    ) -> Bool {
+        guard acceptsAutomaticAnchorUpdates else {
+            return false
+        }
+        let anchor = BadgePlacement.resolvedRuntimeAnchor(
+            caretFrame: caretFrame,
+            fieldFrame: fieldFrame,
+            pointerLocation: NSEvent.mouseLocation
+        )
+        guard case let .accessibility(anchorFrame) = anchor else {
+            return false
+        }
+        let visibleFrame = screenFrame
+            ?? screen(containing: anchorFrame)?.visibleFrame
+            ?? lastScreenFrame
+        guard let visibleFrame else {
+            return false
+        }
+        guard
+            lastCaretFrame != caretFrame
+                || lastFieldFrame != fieldFrame
+                || lastScreenFrame != visibleFrame
+        else {
+            return false
+        }
+
+        lastCaretFrame = caretFrame
+        lastFieldFrame = fieldFrame
+        lastPointerFallback = nil
+        lastScreenFrame = visibleFrame
+        sessionPanelOrigin = nil
+        placePanel(size: badgeView.preferredSize, display: true)
+        panel.orderFrontRegardless()
+        lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
+        return true
     }
 
     public func hide() {
@@ -209,6 +259,7 @@ public final class CaretBadgeController {
         lastScreenFrame = nil
         lastPointerFallback = nil
         sessionPanelOrigin = nil
+        sessionPositionWasDragged = false
     }
 
     public func updateListening(

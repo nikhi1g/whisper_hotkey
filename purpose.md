@@ -86,13 +86,16 @@ geometry polling is performed. If no Accessibility
 geometry is available, the badge snapshots the current
 pointer position once when recording begins and centers the Send/Enter button
 under that pointer, enabling key, speak, click without pointer travel. The badge
-keeps that exact initial frame—including origin, width, and height—through
-listening and all following status states; it does not poll, follow the pointer,
-shrink for short status text, or resize during the session. While listening, its
-waveform and timer surfaces form a drag handle; Stop and Send retain independent
-button hitboxes. A dragged origin replaces the initial origin for the rest of
-that session, including later status states. Screen-edge clamping keeps the
-complete badge visible. This fallback affects presentation only and never
+keeps one immutable width and height through listening and all following status
+states. While it remains undragged, a recording-only Accessibility focus observer
+snaps it to newly focused controls within or across applications; this is
+event-driven and has no timer or idle activity. It never follows the pointer.
+While listening, its waveform and timer surfaces form a drag handle; Stop and
+Send retain independent button hitboxes. The first drag disables automatic
+snapping and locks that origin for the rest of the session, including later
+status states; the next session begins in automatic mode again. It never shrinks
+for short status text or resizes during the session. Screen-edge clamping keeps
+the complete badge visible. This behavior affects presentation only and never
 validates or changes the paste destination. While listening, the compact
 badge shows a sensitive scrolling 23-sample waveform read from the existing
 audio callback at 20 Hz, elapsed time, a Stop and Insert button, and a Send
@@ -132,7 +135,7 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 2.0.0. Beyond the single in-memory last
+The app is English-only for version 2.5.0. Beyond the single in-memory last
 dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented

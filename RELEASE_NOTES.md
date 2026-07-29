@@ -1,24 +1,27 @@
-# whisper_hotkey 2.0.0
+# whisper_hotkey 2.5.0 — Live Flow
 
-Version 2.0 makes the private, low-resource, system-wide dictation agent
-substantially more reliable and easier to control across Apple Silicon Macs.
+Version 2.5 makes private, low-resource, system-wide dictation feel continuous:
+Pause Mode inserts speech after natural pauses, while the compact HUD follows
+the focused text control until the user chooses a position.
 
 ## Highlights
 
-- Choose **Press and Hold** or **Toggle** dictation behavior.
-- Configure the hotkey, model, recording limit, worker threads, and login
-  behavior in a focused Advanced Settings window.
-- Follow a compact, fixed-size recording HUD at the initial caret location, or
-  at the pointer when an exact caret is unavailable.
-- Stop and insert from the HUD, or insert and send with a plain Return that
-  cannot inherit the dictation modifier.
-- See a low-cost live waveform and elapsed timer. During the final minute, the
-  timer becomes an orange-to-red remaining-time warning.
-- Avoid Whisper hallucinations from empty recordings through a lightweight
-  voice-activity gate.
-- Recover the recording HUD across repeated sessions, applications, Spaces, and
-  full-screen windows without restarting the app.
-- Restart the background app directly from its menu.
+- Use **Pause Mode** for ordered, phrase-by-phrase live insertion from one
+  uninterrupted private recording and one session-scoped model helper.
+- Start inserting after a responsive 450 ms pause target that adapts between
+  300 and 750 ms to the current speaking cadence.
+- Preserve continuation punctuation and casing with a private, bounded
+  prior-phrase prompt.
+- Let the fixed-size HUD follow newly focused text controls during dictation
+  through event-driven Accessibility notifications with no polling or idle cost.
+- Drag the HUD to lock its position for the current dictation; the next session
+  returns to automatic placement.
+- Keep compact composers unobscured while rejecting oversized terminal
+  containers in favor of the active caret.
+- Stop and insert with the HUD or dictation key, submit with Return or Send, and
+  discard the complete active dictation with Escape.
+- Retain the low-cost waveform, silence gate, configurable local models,
+  recording limits, login item, and terminal controls from version 2.0.
 
 Clone the repository and run:
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.5.0 — 2026-07-28
+
+Live Flow release.
+
 - Added Pause Mode for automatic ordered phrase insertion after natural pauses
 - Reused one loaded Whisper helper during an active Pause Mode session while
   preserving zero model/audio-worker residency at idle
@@ -18,6 +22,10 @@
   with a below-field screen-edge fallback, so dictated text remains unobscured
 - Kept terminal badges near the active caret by rejecting oversized or distant
   focused-container geometry
+- Automatically followed focused text controls during active dictation through
+  a recording-only event-driven Accessibility observer
+- Locked the badge at its chosen position after the first drag, resetting that
+  lock for the next dictation
 - Made Escape unambiguously abort active dictation, discard its private audio,
   cancel recognition, and insert nothing
 - Reserved Escape for cancellation and migrated legacy Escape triggers to Right

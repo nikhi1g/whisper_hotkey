@@ -366,6 +366,94 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
+    func testUndraggedBadgeSnapsToNewFocusedField() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            fieldFrame: CGRect(x: 180, y: 180, width: 500, height: 60),
+            screenFrame: screen
+        )
+        let originalFrame = controller.panelFrameForTesting
+
+        XCTAssertTrue(controller.acceptsAutomaticAnchorUpdates)
+        XCTAssertTrue(
+            controller.updateAutomaticAnchor(
+                caretFrame: CGRect(x: 800, y: 500, width: 1, height: 18),
+                fieldFrame: CGRect(x: 760, y: 480, width: 500, height: 60),
+                screenFrame: screen
+            )
+        )
+        XCTAssertNotEqual(controller.panelFrameForTesting, originalFrame)
+        XCTAssertEqual(
+            controller.panelFrameForTesting,
+            BadgePlacement.frame(
+                caretFrame: CGRect(x: 800, y: 500, width: 1, height: 18),
+                fieldFrame: CGRect(x: 760, y: 480, width: 500, height: 60),
+                screenFrame: screen,
+                badgeSize: ListeningBadgeLayout().size
+            )
+        )
+        controller.hide()
+    }
+
+    @MainActor
+    func testDraggingLocksAutomaticPlacementUntilNextSession() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+        controller.dragBadgeForTesting(to: CGPoint(x: 640, y: 420))
+        let draggedFrame = controller.panelFrameForTesting
+
+        XCTAssertFalse(controller.acceptsAutomaticAnchorUpdates)
+        XCTAssertFalse(
+            controller.updateAutomaticAnchor(
+                caretFrame: CGRect(x: 800, y: 500, width: 1, height: 18),
+                fieldFrame: nil,
+                screenFrame: screen
+            )
+        )
+        XCTAssertEqual(controller.panelFrameForTesting, draggedFrame)
+
+        controller.hide()
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+        XCTAssertTrue(controller.acceptsAutomaticAnchorUpdates)
+        controller.hide()
+    }
+
+    @MainActor
+    func testInaccessibleFocusChangePreservesAutomaticBadgePosition() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+        let originalFrame = controller.panelFrameForTesting
+
+        XCTAssertFalse(
+            controller.updateAutomaticAnchor(
+                caretFrame: nil,
+                fieldFrame: nil,
+                screenFrame: screen
+            )
+        )
+        XCTAssertEqual(controller.panelFrameForTesting, originalFrame)
+        XCTAssertTrue(controller.acceptsAutomaticAnchorUpdates)
+        controller.hide()
+    }
+
+    @MainActor
     func testDraggingClampsTheWholeBadgeInsideItsSessionScreen() {
         let controller = CaretBadgeController()
         let screen = CGRect(x: 0, y: 0, width: 300, height: 200)
