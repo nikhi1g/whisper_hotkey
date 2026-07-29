@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 2.9.0: 2026-07-29
+
+Apple Acceleration release.
+
+- Added an Engine selector beside Model with Metal, whisper.cpp Core ML
+  Encoder, and native WhisperKit choices
+- Preserved whisper.cpp Metal as the default and persisted explicit engine
+  selection across launches
+- Added pinned, checksum-verified bootstrap paths for whisper.cpp Core ML
+  encoders and WhisperKit model and tokenizer bundles
+- Bundled the private Core ML whisper.cpp runtime libraries inside the signed
+  application while keeping model weights outside the app
+- Required accelerated artifacts to be complete before enabling their Settings
+  choices and prohibited silent fallback to another engine
+- Added local-only WhisperKit inference with optional model residency and
+  bounded unload behavior on cancellation, failure, model changes, and quit
+- Added explicit helper validation so the Core ML encoder option cannot run
+  against a non-Core ML whisper.cpp build
 - Added an optional Keep Model Ready setting for preloading and reusing the
   selected whisper.cpp helper between dictations
 - Kept model readiness off by default and retained bounded cleanup on disable,

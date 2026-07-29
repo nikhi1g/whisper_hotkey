@@ -1,7 +1,8 @@
 # Local models
 
-Version 2.6.0 uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
-Metal and flash attention. Recognition is English-only and entirely local.
+Version 2.9.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Metal and flash attention, whisper.cpp with a Core ML encoder, and native
+WhisperKit Core ML recognition. Recognition is English-only and entirely local.
 
 | Menu choice | File | Download | Tradeoff |
 | --- | --- | ---: | --- |
@@ -35,6 +36,20 @@ Beam search retains several plausible word sequences instead of committing to
 one immediately. Width five improves ambiguous phrases and punctuation at a
 modest latency cost.
 
+## Recognition engines
+
+The Engine chips in Settings are independent of model size:
+
+- **Metal** is the default whisper.cpp GPU path.
+- **Core ML Encoder** runs the encoder through Core ML while whisper.cpp
+  performs decoding.
+- **WhisperKit** performs native Core ML recognition using Apple GPU and Neural
+  Engine compute units.
+
+Core ML choices are enabled only when the selected model's complete verified
+artifacts are installed. The running app never downloads missing files and
+never silently switches engines.
+
 ## Install models
 
 ```sh
@@ -43,6 +58,8 @@ modest latency cost.
 ./run.sh --model medium
 ./run.sh --model turbo
 ./run.sh --all-models    # all four, about 2.7 GB
+./run.sh --model turbo --engine coreml
+./run.sh --model turbo --engine whisperkit
 ```
 
 Files live in `~/.cache/whisper/`. Missing choices remain visible but disabled.
