@@ -271,6 +271,9 @@ public actor WhisperRecognizer {
         defer { audio.delete() }
         let lease = try ensureLease()
         defer { finishDictation(lease) }
+        guard audio.speechPresence != .absent else {
+            throw WhisperASRError.noSpeech
+        }
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             do {

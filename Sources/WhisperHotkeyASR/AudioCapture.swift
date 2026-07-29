@@ -1,6 +1,12 @@
 @preconcurrency import AVFoundation
 import Foundation
 
+public enum WhisperSpeechPresence: Equatable, Sendable {
+    case unknown
+    case absent
+    case present
+}
+
 public final class WhisperAudioFile: @unchecked Sendable {
     public let url: URL
 
@@ -8,11 +14,18 @@ public final class WhisperAudioFile: @unchecked Sendable {
     private let fileManager: FileManager
     private let lock = NSLock()
     private var deleted = false
+    private var recordedSpeechPresence: WhisperSpeechPresence
 
-    init(url: URL, directoryURL: URL, fileManager: FileManager = .default) {
+    init(
+        url: URL,
+        directoryURL: URL,
+        fileManager: FileManager = .default,
+        speechPresence: WhisperSpeechPresence = .unknown
+    ) {
         self.url = url
         self.directoryURL = directoryURL
         self.fileManager = fileManager
+        recordedSpeechPresence = speechPresence
     }
 
     deinit {
@@ -27,6 +40,16 @@ public final class WhisperAudioFile: @unchecked Sendable {
         }
         if shouldDelete {
             try? fileManager.removeItem(at: directoryURL)
+        }
+    }
+
+    public var speechPresence: WhisperSpeechPresence {
+        lock.withLock { recordedSpeechPresence }
+    }
+
+    func setSpeechPresence(_ presence: WhisperSpeechPresence) {
+        lock.withLock {
+            recordedSpeechPresence = presence
         }
     }
 }
@@ -147,6 +170,7 @@ public final class WhisperAudioRecorder {
         }
         engineBox.engine.stop()
         removeInputTap()
+        let speechPresence = writer?.speechPresence ?? .unknown
         let writeError = writer?.finish()
         writer = nil
         self.audioFile = nil
@@ -157,6 +181,7 @@ public final class WhisperAudioRecorder {
                 "Writing microphone audio failed."
             )
         }
+        audioFile.setSpeechPresence(speechPresence)
         return audioFile
     }
 
@@ -222,6 +247,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
     private let outputFormat: AVAudioFormat
     private var firstError: Error?
     private var latestNormalizedInputLevel: Float = 0
+    private var speechDetector = WhisperSpeechActivityDetector()
 
     init(
         file: AVAudioFile,
@@ -235,6 +261,10 @@ final class WhisperWAVWriter: @unchecked Sendable {
 
     var normalizedInputLevel: Float {
         lock.withLock { latestNormalizedInputLevel }
+    }
+
+    var speechPresence: WhisperSpeechPresence {
+        lock.withLock { speechDetector.presence }
     }
 
     func consume(_ input: AVAudioPCMBuffer) {
@@ -277,7 +307,13 @@ final class WhisperWAVWriter: @unchecked Sendable {
                 )
             } else if output.frameLength > 0 {
                 do {
-                    latestNormalizedInputLevel = Self.normalizedLevel(output)
+                    let measurement = Self.levelMeasurement(output)
+                    latestNormalizedInputLevel = measurement.normalizedLevel
+                    speechDetector.observe(
+                        decibels: measurement.decibels,
+                        frameCount: Int(output.frameLength),
+                        sampleRate: output.format.sampleRate
+                    )
                     try file.write(from: output)
                 } catch {
                     firstError = error
@@ -296,13 +332,16 @@ final class WhisperWAVWriter: @unchecked Sendable {
         }
     }
 
-    private static func normalizedLevel(
+    private static func levelMeasurement(
         _ buffer: AVAudioPCMBuffer
-    ) -> Float {
+    ) -> WhisperAudioLevelMeasurement {
         guard buffer.frameLength > 0,
               let samples = buffer.floatChannelData?[0]
         else {
-            return 0
+            return WhisperAudioLevelMeasurement(
+                normalizedLevel: 0,
+                decibels: -120
+            )
         }
 
         // The converted buffer is only about 20 ms of mono audio. Sampling
@@ -318,12 +357,64 @@ final class WhisperWAVWriter: @unchecked Sendable {
             index += 4
         }
         guard sampleCount > 0, sum > 0 else {
-            return 0
+            return WhisperAudioLevelMeasurement(
+                normalizedLevel: 0,
+                decibels: -120
+            )
         }
 
         let rms = sqrt(sum / Double(sampleCount))
         let decibels = 20 * log10(max(rms, 0.000_001))
-        return Float(min(1, max(0, (decibels + 55) / 47)))
+        return WhisperAudioLevelMeasurement(
+            normalizedLevel: Float(
+                min(1, max(0, (decibels + 55) / 47))
+            ),
+            decibels: decibels
+        )
+    }
+}
+
+private struct WhisperAudioLevelMeasurement {
+    let normalizedLevel: Float
+    let decibels: Double
+}
+
+struct WhisperSpeechActivityDetector: Equatable {
+    static let minimumSpeechDecibels = -48.0
+    static let minimumSpeechDuration = 0.10
+
+    private var currentSpeechDuration = 0.0
+    private var longestSpeechDuration = 0.0
+    private var observedAudio = false
+
+    mutating func observe(
+        decibels: Double,
+        frameCount: Int,
+        sampleRate: Double
+    ) {
+        guard frameCount > 0, sampleRate > 0 else {
+            return
+        }
+        observedAudio = true
+        let duration = Double(frameCount) / sampleRate
+        if decibels >= Self.minimumSpeechDecibels {
+            currentSpeechDuration += duration
+            longestSpeechDuration = max(
+                longestSpeechDuration,
+                currentSpeechDuration
+            )
+        } else {
+            currentSpeechDuration = 0
+        }
+    }
+
+    var presence: WhisperSpeechPresence {
+        guard observedAudio else {
+            return .absent
+        }
+        return longestSpeechDuration >= Self.minimumSpeechDuration
+            ? .present
+            : .absent
     }
 }
 

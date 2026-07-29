@@ -67,7 +67,11 @@ badge shows a sensitive scrolling 23-sample waveform read from the existing
 audio callback at 20 Hz, an elapsed and limit timer, a thin duration-progress
 track, a Stop and Insert button, and a Send button. Stop and Insert has the same
 result as hotkey release. Send inserts successfully before posting an unmodified
-Return. The panel remains
+Return. The same unsmoothed audio callback feeds a zero-idle-cost energy gate:
+Whisper runs only after at least 100 milliseconds of contiguous speech-like
+energy above -48 dBFS. Flat silence and short mechanical transients are treated
+as no speech, so Whisper cannot invent a phrase from an empty recording. The
+panel remains
 non-activating, and controller clicks are excluded from modifier-chord
 cancellation. The badge has no outline or gradient; a restrained system shadow
 separates it from the destination. During the last 30 seconds one solid warning

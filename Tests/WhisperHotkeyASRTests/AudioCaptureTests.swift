@@ -91,6 +91,7 @@ final class AudioCaptureTests: XCTestCase {
         for _ in 0..<9 {
             writer.consume(input)
         }
+        XCTAssertEqual(writer.speechPresence, .present)
         XCTAssertNil(writer.finish())
         outputFile = nil
 
@@ -136,6 +137,45 @@ final class AudioCaptureTests: XCTestCase {
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: directory.path)
         )
+    }
+
+    func testVoiceActivityRejectsSustainedSilence() {
+        var detector = WhisperSpeechActivityDetector()
+        for _ in 0..<100 {
+            detector.observe(
+                decibels: -70,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        XCTAssertEqual(detector.presence, .absent)
+    }
+
+    func testVoiceActivityAcceptsSustainedQuietSpeech() {
+        var detector = WhisperSpeechActivityDetector()
+        for _ in 0..<5 {
+            detector.observe(
+                decibels: -47,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        XCTAssertEqual(detector.presence, .present)
+    }
+
+    func testVoiceActivityRejectsBriefTransient() {
+        var detector = WhisperSpeechActivityDetector()
+        detector.observe(
+            decibels: -20,
+            frameCount: 640,
+            sampleRate: 16_000
+        )
+        detector.observe(
+            decibels: -70,
+            frameCount: 320,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(detector.presence, .absent)
     }
 }
 

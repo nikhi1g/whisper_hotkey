@@ -28,6 +28,9 @@ and deepens from orange toward red. Its timer and two circular controls sit
 directly beside the waveform. Its compact outer frame keeps the same position,
 width, and height while it changes from listening to transcribing or another
 status, so the badge never jumps or collapses around shorter text.
+The same microphone levels provide a lightweight voice-activity gate: sustained
+speech proceeds to Whisper, while silence and brief key or click transients are
+discarded as no speech instead of being decoded into a hallucinated phrase.
 
 ## Quick start
 

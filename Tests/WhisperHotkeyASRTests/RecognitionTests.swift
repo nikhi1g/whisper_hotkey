@@ -411,6 +411,46 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(readiness, .idle)
     }
 
+    func testKnownSilenceSkipsHelperAndCommandLineInference() async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            printf '%s\\n' '{"event":"ready"}'
+            while IFS= read -r command; do
+                printf '%s\\n' '{"event":"result","text":"hallucination"}'
+            done
+            """,
+            commandLineScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            printf '%s\\n' 'hallucination'
+            """
+        )
+        defer { fixture.delete() }
+        let audio = try fixture.makeAudio(speechPresence: .absent)
+        let audioDirectory = audio.url.deletingLastPathComponent()
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration,
+            options: WhisperRecognitionOptions()
+        )
+
+        do {
+            _ = try await recognizer.transcribe(audio)
+            XCTFail("Known silence should not be decoded")
+        } catch let error as WhisperASRError {
+            XCTAssertEqual(error, .noSpeech)
+        }
+
+        XCTAssertEqual(try fixture.helperAttemptCount(), 0)
+        XCTAssertEqual(try fixture.commandLineAttemptCount(), 0)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: audioDirectory.path)
+        )
+        let readiness = await recognizer.readiness
+        XCTAssertEqual(readiness, .idle)
+    }
+
     func testHelperReadinessTimeoutStillFallsBackWhenNotCancelled()
         async throws {
         let fixture = try RecognitionFixture(
@@ -738,7 +778,9 @@ private final class RecognitionFixture {
         )
     }
 
-    func makeAudio() throws -> WhisperAudioFile {
+    func makeAudio(
+        speechPresence: WhisperSpeechPresence = .unknown
+    ) throws -> WhisperAudioFile {
         let directory = root.appendingPathComponent(
             "audio-\(UUID().uuidString)",
             isDirectory: true
@@ -754,7 +796,11 @@ private final class RecognitionFixture {
             [.posixPermissions: 0o600],
             ofItemAtPath: url.path
         )
-        return WhisperAudioFile(url: url, directoryURL: directory)
+        return WhisperAudioFile(
+            url: url,
+            directoryURL: directory,
+            speechPresence: speechPresence
+        )
     }
 
     func delete() {
