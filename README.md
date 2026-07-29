@@ -195,11 +195,11 @@ The installed runtime uses:
 
 The Advanced Settings model picker offers:
 
-- **Base English (Fast, 141 MB)** — installed default and smallest option.
-- **Small English (More Accurate, 465 MB)** — installed.
-- **Medium English (High Accuracy, 1.5 GB)** — selectable when its local file
+- **Base English (Fast, 141 MB)**: installed default and smallest option.
+- **Small English (More Accurate, 465 MB)**: installed.
+- **Medium English (High Accuracy, 1.5 GB)**: selectable when its local file
   is present.
-- **Large-v3 Turbo Q5 (Best Balance, 547 MB)** — selectable when its local file
+- **Large-v3 Turbo Q5 (Best Balance, 547 MB)**: selectable when its local file
   is present.
 
 Missing models remain visible but disabled. The running app never downloads

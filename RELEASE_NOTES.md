@@ -1,4 +1,4 @@
-# whisper_hotkey 2.5.0 — Live Flow
+# whisper_hotkey 2.5.0: Live Flow
 
 Version 2.5 makes private, low-resource, system-wide dictation feel continuous:
 Pause Mode inserts speech after natural pauses, while the compact HUD follows

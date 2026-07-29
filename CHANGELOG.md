@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 2.5.0 — 2026-07-28
+## 2.5.0: 2026-07-28
 
 Live Flow release.
 
@@ -33,7 +33,7 @@ Live Flow release.
 - Made Return and keypad Enter stop, insert, and submit active dictation
 - Preserved ordinary Escape and Return behavior outside active dictation
 
-## 2.0.0 — 2026-07-28
+## 2.0.0: 2026-07-28
 
 Major interaction and reliability release.
 
@@ -52,7 +52,7 @@ Major interaction and reliability release.
 - Expanded native AppKit regression coverage for controls, layout, visibility,
   state transitions, and pointer placement
 
-## 1.0.0 — 2026-07-28
+## 1.0.0: 2026-07-28
 
 First public release.
 

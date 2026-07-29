@@ -263,7 +263,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         } catch {
             startupError = "Control service failed: \(error.localizedDescription)"
             logger.error("\(self.startupError ?? "Control service failed", privacy: .public)")
-            badge.present(.error("Control service failed — see logs"))
+            badge.present(.error("Control service failed: see logs"))
             scheduledTerminationTask = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2))
                 NSApp.terminate(nil)
@@ -402,7 +402,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 deactivateRuntime()
                 startupError = "Hotkey monitor failed: \(error.localizedDescription)"
                 logger.error("\(self.startupError ?? "Hotkey monitor failed", privacy: .public)")
-                badge.present(.error("Hotkey unavailable — run setup"))
+                badge.present(.error("Hotkey unavailable: run setup"))
                 startupBadgeVisible = true
                 forceSetup = true
             }
@@ -619,7 +619,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 }
                 preloadTask = nil
                 recognitionTask = nil
-                fail("Transcription was interrupted — try again.")
+                fail("Transcription was interrupted: try again.")
             } catch {
                 guard let self,
                       runtimeReadyForHotkey,
@@ -804,7 +804,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             break
 
         case .clipboardUnavailable:
-            fail("Clipboard unavailable — try again.")
+            fail("Clipboard unavailable: try again.")
         }
     }
 
@@ -832,7 +832,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .clipboardUnavailable:
-            fail("Clipboard unavailable — try again.")
+            fail("Clipboard unavailable: try again.")
             return false
 
         case .emptyTranscript:
@@ -1245,7 +1245,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if !delivery.copyToClipboard(lastDictation) {
-            fail("Clipboard unavailable — try again.")
+            fail("Clipboard unavailable: try again.")
         }
     }
 
@@ -1259,7 +1259,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             logger.error(
                 "Could not schedule restart: \(error.localizedDescription, privacy: .public)"
             )
-            fail("Could not restart — try again.")
+            fail("Could not restart: try again.")
             return
         }
         logger.info("Restart requested from menu")
@@ -1424,21 +1424,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func userFacingMessage(for error: Error) -> String {
         guard let asrError = error as? WhisperASRError else {
-            return "Dictation failed — see logs."
+            return "Dictation failed: see logs."
         }
         switch asrError {
         case .noSpeech:
             return "No speech detected."
         case .modelMissing:
-            return "Whisper model missing — run setup."
+            return "Whisper model missing: run setup."
         case .helperUnavailable, .commandLineUnavailable:
-            return "Whisper tools missing — run setup."
+            return "Whisper tools missing: run setup."
         case .microphoneUnavailable, .captureFailed, .noActiveRecording:
-            return "Microphone failed — run setup."
+            return "Microphone failed: run setup."
         case .recognitionTimedOut:
             return "Transcription timed out."
         case .helperProtocolFailure, .helperFailed, .commandLineFailed:
-            return "Transcription failed — see logs."
+            return "Transcription failed: see logs."
         }
     }
 

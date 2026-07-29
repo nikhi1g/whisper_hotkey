@@ -34,9 +34,10 @@ uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
 and remains between 300 and 750 milliseconds. One uninterrupted private WAV
 retains the complete session while the same converted samples feed a small
-current inference segment. A phrase boundary rotates only that segment—never
-the microphone or full recording—then transcribes and pastes phrases in strict
-order. It reuses one loaded helper during the active session. Every later phrase
+current inference segment. A phrase boundary rotates only that segment: the
+microphone and full recording remain uninterrupted while phrases are transcribed
+and pasted in strict order. It reuses one loaded helper during the active
+session. Every later phrase
 receives a private, bounded 240-character
 tail of the current session as its initial Whisper prompt so punctuation and
 casing can follow the preceding phrase instead of treating every pause as a new
