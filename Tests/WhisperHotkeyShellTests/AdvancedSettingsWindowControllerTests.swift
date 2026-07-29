@@ -55,6 +55,18 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertTrue(controller.usesChipSelectionForTesting)
         XCTAssertTrue(controller.controlsFitWindowForTesting)
+        XCTAssertEqual(
+            controller.summaryValuesForTesting,
+            ["Right Option", "Toggle", "Small", "5 Minutes", "Login On"]
+        )
+        XCTAssertEqual(
+            controller.helpAccessibilityLabelForTesting,
+            "Open User Guide"
+        )
+        XCTAssertGreaterThan(
+            controller.helpButtonFrameForTesting.midX,
+            540
+        )
         XCTAssertTrue(controller.loginItemIsOnForTesting)
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
@@ -64,6 +76,50 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.window?.title,
             "Settings for whisper_hotkey"
+        )
+    }
+
+    @MainActor
+    func testUserGuideExplainsEveryModeModelAndActiveShortcut() {
+        let state = makeAdvancedSettingsState(
+            hotkey: .rightOption,
+            mode: .toggle,
+            model: .largeV3TurboQ5,
+            limit: .minutes5,
+            availableModels: Set(DictationModel.allCases)
+        )
+        let sections = UserGuideContent.sections(for: state)
+        let rows = sections.flatMap(\.rows)
+
+        XCTAssertEqual(sections.first?.title, "DICTATION")
+        XCTAssertTrue(
+            rows.contains(
+                UserGuideRow(
+                    key: "Right Option",
+                    title: "Tap to start or stop",
+                    detail: "Tap once to listen and again to transcribe and insert."
+                )
+            )
+        )
+        XCTAssertTrue(
+            ["Press and Hold", "Toggle", "Pause Mode"].allSatisfy { title in
+                rows.contains(where: { $0.title == title })
+            }
+        )
+        XCTAssertTrue(
+            ["Base", "Small", "Medium", "Turbo"].allSatisfy { title in
+                rows.contains(where: { $0.title == title })
+            }
+        )
+        XCTAssertTrue(
+            ["Discard", "Insert and send", "Stop and insert"].allSatisfy {
+                title in rows.contains(where: { $0.title == title })
+            }
+        )
+        XCTAssertTrue(
+            ["Dictation key", "Recording limit", "Open at Login"].allSatisfy {
+                title in rows.contains(where: { $0.title == title })
+            }
         )
     }
 

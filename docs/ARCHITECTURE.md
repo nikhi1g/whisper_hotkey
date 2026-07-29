@@ -40,6 +40,9 @@ created on first use, refreshes through application/state events, and never
 polls. Behavior and model choices use one-click segmented chips; longer option
 sets retain native pop-up controls. Setup remains a separate
 permissions-and-files repair surface.
+The Settings help popover and configuration summary are created only with the
+Settings window. They derive from the same in-memory state provider, perform no
+I/O, and add no idle worker or timer.
 
 ## Module boundaries
 

@@ -104,6 +104,15 @@ public final class AdvancedSettingsWindowController:
         action: nil
     )
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
+    private let helpButton = NSButton()
+    private let hotkeySummary = SettingsSummaryChip()
+    private let modeSummary = SettingsSummaryChip()
+    private let modelSummary = SettingsSummaryChip()
+    private let limitSummary = SettingsSummaryChip()
+    private let loginSummary = SettingsSummaryChip()
+    private lazy var userGuidePopover = UserGuidePopoverController(
+        stateProvider: stateProvider
+    )
     private var actionError: String?
 
     public init(
@@ -118,6 +127,7 @@ public final class AdvancedSettingsWindowController:
 
         configureControls()
         configureLoginItemControls()
+        configureHelpButton()
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 470),
@@ -198,6 +208,7 @@ public final class AdvancedSettingsWindowController:
 
         let loginStatus = loginItemManager.status
         updateLoginItemControls(loginStatus)
+        updateSummary(using: state, loginStatus: loginStatus)
         loginItemToggle.isEnabled =
             state.configurationEnabled && loginStatus != .unknown
         loginItemSettingsButton.isEnabled = state.configurationEnabled
@@ -205,6 +216,7 @@ public final class AdvancedSettingsWindowController:
     }
 
     public func windowWillClose(_ notification: Notification) {
+        userGuidePopover.close()
         NSApp.deactivate()
     }
 
@@ -301,6 +313,10 @@ public final class AdvancedSettingsWindowController:
         loginItemManager.openLoginItemsSettings()
     }
 
+    @objc private func toggleUserGuide() {
+        userGuidePopover.toggle(relativeTo: helpButton)
+    }
+
     private var dictationModes: [HotkeyActivationMode] {
         [.hold, .toggle, .pause]
     }
@@ -375,6 +391,15 @@ public final class AdvancedSettingsWindowController:
         loginItemSettingsButton.controlSize = .small
     }
 
+    private func configureHelpButton() {
+        helpButton.bezelStyle = .helpButton
+        helpButton.title = ""
+        helpButton.target = self
+        helpButton.action = #selector(toggleUserGuide)
+        helpButton.toolTip = "Open User Guide"
+        helpButton.setAccessibilityLabel("Open User Guide")
+    }
+
     private func updateLoginItemControls(_ status: LoginItemStatus) {
         switch status {
         case .enabled:
@@ -399,6 +424,30 @@ public final class AdvancedSettingsWindowController:
             loginItemSettingsButton.isHidden = false
         }
         loginItemToggle.isEnabled = status != .unknown
+    }
+
+    private func updateSummary(
+        using state: AdvancedSettingsState,
+        loginStatus: LoginItemStatus
+    ) {
+        hotkeySummary.stringValue = state.selectedHotkey.displayName
+        modeSummary.stringValue = DictationModePresentation.optionTitle(
+            for: state.activationMode
+        )
+        modelSummary.stringValue = DictationModelPresentation.chipTitle(
+            for: state.selectedModel
+        )
+        limitSummary.stringValue = state.recordingLimit.displayName
+        switch loginStatus {
+        case .enabled:
+            loginSummary.stringValue = "Login On"
+        case .requiresApproval:
+            loginSummary.stringValue = "Login Needs Approval"
+        case .notRegistered, .notFound:
+            loginSummary.stringValue = "Login Off"
+        case .unknown:
+            loginSummary.stringValue = "Login Unavailable"
+        }
     }
 
     private func updateDetail(using state: AdvancedSettingsState) {
@@ -519,6 +568,28 @@ public final class AdvancedSettingsWindowController:
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.maximumNumberOfLines = 2
         stack.addArrangedSubview(detailLabel)
+        stack.setCustomSpacing(12, after: detailLabel)
+
+        let summary = NSStackView(
+            views: [
+                hotkeySummary,
+                modeSummary,
+                modelSummary,
+                limitSummary,
+                loginSummary,
+            ]
+        )
+        summary.orientation = .horizontal
+        summary.alignment = .centerY
+        summary.spacing = 7
+
+        let footerSpacer = NSView()
+        footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let footer = NSStackView(views: [summary, footerSpacer, helpButton])
+        footer.orientation = .horizontal
+        footer.alignment = .centerY
+        footer.spacing = 10
+        stack.addArrangedSubview(footer)
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 32),
@@ -534,6 +605,7 @@ public final class AdvancedSettingsWindowController:
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
             detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         return root
     }
@@ -621,6 +693,9 @@ public final class AdvancedSettingsWindowController:
             recordingLimitPopup,
             loginItemToggle,
             detailLabel,
+            hotkeySummary,
+            loginSummary,
+            helpButton,
         ].allSatisfy { view in
             let frame = view.convert(view.bounds, to: contentView)
             return frame.width > 0
@@ -666,6 +741,36 @@ public final class AdvancedSettingsWindowController:
 
     var detailTextForTesting: String {
         detailLabel.stringValue
+    }
+
+    var helpAccessibilityLabelForTesting: String? {
+        helpButton.accessibilityLabel()
+    }
+
+    var helpButtonFrameForTesting: CGRect {
+        guard let contentView = window?.contentView else {
+            return .zero
+        }
+        contentView.layoutSubtreeIfNeeded()
+        return helpButton.convert(helpButton.bounds, to: contentView)
+    }
+
+    var summaryValuesForTesting: [String] {
+        [
+            hotkeySummary.stringValue,
+            modeSummary.stringValue,
+            modelSummary.stringValue,
+            limitSummary.stringValue,
+            loginSummary.stringValue,
+        ]
+    }
+
+    func toggleUserGuideForTesting() {
+        toggleUserGuide()
+    }
+
+    var userGuideIsShownForTesting: Bool {
+        userGuidePopover.isShownForTesting
     }
 
     func selectHotkeyForTesting(_ hotkey: HotkeyKey) {
@@ -724,5 +829,52 @@ public final class AdvancedSettingsWindowController:
             return nil
         }
         return Value(rawValue: rawValue)
+    }
+}
+
+private final class SettingsSummaryChip: NSView {
+    private let label = NSTextField(labelWithString: "")
+
+    var stringValue: String {
+        get { label.stringValue }
+        set {
+            label.stringValue = newValue
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let labelSize = label.intrinsicContentSize
+        return NSSize(width: labelSize.width + 16, height: 24)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.quaternaryLabelColor.setFill()
+        NSBezierPath(
+            roundedRect: bounds,
+            xRadius: 7,
+            yRadius: 7
+        ).fill()
+        super.draw(dirtyRect)
     }
 }

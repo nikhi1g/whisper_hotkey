@@ -15,7 +15,12 @@ LaunchAgent opens the main app and immediately exits. The app can be started,
 stopped, inspected, or disabled from the terminal. A one-time Setup window
 handles Microphone, Accessibility, and Input Monitoring permissions. A separate
 lazy Settings window owns persistent behavior and launch preferences;
-it is not constructed until opened and has no polling task.
+it is not constructed until opened and has no polling task. Its lower-right
+help button opens a transient, scrollable user guide that explains every
+dictation gesture, completion and cancellation key, HUD control, menu action,
+behavior mode, model choice, recording limit, login preference, and local
+privacy guarantee. The guide reflects the currently selected dictation key and
+mode and adds no idle task.
 
 The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
@@ -70,6 +75,8 @@ accuracy-first decoder
 keeps a beam width of five, uses Metal and flash attention, and gives whisper.cpp
 half of the Mac's logical CPUs up to an eight-thread cap. **Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
+The bottom of Settings reports the current key, behavior, model, recording
+limit, and login state as compact read-only summary chips.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a

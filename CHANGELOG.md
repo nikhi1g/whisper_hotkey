@@ -6,6 +6,10 @@
 - Replaced the three-choice behavior and four-choice model menus with one-click
   segmented chips
 - Reorganized Settings into clear Input, Recognition, and Startup sections
+- Added a lower-right User Guide covering every gesture, completion key, HUD
+  control, behavior, model, menu action, and privacy guarantee
+- Added compact live summary chips for the active key, behavior, model,
+  recording limit, and login state
 
 ## 2.5.0: 2026-07-28
 
