@@ -335,12 +335,7 @@ private final class BadgeView: NSView {
     }
 
     var preferredSize: CGSize {
-        if presentation == .listening {
-            return ListeningBadgeLayout().size
-        }
-        return StatusBadgeLayout.size(
-            contentWidth: statusLabel.intrinsicContentSize.width
-        )
+        RuntimeBadgeLayout.size
     }
 
     init(frame frameRect: NSRect, actions: CaretBadgeActions) {
@@ -386,7 +381,7 @@ private final class BadgeView: NSView {
             accessibilityLabel: "Stop and insert dictation",
             background: NSColor.white.withAlphaComponent(0.07),
             foreground: NSColor.white.withAlphaComponent(0.86),
-            size: 34
+            size: 32
         )
         stopButton.target = self
         stopButton.action = #selector(stopAndInsert)
@@ -408,7 +403,7 @@ private final class BadgeView: NSView {
                 blue: 0.15,
                 alpha: 1
             ),
-            size: 36
+            size: 34
         )
         sendButton.target = self
         sendButton.action = #selector(sendAndSubmit)
@@ -598,15 +593,15 @@ struct ListeningBadgeLayout: Equatable {
     let limitTrackFrame: CGRect
 
     init() {
-        let height: CGFloat = 48
-        let horizontalMargin: CGFloat = 12
-        let waveformWidth: CGFloat = 88
-        let waveformHeight: CGFloat = 24
+        let height: CGFloat = 44
+        let horizontalMargin: CGFloat = 10
+        let waveformWidth: CGFloat = 76
+        let waveformHeight: CGFloat = 22
         let timeWidth: CGFloat = 90
-        let stopDiameter: CGFloat = 34
-        let sendDiameter: CGFloat = 36
-        let contentGap: CGFloat = 3
-        let buttonGap: CGFloat = 3
+        let stopDiameter: CGFloat = 32
+        let sendDiameter: CGFloat = 34
+        let contentGap: CGFloat = 2
+        let buttonGap: CGFloat = 2
 
         var x = horizontalMargin
         waveformFrame = CGRect(
@@ -641,32 +636,24 @@ struct ListeningBadgeLayout: Equatable {
             height: height
         )
         limitTrackFrame = CGRect(
-            x: horizontalMargin + 4,
-            y: 5,
-            width: size.width - (horizontalMargin + 4) * 2,
+            x: horizontalMargin + 3,
+            y: 4,
+            width: size.width - (horizontalMargin + 3) * 2,
             height: 1.5
         )
     }
 }
 
-enum StatusBadgeLayout {
-    static let horizontalMargin: CGFloat = 15
-    static let minimumWidth: CGFloat = 116
-    static let maximumWidth: CGFloat = ListeningBadgeLayout().size.width
-    static let height: CGFloat = 38
+enum RuntimeBadgeLayout {
+    /// Every visible presentation uses one immutable outer frame. Keeping both
+    /// dimensions fixed prevents state changes from visually jumping even when
+    /// the status text is much shorter than the listening controls.
+    static let size = ListeningBadgeLayout().size
+}
 
-    static func size(contentWidth: CGFloat) -> CGSize {
-        CGSize(
-            width: min(
-                max(
-                    minimumWidth,
-                    ceil(contentWidth) + horizontalMargin * 2
-                ),
-                maximumWidth
-            ),
-            height: height
-        )
-    }
+enum StatusBadgeLayout {
+    static let horizontalMargin: CGFloat = 14
+    static let size = RuntimeBadgeLayout.size
 }
 
 enum BadgeTextLayout {

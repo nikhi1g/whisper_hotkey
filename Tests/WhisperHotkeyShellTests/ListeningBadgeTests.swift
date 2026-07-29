@@ -85,21 +85,21 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
-    func testControllerKeepsInitialOriginAcrossStateAndAnchorChanges() {
+    func testControllerKeepsInitialFrameAcrossStateAndAnchorChanges() {
         let controller = CaretBadgeController()
         controller.present(
             .listening,
             caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
             screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
         )
-        let listeningOrigin = controller.panelFrameForTesting.origin
+        let listeningFrame = controller.panelFrameForTesting
 
         controller.present(
             .transcribing,
             caretFrame: CGRect(x: 900, y: 600, width: 1, height: 18),
             screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
         )
-        XCTAssertEqual(controller.panelFrameForTesting.origin, listeningOrigin)
+        XCTAssertEqual(controller.panelFrameForTesting, listeningFrame)
 
         controller.present(
             .error("Try again"),
@@ -107,7 +107,14 @@ final class ListeningBadgeTests: XCTestCase {
             fieldFrame: CGRect(x: 40, y: 50, width: 400, height: 60),
             screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
         )
-        XCTAssertEqual(controller.panelFrameForTesting.origin, listeningOrigin)
+        XCTAssertEqual(controller.panelFrameForTesting, listeningFrame)
+
+        controller.present(
+            .busy,
+            caretFrame: CGRect(x: 1_100, y: 700, width: 1, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        XCTAssertEqual(controller.panelFrameForTesting, listeningFrame)
         controller.hide()
     }
 
@@ -275,20 +282,20 @@ final class ListeningBadgeTests: XCTestCase {
 
     func testCompactListeningLayoutHasTightSquareControls() {
         let layout = ListeningBadgeLayout()
-        XCTAssertEqual(layout.size, CGSize(width: 281, height: 48))
-        XCTAssertEqual(layout.waveformFrame.minX, 12)
-        XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 12)
+        XCTAssertEqual(layout.size, CGSize(width: 258, height: 44))
+        XCTAssertEqual(layout.waveformFrame.minX, 10)
+        XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 10)
         XCTAssertEqual(
             layout.timeFrame.minX - layout.waveformFrame.maxX,
-            3
+            2
         )
         XCTAssertEqual(
             layout.stopButtonFrame.minX - layout.timeFrame.maxX,
-            3
+            2
         )
         XCTAssertEqual(
             layout.sendButtonFrame.minX - layout.stopButtonFrame.maxX,
-            3
+            2
         )
         XCTAssertEqual(
             layout.stopButtonFrame.width,
@@ -298,12 +305,13 @@ final class ListeningBadgeTests: XCTestCase {
             layout.sendButtonFrame.width,
             layout.sendButtonFrame.height
         )
-        XCTAssertEqual(layout.stopButtonFrame.minY, 7)
-        XCTAssertEqual(layout.sendButtonFrame.minY, 6)
-        XCTAssertEqual(layout.limitTrackFrame.minX, 16)
-        XCTAssertEqual(layout.size.width - layout.limitTrackFrame.maxX, 16)
-        XCTAssertEqual(layout.limitTrackFrame.minY, 5)
+        XCTAssertEqual(layout.stopButtonFrame.minY, 6)
+        XCTAssertEqual(layout.sendButtonFrame.minY, 5)
+        XCTAssertEqual(layout.limitTrackFrame.minX, 13)
+        XCTAssertEqual(layout.size.width - layout.limitTrackFrame.maxX, 13)
+        XCTAssertEqual(layout.limitTrackFrame.minY, 4)
         XCTAssertEqual(layout.limitTrackFrame.height, 1.5)
+        XCTAssertEqual(RuntimeBadgeLayout.size, layout.size)
     }
 
     @MainActor
@@ -341,7 +349,7 @@ final class ListeningBadgeTests: XCTestCase {
         XCTAssertEqual(timerFrame.midX, listening.timeFrame.midX)
         XCTAssertEqual(timerFrame.midY, listening.timeFrame.midY)
 
-        let statusSize = StatusBadgeLayout.size(contentWidth: 80)
+        let statusSize = StatusBadgeLayout.size
         let statusBounds = CGRect(origin: .zero, size: statusSize)
         let statusFrame = BadgeTextLayout.centeredFrame(
             in: statusBounds,
@@ -355,17 +363,13 @@ final class ListeningBadgeTests: XCTestCase {
             statusBounds.width - statusFrame.maxX,
             StatusBadgeLayout.horizontalMargin
         )
-        XCTAssertEqual(StatusBadgeLayout.height, 38)
-        XCTAssertEqual(
-            StatusBadgeLayout.maximumWidth,
-            ListeningBadgeLayout().size.width
-        )
+        XCTAssertEqual(statusSize, ListeningBadgeLayout().size)
     }
 
     func testWaveformBarsAreTwoThirdsOfPreviousThicknessAndCentered() {
         XCTAssertEqual(AudioWaveformStyle.barWidth, 1.6)
         let count = 23
-        let width: CGFloat = 88
+        let width: CGFloat = 76
         let gap = AudioWaveformStyle.gap(
             availableWidth: width,
             sampleCount: count

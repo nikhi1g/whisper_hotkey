@@ -25,7 +25,9 @@ progress track, making its automatic stopping point visible throughout the
 recording. The badge uses a borderless flat surface with a restrained system
 shadow and no gradients. In the final 30 seconds one solid warning color pulses
 and deepens from orange toward red. Its timer and two circular controls sit
-directly beside the waveform.
+directly beside the waveform. Its compact outer frame keeps the same position,
+width, and height while it changes from listening to transcribing or another
+status, so the badge never jumps or collapses around shorter text.
 
 ## Quick start
 
