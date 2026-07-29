@@ -6,6 +6,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedHotkey: HotkeyKey
     public let activationMode: HotkeyActivationMode
     public let selectedModel: DictationModel
+    public let keepModelReady: Bool
     public let recordingLimit: RecordingLimit
     public let selectedTheme: BadgeTheme
     public let availableModels: Set<DictationModel>
@@ -15,6 +16,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         selectedHotkey: HotkeyKey,
         activationMode: HotkeyActivationMode,
         selectedModel: DictationModel,
+        keepModelReady: Bool = false,
         recordingLimit: RecordingLimit,
         selectedTheme: BadgeTheme = .defaultTheme,
         availableModels: Set<DictationModel>,
@@ -23,6 +25,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.selectedHotkey = selectedHotkey
         self.activationMode = activationMode
         self.selectedModel = selectedModel
+        self.keepModelReady = keepModelReady
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
         self.availableModels = availableModels
@@ -35,6 +38,7 @@ public struct AdvancedSettingsActions {
     public var selectDictationMode: (HotkeyActivationMode) -> Void
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
+    public var setKeepModelReady: (Bool) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeTheme) -> Void
     public var loginItemChanged: () -> Void
@@ -43,6 +47,7 @@ public struct AdvancedSettingsActions {
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
+        setKeepModelReady: @escaping (Bool) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
         loginItemChanged: @escaping () -> Void = {}
@@ -50,6 +55,7 @@ public struct AdvancedSettingsActions {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
+        self.setKeepModelReady = setKeepModelReady
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
         self.loginItemChanged = loginItemChanged
@@ -97,6 +103,10 @@ public final class AdvancedSettingsWindowController:
     private let hotkeyPopup = NSPopUpButton()
     private let modeControl = NSSegmentedControl()
     private let modelControl = NSSegmentedControl()
+    private let keepModelReadySwitch = NSSwitch()
+    private let keepModelReadyLabel = NSTextField(
+        labelWithString: "Keep model ready"
+    )
     private let recordingLimitPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
     private let loginItemToggle = NSButton(
@@ -110,7 +120,6 @@ public final class AdvancedSettingsWindowController:
         target: nil,
         action: nil
     )
-    private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let helpButton = NSButton()
     private let hotkeySummary = SettingsSummaryChip()
     private let modeSummary = SettingsSummaryChip()
@@ -121,7 +130,10 @@ public final class AdvancedSettingsWindowController:
     private lazy var userGuidePopover = UserGuidePopoverController(
         stateProvider: stateProvider
     )
-    private var actionError: String?
+    private weak var settingsRootView: NSView?
+    private var themedPrimaryLabels: [NSTextField] = []
+    private var themedSecondaryLabels: [NSTextField] = []
+    private var themedSectionLabels: [NSTextField] = []
 
     public init(
         stateProvider: @escaping StateProvider,
@@ -138,12 +150,13 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 540),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings for whisper_hotkey"
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.animationBehavior = .utilityWindow
         window.center()
@@ -187,12 +200,17 @@ public final class AdvancedSettingsWindowController:
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
         select(mode: state.activationMode)
         select(model: state.selectedModel)
+        keepModelReadySwitch.state = state.keepModelReady ? .on : .off
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         select(rawValue: state.selectedTheme.rawValue, in: themePopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
         modelControl.isEnabled = state.configurationEnabled
+        keepModelReadySwitch.isEnabled = state.configurationEnabled
+        keepModelReadyLabel.textColor = state.configurationEnabled
+            ? .labelColor
+            : .disabledControlTextColor
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
 
@@ -219,10 +237,10 @@ public final class AdvancedSettingsWindowController:
         let loginStatus = loginItemManager.status
         updateLoginItemControls(loginStatus)
         updateSummary(using: state, loginStatus: loginStatus)
+        applyTheme(state.selectedTheme)
         loginItemToggle.isEnabled =
             state.configurationEnabled && loginStatus != .unknown
         loginItemSettingsButton.isEnabled = state.configurationEnabled
-        updateDetail(using: state)
     }
 
     public func windowWillClose(_ notification: Notification) {
@@ -242,7 +260,6 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actionError = nil
         actions.selectHotkey(hotkey)
         refresh()
     }
@@ -262,7 +279,6 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actionError = nil
         actions.selectDictationMode(mode)
         refresh()
     }
@@ -282,7 +298,6 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actionError = nil
         actions.selectModel(model)
         refresh()
     }
@@ -295,8 +310,16 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actionError = nil
         actions.selectRecordingLimit(limit)
+        refresh()
+    }
+
+    @objc private func toggleKeepModelReady(_ sender: NSSwitch) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setKeepModelReady(sender.state == .on)
         refresh()
     }
 
@@ -308,7 +331,6 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actionError = nil
         actions.selectTheme(theme)
         refresh()
     }
@@ -324,10 +346,9 @@ public final class AdvancedSettingsWindowController:
             } else {
                 _ = try loginItemManager.disableExplicitly()
             }
-            actionError = nil
             actions.loginItemChanged()
         } catch {
-            actionError = "Could not update Open at Login: \(error.localizedDescription)"
+            NSSound.beep()
         }
         refresh()
     }
@@ -364,6 +385,11 @@ public final class AdvancedSettingsWindowController:
             ),
             action: #selector(selectModel(_:))
         )
+        keepModelReadySwitch.target = self
+        keepModelReadySwitch.action = #selector(toggleKeepModelReady(_:))
+        keepModelReadySwitch.toolTip =
+            "Keeps the selected Whisper model loaded for the fastest transcription."
+        keepModelReadySwitch.setAccessibilityLabel("Keep Model Ready")
         configure(
             recordingLimitPopup,
             values: RecordingLimit.allCases.map {
@@ -464,9 +490,9 @@ public final class AdvancedSettingsWindowController:
         modeSummary.stringValue = DictationModePresentation.optionTitle(
             for: state.activationMode
         )
-        modelSummary.stringValue = DictationModelPresentation.chipTitle(
-            for: state.selectedModel
-        )
+        modelSummary.stringValue =
+            "\(DictationModelPresentation.chipTitle(for: state.selectedModel)) "
+            + (state.keepModelReady ? "Ready" : "On Demand")
         limitSummary.stringValue = state.recordingLimit.displayName
         themeSummary.stringValue = state.selectedTheme.summaryName
         switch loginStatus {
@@ -481,29 +507,36 @@ public final class AdvancedSettingsWindowController:
         }
     }
 
-    private func updateDetail(using state: AdvancedSettingsState) {
-        if let actionError {
-            detailLabel.stringValue = actionError
-            detailLabel.textColor = .systemRed
-        } else if !state.configurationEnabled {
-            detailLabel.stringValue =
-                "Finish or cancel the current dictation before changing settings."
-            detailLabel.textColor = .systemOrange
-        } else if state.selectedHotkey.requiresToggleMode
-            && state.activationMode == .toggle
-        {
-            detailLabel.stringValue =
-                "Caps Lock cannot use Press and Hold because macOS exposes its lock-state changes."
-            detailLabel.textColor = .secondaryLabelColor
-        } else if state.activationMode == .pause {
-            detailLabel.stringValue =
-                "Pause Mode pastes each phrase after a natural silence and keeps listening until stopped."
-            detailLabel.textColor = .secondaryLabelColor
-        } else {
-            detailLabel.stringValue =
-                "Changes apply immediately and persist across launches."
-            detailLabel.textColor = .secondaryLabelColor
-        }
+    private func applyTheme(_ theme: BadgeTheme) {
+        let palette = BadgeThemePalette.palette(for: theme)
+        let background = palette.background.withAlphaComponent(1)
+        let secondaryText = palette.primaryText.withAlphaComponent(0.72)
+        let sectionText = palette.waveform.withAlphaComponent(0.78)
+        let appearanceName: NSAppearance.Name =
+            theme == .lightFrost ? .aqua : .darkAqua
+
+        window?.appearance = NSAppearance(named: appearanceName)
+        window?.backgroundColor = background
+        settingsRootView?.layer?.backgroundColor = background.cgColor
+        themedPrimaryLabels.forEach { $0.textColor = palette.primaryText }
+        themedSecondaryLabels.forEach { $0.textColor = secondaryText }
+        themedSectionLabels.forEach { $0.textColor = sectionText }
+        keepModelReadyLabel.textColor = stateProvider().configurationEnabled
+            ? palette.primaryText
+            : secondaryText.withAlphaComponent(0.48)
+
+        loginItemToggle.contentTintColor = palette.waveform
+        loginItemSettingsButton.contentTintColor = palette.waveform
+        helpButton.contentTintColor = palette.waveform
+        [
+            hotkeySummary,
+            modeSummary,
+            modelSummary,
+            limitSummary,
+            themeSummary,
+            loginSummary,
+        ].forEach { $0.applyTheme(palette) }
+        userGuidePopover.applyTheme(theme)
     }
 
     private func select(rawValue: String, in popup: NSPopUpButton) {
@@ -531,6 +564,8 @@ public final class AdvancedSettingsWindowController:
 
     private func makeContentView() -> NSView {
         let root = NSView()
+        root.wantsLayer = true
+        settingsRootView = root
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -540,6 +575,7 @@ public final class AdvancedSettingsWindowController:
 
         let title = NSTextField(labelWithString: "Settings")
         title.font = .systemFont(ofSize: 22, weight: .semibold)
+        themedPrimaryLabels.append(title)
         stack.addArrangedSubview(title)
 
         let subtitle = NSTextField(
@@ -548,6 +584,7 @@ public final class AdvancedSettingsWindowController:
         )
         subtitle.textColor = .secondaryLabelColor
         subtitle.maximumNumberOfLines = 2
+        themedSecondaryLabels.append(subtitle)
         stack.addArrangedSubview(subtitle)
         stack.setCustomSpacing(22, after: subtitle)
 
@@ -564,6 +601,17 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionTitle)
         let recognitionGrid = makeGrid()
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        let readinessControls = NSStackView(
+            views: [keepModelReadySwitch, keepModelReadyLabel]
+        )
+        readinessControls.orientation = .horizontal
+        readinessControls.alignment = .centerY
+        readinessControls.spacing = 8
+        addRow(
+            to: recognitionGrid,
+            title: "Model readiness",
+            control: readinessControls
+        )
         addRow(
             to: recognitionGrid,
             title: "Recording limit",
@@ -599,16 +647,6 @@ public final class AdvancedSettingsWindowController:
         sizeColumns(in: startupGrid)
         stack.addArrangedSubview(startupGrid)
 
-        let separator = NSBox()
-        separator.boxType = .separator
-        stack.addArrangedSubview(separator)
-        stack.setCustomSpacing(12, after: separator)
-
-        detailLabel.textColor = .secondaryLabelColor
-        detailLabel.maximumNumberOfLines = 2
-        stack.addArrangedSubview(detailLabel)
-        stack.setCustomSpacing(12, after: detailLabel)
-
         let summary = NSStackView(
             views: [
                 hotkeySummary,
@@ -621,10 +659,14 @@ public final class AdvancedSettingsWindowController:
         )
         summary.orientation = .horizontal
         summary.alignment = .centerY
-        summary.spacing = 7
+        summary.spacing = 4
 
         let footerSpacer = NSView()
         footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        helpButton.setContentCompressionResistancePriority(
+            .required,
+            for: .horizontal
+        )
         let footer = NSStackView(views: [summary, footerSpacer, helpButton])
         footer.orientation = .horizontal
         footer.alignment = .centerY
@@ -644,8 +686,6 @@ public final class AdvancedSettingsWindowController:
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         return root
@@ -655,6 +695,7 @@ public final class AdvancedSettingsWindowController:
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = .tertiaryLabelColor
+        themedSectionLabels.append(label)
         return label
     }
 
@@ -679,6 +720,7 @@ public final class AdvancedSettingsWindowController:
     ) {
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 13, weight: .medium)
+        themedPrimaryLabels.append(label)
         grid.addRow(with: [label, control])
     }
 
@@ -709,9 +751,14 @@ public final class AdvancedSettingsWindowController:
         selectedValue(in: themePopup)
     }
 
+    var windowBackgroundForTesting: NSColor? {
+        window?.backgroundColor
+    }
+
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
             && modelControl.isEnabled
+            && keepModelReadySwitch.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
     }
@@ -728,27 +775,34 @@ public final class AdvancedSettingsWindowController:
     }
 
     var controlsFitWindowForTesting: Bool {
+        controlsOutsideWindowForTesting.isEmpty
+    }
+
+    var controlsOutsideWindowForTesting: [String] {
         guard let contentView = window?.contentView else {
-            return false
+            return ["contentView"]
         }
         contentView.layoutSubtreeIfNeeded()
-        return [
-            hotkeyPopup,
-            modeControl,
-            modelControl,
-            recordingLimitPopup,
-            themePopup,
-            loginItemToggle,
-            detailLabel,
-            hotkeySummary,
-            themeSummary,
-            loginSummary,
-            helpButton,
-        ].allSatisfy { view in
+        let controls: [(String, NSView)] = [
+            ("hotkey", hotkeyPopup),
+            ("mode", modeControl),
+            ("model", modelControl),
+            ("readiness switch", keepModelReadySwitch),
+            ("readiness label", keepModelReadyLabel),
+            ("limit", recordingLimitPopup),
+            ("theme", themePopup),
+            ("login toggle", loginItemToggle),
+            ("hotkey summary", hotkeySummary),
+            ("theme summary", themeSummary),
+            ("login summary", loginSummary),
+            ("help", helpButton),
+        ]
+        return controls.compactMap { name, view in
             let frame = view.convert(view.bounds, to: contentView)
-            return frame.width > 0
+            let fits = frame.width > 0
                 && frame.height > 0
                 && contentView.bounds.contains(frame)
+            return fits ? nil : "\(name): \(frame)"
         }
     }
 
@@ -786,10 +840,6 @@ public final class AdvancedSettingsWindowController:
 
     var loginSettingsIsVisibleForTesting: Bool {
         !loginItemSettingsButton.isHidden
-    }
-
-    var detailTextForTesting: String {
-        detailLabel.stringValue
     }
 
     var helpAccessibilityLabelForTesting: String? {
@@ -836,6 +886,15 @@ public final class AdvancedSettingsWindowController:
     func selectModelForTesting(_ model: DictationModel) {
         select(model: model)
         selectModel(modelControl)
+    }
+
+    func setKeepModelReadyForTesting(_ enabled: Bool) {
+        keepModelReadySwitch.state = enabled ? .on : .off
+        toggleKeepModelReady(keepModelReadySwitch)
+    }
+
+    var keepModelReadyForTesting: Bool {
+        keepModelReadySwitch.state == .on
     }
 
     func selectLimitForTesting(_ limit: RecordingLimit) {
@@ -889,6 +948,7 @@ public final class AdvancedSettingsWindowController:
 
 private final class SettingsSummaryChip: NSView {
     private let label = NSTextField(labelWithString: "")
+    private var fillColor = NSColor.quaternaryLabelColor
 
     var stringValue: String {
         get { label.stringValue }
@@ -900,7 +960,7 @@ private final class SettingsSummaryChip: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.font = .systemFont(ofSize: 10, weight: .medium)
         label.textColor = .secondaryLabelColor
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -908,8 +968,8 @@ private final class SettingsSummaryChip: NSView {
         setContentHuggingPriority(.required, for: .horizontal)
         setContentCompressionResistancePriority(.required, for: .horizontal)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
@@ -918,13 +978,19 @@ private final class SettingsSummaryChip: NSView {
         nil
     }
 
+    func applyTheme(_ palette: BadgeThemePalette) {
+        label.textColor = palette.primaryText.withAlphaComponent(0.78)
+        fillColor = palette.primaryText.withAlphaComponent(0.08)
+        needsDisplay = true
+    }
+
     override var intrinsicContentSize: NSSize {
         let labelSize = label.intrinsicContentSize
-        return NSSize(width: labelSize.width + 16, height: 24)
+        return NSSize(width: labelSize.width + 12, height: 24)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.quaternaryLabelColor.setFill()
+        fillColor.setFill()
         NSBezierPath(
             roundedRect: bounds,
             xRadius: 7,

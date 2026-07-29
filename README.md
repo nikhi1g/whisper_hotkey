@@ -27,7 +27,8 @@ dictation is inactive. The question-mark button in the lower-right of Settings
 opens the complete user guide. A compact row beside it summarizes the active
 key, behavior, model, recording limit, theme, and login state. The Theme
 dropdown offers GitHub Dark Dimmed plus ten varied HUD presets and applies the
-choice immediately. The badge normally shows only elapsed time. In the final
+choice immediately to the HUD, Settings, and opaque User Guide. The badge
+normally shows only elapsed time. In the final
 minute,
 it switches to a remaining-time countdown whose text shifts from orange to red
 and reveals the thin limit track; shorter limits use their full duration for the
@@ -210,10 +211,16 @@ Missing models remain visible but disabled. The running app never downloads
 weights; only the explicitly invoked bootstrap does.
 The decoder keeps beam search at width five for accuracy, uses Metal and flash
 attention, and assigns half the available logical CPUs up to eight threads.
+The **Keep Model Ready** switch directly below the model chips defaults off.
+Turning it on preloads the selected model and reuses its helper between
+dictations for the shortest startup latency. This increases idle memory but
+does not keep the microphone active or add polling. Turning it off, changing
+models, quitting, or restarting releases the owned helper.
 
 In hold mode, audio capture and model preload begin together only after the
 150 ms bare-key dwell. In toggle and Pause modes they begin after the first
-bare-key release. A normal dictation owns the model helper only until its one
+bare-key release. With Keep Model Ready off, a normal dictation owns the model
+helper only until its one
 insertion. Pause Mode reuses one helper and loaded model for its ordered phrase
 chunks, then terminates it when the session stops, is cancelled, reaches its
 limit, or fails. One uninterrupted private WAV retains the complete active
@@ -222,9 +229,10 @@ segment from the same converted samples; a pause rotates only that segment, so
 the microphone never stops and no speech can fall into a restart gap. The full
 recording and every segment are deleted when the session ends. Bounded text
 context reaches the helper over private stdin, never as a process argument. Idle
-operation is event-driven; no
-Whisper model, transcription helper, polling worker, audio, or transcript
-history remains resident. The menu-bar icon is updated only by state
+operation is event-driven. With Keep Model Ready off, no Whisper model,
+transcription helper, polling worker, audio, or transcript history remains
+resident. With it on, only the selected helper and model remain resident. The
+menu-bar icon is updated only by state
 transitions. The waveform and pause detector read the existing capture callback
 at 20 Hz only while recording; they add no idle timer or second audio pipeline.
 

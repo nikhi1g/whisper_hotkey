@@ -245,6 +245,7 @@ public actor WhisperRecognizer {
     private var helperSession: WhisperHelperSession?
     private var cachedHelperFailure: CachedHelperFailure?
     private var generation = UUID()
+    private var keepsModelReady = false
     private var isShutDown = false
 
     public init(configuration: WhisperRuntimeConfiguration? = nil) {
@@ -271,6 +272,43 @@ public actor WhisperRecognizer {
         _ = try await preparedHelper()
     }
 
+    /// Enables or disables an idle resident helper. Enabling immediately
+    /// preloads the selected model. Disabling waits for the owned helper and
+    /// every descendant to exit before returning.
+    public func setKeepsModelReady(_ enabled: Bool) async throws {
+        guard !isShutDown else {
+            throw CancellationError()
+        }
+        keepsModelReady = enabled
+        if enabled {
+            do {
+                try await preload()
+            } catch {
+                await resetRuntime()
+                throw error
+            }
+        } else {
+            await resetRuntime()
+        }
+    }
+
+    /// Drops the current configuration after a model preference change and
+    /// preloads the replacement only when warm readiness remains enabled.
+    public func reloadSelectedModel() async throws {
+        guard !isShutDown else {
+            throw CancellationError()
+        }
+        await resetRuntime()
+        if keepsModelReady {
+            do {
+                try await preload()
+            } catch {
+                await resetRuntime()
+                throw error
+            }
+        }
+    }
+
     public func transcribe(_ audio: WhisperAudioFile) async throws -> String {
         try await transcribe(audio, keepHelperLoaded: false)
     }
@@ -292,7 +330,9 @@ public actor WhisperRecognizer {
         guard let activeLease else {
             return
         }
-        finishDictation(activeLease)
+        if !keepsModelReady {
+            finishDictation(activeLease)
+        }
     }
 
     private func transcribe(
@@ -303,7 +343,7 @@ public actor WhisperRecognizer {
         defer { audio.delete() }
         let lease = try ensureLease()
         defer {
-            if !keepHelperLoaded {
+            if !keepHelperLoaded && !keepsModelReady {
                 finishDictation(lease)
             }
         }
@@ -345,6 +385,10 @@ public actor WhisperRecognizer {
                 if keepHelperLoaded {
                     readiness = .idle
                 }
+                if keepsModelReady {
+                    cachedHelperFailure = nil
+                    readiness = .idle
+                }
                 return try cleanedTranscript(transcript)
             }
         } onCancel: {
@@ -352,42 +396,18 @@ public actor WhisperRecognizer {
         }
     }
 
-    public func cancel() {
-        generation = UUID()
-        preloadTask?.cancel()
-        if let activeLease {
-            processController.finish(activeLease, wait: false)
+    public func cancel() async {
+        let shouldRestoreReadiness = keepsModelReady && !isShutDown
+        await resetRuntime()
+        if shouldRestoreReadiness {
+            try? await preload()
         }
-        helperSession?.terminate(wait: false)
-        activeLease = nil
-        preloadTask = nil
-        helperSession = nil
-        cachedHelperFailure = nil
-        activeConfiguration = nil
-        readiness = .idle
     }
 
     public func shutdown() async {
         isShutDown = true
-        generation = UUID()
-        let pendingPreload = preloadTask
-        let activeSession = helperSession
-        let lease = activeLease
-        pendingPreload?.cancel()
-        if let lease {
-            processController.finish(lease, wait: true)
-        }
-        activeSession?.terminate(wait: true)
-        if let pendingPreload,
-           let lateSession = try? await pendingPreload.value {
-            lateSession.terminate(wait: true)
-        }
-        activeLease = nil
-        preloadTask = nil
-        helperSession = nil
-        cachedHelperFailure = nil
-        activeConfiguration = nil
-        readiness = .idle
+        keepsModelReady = false
+        await resetRuntime()
     }
 
     private func preparedHelper() async throws -> WhisperHelperSession {
@@ -504,6 +524,28 @@ public actor WhisperRecognizer {
         activeLease = nil
         helperSession = nil
         preloadTask = nil
+        cachedHelperFailure = nil
+        activeConfiguration = nil
+        readiness = .idle
+    }
+
+    private func resetRuntime() async {
+        generation = UUID()
+        let pendingPreload = preloadTask
+        let activeSession = helperSession
+        let lease = activeLease
+        pendingPreload?.cancel()
+        if let lease {
+            processController.finish(lease, wait: true)
+        }
+        activeSession?.terminate(wait: true)
+        if let pendingPreload,
+           let lateSession = try? await pendingPreload.value {
+            lateSession.terminate(wait: true)
+        }
+        activeLease = nil
+        preloadTask = nil
+        helperSession = nil
         cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle

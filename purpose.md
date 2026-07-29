@@ -21,6 +21,9 @@ dictation gesture, completion and cancellation key, HUD control, menu action,
 behavior mode, model choice, recording limit, login preference, and local
 privacy guarantee. The guide reflects the currently selected dictation key and
 mode and adds no idle task.
+Settings and its User Guide use the selected visual theme on an opaque
+background. Theme changes update the HUD, Settings, and an open guide
+immediately without adding an idle task.
 
 The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
@@ -30,7 +33,7 @@ does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
 arms capture without polling, after which the microphone starts and the
 installed Base English whisper.cpp model loads asynchronously. Releasing after
 at least 250 milliseconds transcribes once, pastes at the current focus, and
-unloads the model. A faster tap does nothing.
+unloads the model by default. A faster tap does nothing.
 
 The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
 **Pause Mode** choices. The selected mode persists across launches. The three
@@ -49,7 +52,8 @@ tail of the current session as its initial Whisper prompt so punctuation and
 casing can follow the preceding phrase instead of treating every pause as a new
 utterance. The prompt travels only over the owned helper's stdin, is never a
 process argument, and does not grow with session length. The app retains no
-model or audio worker at idle. Full audio and inference segments are deleted on
+audio worker at idle. With **Keep Model Ready** off, it also retains no model
+helper at idle. Full audio and inference segments are deleted on
 stop, cancellation, failure, or termination. Caps Lock
 cannot use Press and Hold because macOS exposes its lock-state changes rather
 than a momentary hold/release pair; it can use Toggle or Pause Mode.
@@ -73,11 +77,19 @@ as muted model chips but cannot be selected; the app never downloads them. The
 full model description is available from each chip's native help text. The
 accuracy-first decoder
 keeps a beam width of five, uses Metal and flash attention, and gives whisper.cpp
-half of the Mac's logical CPUs up to an eight-thread cap. **Open at login** uses
+half of the Mac's logical CPUs up to an eight-thread cap. The persistent
+**Keep Model Ready** switch sits directly below the model picker and defaults
+off. When enabled, the selected helper and model preload once and remain ready
+between dictations for the shortest recognition startup time, at the cost of
+higher idle memory. It does not keep the microphone active, poll, or retain
+audio. Turning it off, changing models, quitting, restarting, or a failed helper
+cleans up the owned process before returning to on-demand behavior.
+**Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
 The bottom of Settings reports the current key, behavior, model, recording
 limit, theme, and login state as compact read-only summary chips.
-The **Theme** dropdown changes only the floating HUD and persists immediately.
+The **Theme** dropdown changes the floating HUD, Settings window, and User Guide
+and persists immediately.
 GitHub Dark Dimmed remains the default. Ten additional restrained presets are
 Midnight Indigo, Graphite, Nord, Dracula, Solarized Dark, Forest, Ocean, Rosé
 Pine, Light Frost, and High Contrast. Theme application is event-driven and

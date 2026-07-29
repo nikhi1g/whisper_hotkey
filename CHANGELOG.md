@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added an optional Keep Model Ready setting for preloading and reusing the
+  selected whisper.cpp helper between dictations
+- Kept model readiness off by default and retained bounded cleanup on disable,
+  model changes, cancellation, failure, restart, and quit
+- Updated the User Guide with the warm-model speed and idle-memory tradeoff
+- Applied the selected HUD theme to Settings and the User Guide
+- Replaced the translucent guide canvas with an opaque themed background and
+  higher-contrast text
+- Removed the remaining explanatory sentence area from the Settings footer
+
 ## 2.6.0: 2026-07-28
 
 Personalization release.

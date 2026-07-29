@@ -21,8 +21,11 @@ flowchart LR
 ```
 
 At idle, only the event tap, menu item, local control socket, and app process
-remain. There is no audio engine, loaded model, helper, polling worker, or
-transcript history. During dictation, capture and model preload begin together.
+remain by default. There is no audio engine, loaded model, helper, polling
+worker, or transcript history. If Keep Model Ready is enabled, the selected
+helper and model also remain resident, but the audio engine stays stopped and
+no polling task is added. During on-demand dictation, capture and model preload
+begin together.
 Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
 helper, and deletes the private audio directory. Pause Mode retains one
 uninterrupted full-session WAV and writes a parallel current inference segment
@@ -44,8 +47,9 @@ The Settings help popover and configuration summary are created only with the
 Settings window. They derive from the same in-memory state provider, perform no
 I/O, and add no idle worker or timer.
 HUD themes are value-type palettes selected from a persisted core preference.
-Changing the dropdown updates the existing badge view and its layers in place;
-no window, worker, timer, model, or observer is added.
+Changing the dropdown updates the existing badge, Settings window, and open
+opaque User Guide in place. No window, worker, timer, model, or observer is
+added.
 
 ## Module boundaries
 

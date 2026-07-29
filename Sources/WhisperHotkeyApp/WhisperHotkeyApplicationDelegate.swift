@@ -14,6 +14,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         selectedHotkey: .rightCommand,
         activationMode: .hold,
         selectedModel: .baseEnglish,
+        keepModelReady: false,
         recordingLimit: .minutes10,
         availableModels: [],
         configurationEnabled: false
@@ -26,6 +27,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private struct PendingRecognizerWork {
         let precedingCleanup: Task<Void, Never>?
+        let modelConfiguration: Task<Void, Never>?
         let preload: Task<Void, Never>?
         let recognition: Task<Void, Never>?
     }
@@ -60,6 +62,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedDictationMode =
         WhisperHotkeyApplicationDelegate.loadDictationMode()
     private var selectedModel = DictationModel.selected()
+    private var keepModelReady =
+        WhisperModelReadinessPreference.keepsModelReady()
     private var recordingLimit = RecordingLimit.selected()
     private var selectedTheme = BadgeTheme.selected()
 
@@ -143,6 +147,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var errorPresentationTask: Task<Void, Never>?
     private var submitAfterPasteTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
+    private var modelConfigurationTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
     private var insertionContext: DictationInsertionContext?
     private var completionBehavior = CompletionBehavior.insert
@@ -177,6 +182,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             hasLastDictation: lastDictation != nil
         )
         reconcileRuntime(showSetupIfNeeded: true)
+        configureModelReadiness()
         logger.info("Agent started")
     }
 
@@ -203,6 +209,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 await precedingCleanup.value
             }
             await recognizer.shutdown()
+            if let modelConfiguration = pendingWork.modelConfiguration {
+                await modelConfiguration.value
+            }
             if let preload = pendingWork.preload {
                 await preload.value
             }
@@ -1129,6 +1138,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectedHotkey: selectedHotkey,
             activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
+            keepModelReady: keepModelReady,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
             availableModels: availableModels,
@@ -1155,6 +1165,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectModel: { [weak self] model in
                         self?.selectModel(model)
+                    },
+                    setKeepModelReady: { [weak self] enabled in
+                        self?.setKeepModelReady(enabled)
                     },
                     selectRecordingLimit: { [weak self] limit in
                         self?.selectRecordingLimit(limit)
@@ -1245,8 +1258,52 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             model.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.dictationModel
         )
+        configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
         setupWindowController.refresh()
+    }
+
+    private func setKeepModelReady(_ enabled: Bool) {
+        guard !machine.phase.isBusy, keepModelReady != enabled else {
+            return
+        }
+        keepModelReady = enabled
+        UserDefaults.standard.set(
+            enabled,
+            forKey: WhisperHotkeyPreferenceKeys.keepModelReady
+        )
+        configureModelReadiness()
+        updateMenuBar()
+    }
+
+    private func configureModelReadiness(
+        reloadSelectedModel: Bool = false
+    ) {
+        let precedingConfiguration = modelConfigurationTask
+        let shouldKeepReady = keepModelReady
+        let recognizer = recognizer
+        let logger = logger
+        modelConfigurationTask = Task.detached(priority: .utility) {
+            if let precedingConfiguration {
+                await precedingConfiguration.value
+            }
+            guard !Task.isCancelled else {
+                return
+            }
+            do {
+                if reloadSelectedModel {
+                    try await recognizer.reloadSelectedModel()
+                } else {
+                    try await recognizer.setKeepsModelReady(shouldKeepReady)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.error(
+                    "Could not update model readiness: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
     }
 
     private func selectRecordingLimit(_ limit: RecordingLimit) {
@@ -1303,6 +1360,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func stopSynchronousServices() -> PendingRecognizerWork {
         let pendingWork = PendingRecognizerWork(
             precedingCleanup: recognizerCleanupTask,
+            modelConfiguration: modelConfigurationTask,
             preload: preloadTask,
             recognition: recognitionTask
         )
@@ -1324,6 +1382,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognizerCleanupTask = nil
+        modelConfigurationTask?.cancel()
+        modelConfigurationTask = nil
         hotkeyMonitor.stop()
         recorder.cancel()
         badge.hide()

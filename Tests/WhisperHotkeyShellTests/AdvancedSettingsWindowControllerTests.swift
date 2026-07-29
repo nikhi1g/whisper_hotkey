@@ -34,6 +34,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 hotkey: .rightOption,
                 mode: .toggle,
                 model: .smallEnglish,
+                keepModelReady: true,
                 limit: .minutes5,
                 availableModels: [.baseEnglish, .smallEnglish]
             )
@@ -44,6 +45,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedHotkeyForTesting, .rightOption)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .smallEnglish)
+        XCTAssertTrue(controller.keepModelReadyForTesting)
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes5)
         XCTAssertEqual(controller.selectedThemeForTesting, .githubDarkDimmed)
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
@@ -55,21 +57,20 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             "\(DictationModel.mediumEnglish.menuTitle): Not Installed"
         )
         XCTAssertTrue(controller.usesChipSelectionForTesting)
-        XCTAssertTrue(controller.controlsFitWindowForTesting)
+        XCTAssertTrue(
+            controller.controlsFitWindowForTesting,
+            controller.controlsOutsideWindowForTesting.joined(separator: ", ")
+        )
         XCTAssertEqual(
             controller.summaryValuesForTesting,
             [
-                "Right Option", "Toggle", "Small", "5 Minutes", "Dimmed",
-                "Login On",
+                "Right Option", "Toggle", "Small Ready", "5 Minutes",
+                "Dimmed", "Login On",
             ]
         )
         XCTAssertEqual(
             controller.helpAccessibilityLabelForTesting,
             "Open User Guide"
-        )
-        XCTAssertEqual(
-            controller.detailTextForTesting,
-            "Changes apply immediately and persist across launches."
         )
         XCTAssertGreaterThan(
             controller.helpButtonFrameForTesting.midX,
@@ -79,7 +80,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 520)
+            CGSize(width: 620, height: 540)
         )
         XCTAssertEqual(
             controller.window?.title,
@@ -93,6 +94,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             hotkey: .rightOption,
             mode: .toggle,
             model: .largeV3TurboQ5,
+            keepModelReady: true,
             limit: .minutes5,
             availableModels: Set(DictationModel.allCases)
         )
@@ -120,6 +122,15 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             }
         )
         XCTAssertTrue(
+            rows.contains(
+                UserGuideRow(
+                    key: "on",
+                    title: "Keep Model Ready",
+                    detail: "On: the selected model stays loaded for the fastest response and higher idle memory use."
+                )
+            )
+        )
+        XCTAssertTrue(
             ["Discard", "Insert and send", "Stop and insert"].allSatisfy {
                 title in rows.contains(where: { $0.title == title })
             }
@@ -130,7 +141,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             }
         )
 
-        let viewController = UserGuideViewController(sections: sections)
+        let viewController = UserGuideViewController(
+            sections: sections,
+            theme: .nord
+        )
         viewController.preferredContentSize = NSSize(width: 440, height: 540)
         let renderedText = viewController.renderedTextForTesting
         XCTAssertFalse(renderedText.isEmpty)
@@ -139,6 +153,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(renderedText.contains("Press and Hold"))
         XCTAssertTrue(renderedText.contains("Turbo"))
         XCTAssertTrue(renderedText.contains("Return or keypad Enter"))
+        XCTAssertEqual(viewController.appliedThemeForTesting, .nord)
+        XCTAssertTrue(viewController.backgroundIsOpaqueForTesting)
     }
 
     @MainActor
@@ -151,6 +167,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedHotkeys: [HotkeyKey] = []
         var selectedModes: [HotkeyActivationMode] = []
         var selectedModels: [DictationModel] = []
+        var readinessSelections: [Bool] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeTheme] = []
         let controller = AdvancedSettingsWindowController(
@@ -159,6 +176,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDictationMode: { selectedModes.append($0) },
                 selectHotkey: { selectedHotkeys.append($0) },
                 selectModel: { selectedModels.append($0) },
+                setKeepModelReady: { readinessSelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) }
             ),
@@ -169,12 +187,14 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectHotkeyForTesting(.leftShift)
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.largeV3TurboQ5)
+        controller.setKeepModelReadyForTesting(true)
         controller.selectLimitForTesting(.minutes30)
         controller.selectThemeForTesting(.nord)
 
         XCTAssertEqual(selectedHotkeys, [.leftShift])
         XCTAssertEqual(selectedModes, [.toggle])
         XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
+        XCTAssertEqual(readinessSelections, [true])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.nord])
 
@@ -182,6 +202,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             hotkey: .leftShift,
             mode: .toggle,
             model: .largeV3TurboQ5,
+            keepModelReady: true,
             limit: .minutes30,
             theme: .nord,
             availableModels: Set(DictationModel.allCases)
@@ -192,13 +213,18 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedHotkeyForTesting, .leftShift)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
+        XCTAssertTrue(controller.keepModelReadyForTesting)
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes30)
         XCTAssertEqual(controller.selectedThemeForTesting, .nord)
         XCTAssertEqual(controller.optionCountsForTesting, initialCounts)
+        XCTAssertEqual(
+            controller.windowBackgroundForTesting,
+            BadgeThemePalette.palette(for: .nord).background.withAlphaComponent(1)
+        )
     }
 
     @MainActor
-    func testCapsLockForcesToggleAndExplainsConstraint() {
+    func testCapsLockForcesToggle() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
                 hotkey: .capsLock,
@@ -219,7 +245,6 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertTrue(controller.modeControlEnabledForTesting)
-        XCTAssertTrue(controller.detailTextForTesting.contains("Caps Lock"))
         controller.selectModeForTesting(.hold)
         XCTAssertTrue(selectedModes.isEmpty)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
@@ -243,6 +268,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDictationMode: { _ in mutationCount += 1 },
                 selectHotkey: { _ in mutationCount += 1 },
                 selectModel: { _ in mutationCount += 1 },
+                setKeepModelReady: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },
                 loginItemChanged: { mutationCount += 1 }
@@ -252,11 +278,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertFalse(controller.configurationControlsEnabledForTesting)
         XCTAssertFalse(controller.modeControlEnabledForTesting)
-        XCTAssertTrue(controller.detailTextForTesting.contains("Finish or cancel"))
-
         controller.selectHotkeyForTesting(.leftControl)
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.smallEnglish)
+        controller.setKeepModelReadyForTesting(true)
         controller.selectLimitForTesting(.seconds30)
         controller.selectThemeForTesting(.dracula)
         controller.setLoginItemForTesting(enabled: true)
@@ -343,7 +368,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             "Approval needed"
         )
         XCTAssertTrue(controller.loginSettingsIsVisibleForTesting)
-        XCTAssertTrue(controller.controlsFitWindowForTesting)
+        XCTAssertTrue(
+            controller.controlsFitWindowForTesting,
+            controller.controlsOutsideWindowForTesting.joined(separator: ", ")
+        )
 
         controller.openLoginSettingsForTesting()
         XCTAssertEqual(service.openSettingsCallCount, 1)
@@ -380,6 +408,7 @@ private func makeAdvancedSettingsState(
     hotkey: HotkeyKey = .rightCommand,
     mode: HotkeyActivationMode = .hold,
     model: DictationModel = .baseEnglish,
+    keepModelReady: Bool = false,
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
     availableModels: Set<DictationModel> = [.baseEnglish],
@@ -389,6 +418,7 @@ private func makeAdvancedSettingsState(
         selectedHotkey: hotkey,
         activationMode: mode,
         selectedModel: model,
+        keepModelReady: keepModelReady,
         recordingLimit: limit,
         selectedTheme: theme,
         availableModels: availableModels,

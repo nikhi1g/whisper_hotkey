@@ -11,8 +11,17 @@ Metal and flash attention. Recognition is English-only and entirely local.
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Strong accuracy/speed balance |
 
 Memory varies with whisper.cpp, Metal allocation, and recording length, so the
-menu shows download size rather than promising a fixed RAM number. Models load
-only for active dictation and unload afterward.
+menu shows download size rather than promising a fixed RAM number. By default,
+models load only for active dictation and unload afterward.
+
+## Keep Model Ready
+
+Settings includes a persistent **Keep Model Ready** switch directly below the
+model picker. It defaults off for minimal idle memory. When enabled, the app
+preloads the selected whisper.cpp helper and keeps that model loaded between
+dictations, removing repeated model startup latency. The microphone remains off,
+and there is no polling loop. Turning the switch off, changing the selected
+model, quitting, or restarting terminates the owned helper.
 
 ## Decoder
 

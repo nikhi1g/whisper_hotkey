@@ -108,6 +108,13 @@ enum UserGuideContent {
                         title: "Unavailable models",
                         detail: "A muted chip means its local model file is not installed."
                     ),
+                    UserGuideRow(
+                        key: state.keepModelReady ? "on" : "off",
+                        title: "Keep Model Ready",
+                        detail: state.keepModelReady
+                            ? "On: the selected model stays loaded for the fastest response and higher idle memory use."
+                            : "Off: the model loads during each dictation and unloads afterward to minimize idle memory."
+                    ),
                 ]
             ),
             UserGuideSection(
@@ -225,6 +232,7 @@ final class UserGuidePopoverController {
 
     private let stateProvider: StateProvider
     private let popover = NSPopover()
+    private var selectedTheme = BadgeTheme.defaultTheme
 
     init(stateProvider: @escaping StateProvider) {
         self.stateProvider = stateProvider
@@ -239,7 +247,8 @@ final class UserGuidePopoverController {
             return
         }
         let contentController = UserGuideViewController(
-            sections: UserGuideContent.sections(for: stateProvider())
+            sections: UserGuideContent.sections(for: stateProvider()),
+            theme: selectedTheme
         )
         contentController.preferredContentSize = NSSize(width: 440, height: 540)
         popover.contentViewController = contentController
@@ -255,6 +264,15 @@ final class UserGuidePopoverController {
         popover.performClose(nil)
     }
 
+    func applyTheme(_ theme: BadgeTheme) {
+        selectedTheme = theme
+        let appearanceName: NSAppearance.Name =
+            theme == .lightFrost ? .aqua : .darkAqua
+        popover.appearance = NSAppearance(named: appearanceName)
+        (popover.contentViewController as? UserGuideViewController)?
+            .applyTheme(theme)
+    }
+
     var isShownForTesting: Bool {
         popover.isShown
     }
@@ -263,10 +281,17 @@ final class UserGuidePopoverController {
 @MainActor
 final class UserGuideViewController: NSViewController {
     private let sections: [UserGuideSection]
+    private var theme: BadgeTheme
     private var textView: NSTextView!
+    private var titleLabel: NSTextField!
+    private var subtitleLabel: NSTextField!
 
-    init(sections: [UserGuideSection]) {
+    init(
+        sections: [UserGuideSection],
+        theme: BadgeTheme = .defaultTheme
+    ) {
         self.sections = sections
+        self.theme = theme
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -276,6 +301,7 @@ final class UserGuideViewController: NSViewController {
 
     override func loadView() {
         let root = NSView()
+        root.wantsLayer = true
         let header = NSStackView()
         header.orientation = .vertical
         header.alignment = .leading
@@ -284,12 +310,14 @@ final class UserGuideViewController: NSViewController {
 
         let title = NSTextField(labelWithString: "User Guide")
         title.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel = title
         header.addArrangedSubview(title)
 
         let subtitle = NSTextField(
             labelWithString: "Everything you can do while dictating."
         )
         subtitle.textColor = .secondaryLabelColor
+        subtitleLabel = subtitle
         header.addArrangedSubview(subtitle)
         root.addSubview(header)
 
@@ -322,12 +350,13 @@ final class UserGuideViewController: NSViewController {
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
         ])
         view = root
+        applyTheme(theme)
     }
 
     private func configureTextView() {
         textView.isEditable = false
         textView.isSelectable = true
-        textView.drawsBackground = false
+        textView.drawsBackground = true
         textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -346,6 +375,8 @@ final class UserGuideViewController: NSViewController {
     }
 
     private func makeGuideText() -> NSAttributedString {
+        let palette = BadgeThemePalette.palette(for: theme)
+        let secondaryText = palette.primaryText.withAlphaComponent(0.72)
         let result = NSMutableAttributedString()
         let headingStyle = NSMutableParagraphStyle()
         headingStyle.paragraphSpacingBefore = 6
@@ -361,7 +392,7 @@ final class UserGuideViewController: NSViewController {
                     string: "\(section.title)\n",
                     attributes: [
                         .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-                        .foregroundColor: NSColor.tertiaryLabelColor,
+                        .foregroundColor: palette.waveform.withAlphaComponent(0.78),
                         .paragraphStyle: headingStyle,
                     ]
                 )
@@ -374,7 +405,7 @@ final class UserGuideViewController: NSViewController {
                             ofSize: 11,
                             weight: .medium
                         ),
-                        .foregroundColor: NSColor.secondaryLabelColor,
+                        .foregroundColor: palette.waveform,
                         .paragraphStyle: titleStyle,
                     ]
                 )
@@ -383,7 +414,7 @@ final class UserGuideViewController: NSViewController {
                         string: "\(row.title)\n",
                         attributes: [
                             .font: NSFont.systemFont(ofSize: 13, weight: .medium),
-                            .foregroundColor: NSColor.labelColor,
+                            .foregroundColor: palette.primaryText,
                             .paragraphStyle: titleStyle,
                         ]
                     )
@@ -394,7 +425,7 @@ final class UserGuideViewController: NSViewController {
                         string: "\(row.detail)\n",
                         attributes: [
                             .font: NSFont.systemFont(ofSize: 12),
-                            .foregroundColor: NSColor.secondaryLabelColor,
+                            .foregroundColor: secondaryText,
                             .paragraphStyle: detailStyle,
                         ]
                     )
@@ -402,6 +433,28 @@ final class UserGuideViewController: NSViewController {
             }
         }
         return result
+    }
+
+    func applyTheme(_ theme: BadgeTheme) {
+        self.theme = theme
+        loadViewIfNeeded()
+        let palette = BadgeThemePalette.palette(for: theme)
+        let background = palette.background.withAlphaComponent(1)
+        view.layer?.backgroundColor = background.cgColor
+        titleLabel.textColor = palette.primaryText
+        subtitleLabel.textColor = palette.primaryText.withAlphaComponent(0.72)
+        textView.backgroundColor = background
+        textView.textStorage?.setAttributedString(makeGuideText())
+    }
+
+    var appliedThemeForTesting: BadgeTheme {
+        theme
+    }
+
+    var backgroundIsOpaqueForTesting: Bool {
+        loadViewIfNeeded()
+        return textView.backgroundColor.alphaComponent == 1
+            && view.layer?.backgroundColor?.alpha == 1
     }
 
     var renderedTextForTesting: String {

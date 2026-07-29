@@ -2,9 +2,18 @@ import Foundation
 
 public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
+    public static let keepModelReady = "keepModelReady"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
+}
+
+public enum WhisperModelReadinessPreference {
+    public static func keepsModelReady(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.bool(forKey: WhisperHotkeyPreferenceKeys.keepModelReady)
+    }
 }
 
 public enum BadgeTheme: String, CaseIterable, Codable, Sendable {

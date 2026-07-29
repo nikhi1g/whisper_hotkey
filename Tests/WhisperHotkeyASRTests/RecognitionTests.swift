@@ -496,6 +496,41 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(readiness, .idle)
     }
 
+    func testKeepModelReadyReusesHelperAcrossOrdinaryDictations()
+        async throws
+    {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            printf '%s\\n' '{"event":"ready"}'
+            count=0
+            while IFS= read -r command; do
+                count=$((count + 1))
+                printf '{"event":"result","text":"warm %s"}\\n' "$count"
+            done
+            """
+        )
+        defer { fixture.delete() }
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration
+        )
+
+        try await recognizer.setKeepsModelReady(true)
+        let first = try await recognizer.transcribe(fixture.makeAudio())
+        let second = try await recognizer.transcribe(fixture.makeAudio())
+
+        XCTAssertEqual(first, "warm 1")
+        XCTAssertEqual(second, "warm 2")
+        XCTAssertEqual(try fixture.helperAttemptCount(), 1)
+        let warmReadiness = await recognizer.readiness
+        XCTAssertEqual(warmReadiness, .ready)
+
+        try await recognizer.setKeepsModelReady(false)
+        let coldReadiness = await recognizer.readiness
+        XCTAssertEqual(coldReadiness, .idle)
+    }
+
     func testHelperReadinessTimeoutStillFallsBackWhenNotCancelled()
         async throws {
         let fixture = try RecognitionFixture(

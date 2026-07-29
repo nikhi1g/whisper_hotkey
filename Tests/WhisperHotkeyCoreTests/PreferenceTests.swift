@@ -54,6 +54,23 @@ final class PreferenceTests: XCTestCase {
         XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .githubDarkDimmed)
     }
 
+    func testKeepModelReadyDefaultsOffAndPersists() {
+        let suite = "whisper-hotkey-readiness-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertFalse(
+            WhisperModelReadinessPreference.keepsModelReady(defaults: defaults)
+        )
+        defaults.set(
+            true,
+            forKey: WhisperHotkeyPreferenceKeys.keepModelReady
+        )
+        XCTAssertTrue(
+            WhisperModelReadinessPreference.keepsModelReady(defaults: defaults)
+        )
+    }
+
     func testRecordingLimitsCoverThirtySecondsThroughOneHour() {
         XCTAssertEqual(RecordingLimit.allCases.first?.seconds, 30)
         XCTAssertEqual(RecordingLimit.allCases.last?.seconds, 3_600)
