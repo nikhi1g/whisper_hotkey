@@ -306,6 +306,89 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
+    func testListeningBackgroundDragsWithoutStealingButtonHitboxes() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+        let layout = ListeningBadgeLayout()
+
+        XCTAssertTrue(
+            controller.badgeBackgroundIsDraggableForTesting(
+                at: CGPoint(
+                    x: layout.timeFrame.midX,
+                    y: layout.timeFrame.midY
+                )
+            )
+        )
+        XCTAssertFalse(
+            controller.badgeBackgroundIsDraggableForTesting(
+                at: CGPoint(
+                    x: layout.stopButtonFrame.midX,
+                    y: layout.stopButtonFrame.midY
+                )
+            )
+        )
+        XCTAssertFalse(
+            controller.badgeBackgroundIsDraggableForTesting(
+                at: CGPoint(
+                    x: layout.sendButtonFrame.midX,
+                    y: layout.sendButtonFrame.midY
+                )
+            )
+        )
+        controller.hide()
+    }
+
+    @MainActor
+    func testDraggedOriginPersistsAcrossUpdatesAndStatusChanges() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+
+        controller.dragBadgeForTesting(to: CGPoint(x: 640, y: 420))
+        let draggedFrame = controller.panelFrameForTesting
+        XCTAssertEqual(draggedFrame.origin, CGPoint(x: 640, y: 420))
+
+        controller.updateListening(elapsed: 15, limit: 300, level: 0.5)
+        XCTAssertEqual(controller.panelFrameForTesting, draggedFrame)
+
+        controller.present(.transcribing, screenFrame: screen)
+        XCTAssertEqual(controller.panelFrameForTesting, draggedFrame)
+        controller.hide()
+    }
+
+    @MainActor
+    func testDraggingClampsTheWholeBadgeInsideItsSessionScreen() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 300, height: 200)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 100, y: 100, width: 1, height: 18),
+            screenFrame: screen
+        )
+
+        controller.dragBadgeForTesting(to: CGPoint(x: 500, y: -100))
+        XCTAssertEqual(
+            controller.panelFrameForTesting,
+            CGRect(
+                x: screen.maxX - 8 - ListeningBadgeLayout().size.width,
+                y: screen.minY + 8,
+                width: ListeningBadgeLayout().size.width,
+                height: ListeningBadgeLayout().size.height
+            )
+        )
+        controller.hide()
+    }
+
+    @MainActor
     func testPointerFallbackPlacesClickableSendButtonUnderPointer() {
         var submitted = 0
         let controller = CaretBadgeController(
@@ -374,8 +457,9 @@ final class ListeningBadgeTests: XCTestCase {
 
     func testCompactListeningLayoutHasTightSquareControls() {
         let layout = ListeningBadgeLayout()
-        XCTAssertEqual(layout.size, CGSize(width: 232, height: 44))
+        XCTAssertEqual(layout.size, CGSize(width: 218, height: 44))
         XCTAssertEqual(layout.waveformFrame.minX, 10)
+        XCTAssertEqual(layout.timeFrame.width, 50)
         XCTAssertEqual(layout.size.width - layout.sendButtonFrame.maxX, 10)
         XCTAssertEqual(
             layout.timeFrame.minX - layout.waveformFrame.maxX,

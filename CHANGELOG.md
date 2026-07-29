@@ -11,6 +11,9 @@
   while rotating lightweight inference segments at adaptive cadence boundaries
 - Reduced Pause Mode's adaptive boundary to a live 300–750 ms range with a
   450 ms initial target
+- Made the listening badge draggable from its waveform or timer, preserving and
+  clamping the chosen position through the rest of the dictation
+- Tightened the timer cell to compact the fixed-size listening badge
 - Made Escape unambiguously abort active dictation, discard its private audio,
   cancel recognition, and insert nothing
 - Reserved Escape for cancellation and migrated legacy Escape triggers to Right

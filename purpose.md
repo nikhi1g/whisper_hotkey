@@ -81,9 +81,12 @@ pointer position once when recording begins and centers the Send/Enter button
 under that pointer, enabling key, speak, click without pointer travel. The badge
 keeps that exact initial frame—including origin, width, and height—through
 listening and all following status states; it does not poll, follow the pointer,
-shrink for short status text, or resize during the session. Screen-edge clamping
-keeps the complete badge visible. This fallback affects presentation only and
-never validates or changes the paste destination. While listening, the compact
+shrink for short status text, or resize during the session. While listening, its
+waveform and timer surfaces form a drag handle; Stop and Send retain independent
+button hitboxes. A dragged origin replaces the initial origin for the rest of
+that session, including later status states. Screen-edge clamping keeps the
+complete badge visible. This fallback affects presentation only and never
+validates or changes the paste destination. While listening, the compact
 badge shows a sensitive scrolling 23-sample waveform read from the existing
 audio callback at 20 Hz, elapsed time, a Stop and Insert button, and a Send
 button. The recording limit stays hidden until its final minute; then elapsed

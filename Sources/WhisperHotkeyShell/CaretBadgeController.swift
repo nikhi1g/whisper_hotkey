@@ -45,6 +45,9 @@ public final class CaretBadgeController {
             actions: actions
         )
         panel = Self.makePanel(contentView: badgeView)
+        badgeView.dragHandler = { [weak self] proposedOrigin in
+            self?.movePanel(to: proposedOrigin)
+        }
     }
 
     private static func makePanel(
@@ -179,6 +182,22 @@ public final class CaretBadgeController {
         panel.setFrame(frame, display: display)
     }
 
+    private func movePanel(to proposedOrigin: CGPoint) {
+        guard
+            badgeView.presentation == .listening,
+            let visibleFrame = lastScreenFrame
+        else {
+            return
+        }
+        let frame = BadgePlacement.frame(
+            preservingOrigin: proposedOrigin,
+            screenFrame: visibleFrame,
+            badgeSize: badgeView.preferredSize
+        )
+        sessionPanelOrigin = frame.origin
+        panel.setFrameOrigin(frame.origin)
+    }
+
     public func hide() {
         badgeView.presentation = .hidden
         panel.ignoresMouseEvents = true
@@ -250,6 +269,14 @@ public final class CaretBadgeController {
             return
         }
         button.performClick(nil)
+    }
+
+    func dragBadgeForTesting(to proposedOrigin: CGPoint) {
+        movePanel(to: proposedOrigin)
+    }
+
+    func badgeBackgroundIsDraggableForTesting(at point: CGPoint) -> Bool {
+        badgeView.hitTest(point) === badgeView
     }
 
     var panelFrameForTesting: CGRect {
@@ -363,6 +390,8 @@ private final class BadgeView: NSView {
     private let limitTrackLayer = CALayer()
     private let limitProgressLayer = CALayer()
     private var listeningProgress: CGFloat = 0
+    private var dragStart: (pointer: CGPoint, windowOrigin: CGPoint)?
+    var dragHandler: (@MainActor (CGPoint) -> Void)?
 
     var presentation: BadgePresentation = .hidden {
         didSet {
@@ -450,6 +479,44 @@ private final class BadgeView: NSView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, bounds.contains(point) else {
+            return nil
+        }
+        for button in [stopButton, sendButton]
+        where !button.isHidden && button.frame.contains(point) {
+            return button
+        }
+        return presentation == .listening ? self : super.hitTest(point)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard presentation == .listening, let window else {
+            return
+        }
+        dragStart = (
+            pointer: NSEvent.mouseLocation,
+            windowOrigin: window.frame.origin
+        )
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragStart else {
+            return
+        }
+        let pointer = NSEvent.mouseLocation
+        dragHandler?(
+            CGPoint(
+                x: dragStart.windowOrigin.x + pointer.x - dragStart.pointer.x,
+                y: dragStart.windowOrigin.y + pointer.y - dragStart.pointer.y
+            )
+        )
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        dragStart = nil
     }
 
     @objc private func stopAndInsert() {
@@ -642,7 +709,7 @@ struct ListeningBadgeLayout: Equatable {
         let horizontalMargin: CGFloat = 10
         let waveformWidth: CGFloat = 76
         let waveformHeight: CGFloat = 22
-        let timeWidth: CGFloat = 64
+        let timeWidth: CGFloat = 50
         let stopDiameter: CGFloat = 32
         let sendDiameter: CGFloat = 34
         let contentGap: CGFloat = 2

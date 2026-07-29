@@ -31,7 +31,9 @@ warning. The badge uses a borderless flat surface with a restrained system
 shadow and no gradients. Its timer and two circular controls sit directly beside
 the waveform. Its compact outer frame keeps the same position, width, and height
 while it changes from listening to transcribing or another status, so the badge
-never jumps or collapses around shorter text.
+never jumps or collapses around shorter text. Drag its waveform or timer to move
+it for the rest of the current dictation; the Stop and Send hitboxes remain
+independently clickable.
 The same microphone levels provide a lightweight voice-activity gate: sustained
 speech proceeds to Whisper, while silence and brief key or click transients are
 discarded as no speech instead of being decoded into a hallucinated phrase.
