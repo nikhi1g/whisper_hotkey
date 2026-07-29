@@ -61,6 +61,7 @@ public final class CaretBadgeController {
         panel.hasShadow = true
         panel.level = .statusBar
         panel.hidesOnDeactivate = false
+        panel.canHide = false
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.ignoresMouseEvents = true
@@ -89,11 +90,10 @@ public final class CaretBadgeController {
         }
         let previousPresentation = badgeView.presentation
         if presentation == .listening, previousPresentation != .listening {
-            // A fresh panel obtains current Space/Stage Manager membership.
-            // Reusing an ordered-out panel indefinitely can leave AppKit
-            // reporting it visible while it belongs to an inactive set.
-            panel.orderOut(nil)
-            panel = Self.makePanel(contentView: badgeView)
+            // Keep one registered panel for the process lifetime. Replacing an
+            // ordered-out NSPanel leaks the old window in NSApplication.windows.
+            // Reassert its cross-Space behavior before ordering it back in.
+            panel.collectionBehavior = Self.overlayCollectionBehavior
             lastCaretFrame = nil
             lastFieldFrame = nil
             lastScreenFrame = nil
@@ -230,6 +230,22 @@ public final class CaretBadgeController {
 
     var panelFrameForTesting: CGRect {
         panel.frame
+    }
+
+    static var registeredPanelCountForTesting: Int {
+        NSApplication.shared.windows.reduce(into: 0) { count, window in
+            if window is NonactivatingBadgePanel {
+                count += 1
+            }
+        }
+    }
+
+    var panelCanHideForTesting: Bool {
+        panel.canHide
+    }
+
+    var panelIdentifierForTesting: ObjectIdentifier {
+        ObjectIdentifier(panel)
     }
 
     var visualStyleForTesting: BadgeVisualStyleSnapshot {

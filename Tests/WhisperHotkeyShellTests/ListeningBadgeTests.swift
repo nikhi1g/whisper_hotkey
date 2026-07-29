@@ -133,6 +133,41 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedSessionsReuseOneRegisteredPanel() {
+        let baseline = CaretBadgeController.registeredPanelCountForTesting
+        let controller = CaretBadgeController()
+        let countWithController = CaretBadgeController.registeredPanelCountForTesting
+        XCTAssertEqual(countWithController, baseline + 1)
+        XCTAssertFalse(controller.panelCanHideForTesting)
+        let panelIdentifier = controller.panelIdentifierForTesting
+
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        for index in 0..<100 {
+            controller.present(
+                .listening,
+                caretFrame: CGRect(
+                    x: 200 + CGFloat(index),
+                    y: 200,
+                    width: 1,
+                    height: 18
+                ),
+                screenFrame: screen
+            )
+            controller.hide()
+            XCTAssertEqual(
+                controller.panelIdentifierForTesting,
+                panelIdentifier,
+                "Session \(index) replaced the reusable AppKit panel"
+            )
+            XCTAssertEqual(
+                CaretBadgeController.registeredPanelCountForTesting,
+                countWithController,
+                "Session \(index) retained a superseded AppKit panel"
+            )
+        }
+    }
+
+    @MainActor
     func testListeningUpdateRestoresUnexpectedlyOrderedOutPanel() {
         let controller = CaretBadgeController()
         controller.present(

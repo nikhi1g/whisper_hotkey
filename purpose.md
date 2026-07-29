@@ -68,7 +68,9 @@ color pulses and deepens from orange toward red.
 The update task exists only while recording. The panel joins every application,
 Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
-Space or Stage Manager set. Other badge states show Transcribing, Busy, or an
+Space or Stage Manager set. One panel is reused for the process lifetime so
+repeated dictations cannot accumulate hidden WindowServer windows. Other badge
+states show Transcribing, Busy, or an
 actionable error. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. There is no live text preview or success
