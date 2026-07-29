@@ -97,6 +97,39 @@ final class BadgePlacementTests: XCTestCase {
         )
     }
 
+    func testOversizedTerminalContainerPlacesBadgeAboveLocalCaret() {
+        let terminalSurface = CGRect(
+            x: 20,
+            y: 20,
+            width: 960,
+            height: 760
+        )
+        let caret = CGRect(x: 40, y: 60, width: 10, height: 20)
+        let frame = BadgePlacement.frame(
+            caretFrame: caret,
+            fieldFrame: terminalSurface,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertGreaterThan(
+            terminalSurface.maxY - caret.maxY,
+            BadgePlacement.maximumCaretToFieldTopDistance
+        )
+        XCTAssertEqual(frame, CGRect(x: 40, y: 88, width: 100, height: 30))
+    }
+
+    func testOversizedFieldWithoutCaretUsesPointerRuntimeFallback() {
+        XCTAssertEqual(
+            BadgePlacement.resolvedRuntimeAnchor(
+                caretFrame: nil,
+                fieldFrame: CGRect(x: 20, y: 20, width: 960, height: 760),
+                pointerLocation: CGPoint(x: 600, y: 100)
+            ),
+            .pointer(CGPoint(x: 600, y: 100))
+        )
+    }
+
     func testFlipsBelowFieldWhenTopEdgeHasNoRoom() {
         let field = CGRect(x: 20, y: 750, width: 300, height: 40)
         let frame = BadgePlacement.frame(

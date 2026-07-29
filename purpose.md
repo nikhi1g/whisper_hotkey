@@ -78,8 +78,11 @@ Chromium-style text markers are both used to locate the caret. Exact caret
 geometry is feasible only when the destination app exposes one of those
 Accessibility representations. When exposed, the focused element's frame is
 captured in the same one-time query and the badge sits above the complete text
-area, flipping below only at the top display edge, so it does not obscure typed
-text. No role validation or geometry polling is performed. If no Accessibility
+area when that boundary remains local to the caret. Terminal applications often
+report the entire terminal surface as their focused field; oversized or distant
+containers are ignored and the badge sits directly above the exact caret
+instead. It flips below only at the top display edge. No role validation or
+geometry polling is performed. If no Accessibility
 geometry is available, the badge snapshots the current
 pointer position once when recording begins and centers the Send/Enter button
 under that pointer, enabling key, speak, click without pointer travel. The badge

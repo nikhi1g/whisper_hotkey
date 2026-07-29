@@ -16,6 +16,8 @@ enum BadgeRuntimeAnchor: Equatable {
 
 public enum BadgePlacement {
     public static let defaultSize = CGSize(width: 132, height: 34)
+    static let maximumCaretToFieldTopDistance: CGFloat = 120
+    static let maximumStandaloneFieldHeight: CGFloat = 320
 
     /// Prefers exact Accessibility geometry and otherwise snapshots the pointer
     /// as a one-point anchor. The caller decides when pointer fallback is
@@ -37,16 +39,21 @@ public enum BadgePlacement {
         fieldFrame: CGRect?,
         pointerLocation: CGPoint
     ) -> BadgeRuntimeAnchor {
-        if let accessibilityFrame = usable(caretFrame)
-            ?? usable(fieldFrame) {
-            return .accessibility(accessibilityFrame)
+        if let caret = usable(caretFrame) {
+            return .accessibility(caret)
+        }
+        if let field = usable(fieldFrame),
+           field.height <= maximumStandaloneFieldHeight
+        {
+            return .accessibility(field)
         }
         return .pointer(pointerLocation)
     }
 
-    /// Places the badge above the complete focused field when exposed, or above
-    /// the exact caret line otherwise. This keeps recognized text unobscured.
-    /// If the top display edge has no room, the badge flips below the anchor.
+    /// Uses a focused field only when its top edge remains local to the caret.
+    /// Terminal apps often expose the entire terminal surface as the focused
+    /// field; treating that as a text box would strand the badge at the top of
+    /// the window, far from the active prompt.
     public static func frame(
         caretFrame: CGRect?,
         fieldFrame: CGRect?,
@@ -65,7 +72,10 @@ public enum BadgePlacement {
             return CGRect(origin: visibleFrame.origin, size: .zero)
         }
 
-        let anchor = usable(fieldFrame) ?? usable(caretFrame)
+        let anchor = placementAnchor(
+            caretFrame: caretFrame,
+            fieldFrame: fieldFrame
+        )
         var origin: CGPoint
 
         if let anchor {
@@ -92,6 +102,34 @@ public enum BadgePlacement {
         origin.x = min(max(origin.x, minimumX), maximumX)
         origin.y = min(max(origin.y, minimumY), maximumY)
         return CGRect(origin: origin, size: size)
+    }
+
+    private static func placementAnchor(
+        caretFrame: CGRect?,
+        fieldFrame: CGRect?
+    ) -> CGRect? {
+        let caret = usable(caretFrame)
+        guard let field = usable(fieldFrame) else {
+            return caret
+        }
+        guard let caret else {
+            return field.height <= maximumStandaloneFieldHeight
+                ? field
+                : nil
+        }
+
+        let caretMidpoint = CGPoint(x: caret.midX, y: caret.midY)
+        let containsCaret = field.insetBy(dx: -2, dy: -2)
+            .contains(caretMidpoint)
+        let caretToFieldTop = field.maxY - caret.maxY
+        guard
+            containsCaret,
+            caretToFieldTop >= -2,
+            caretToFieldTop <= maximumCaretToFieldTopDistance
+        else {
+            return caret
+        }
+        return field
     }
 
     /// Reuses a session's initial panel origin while adapting to a new badge

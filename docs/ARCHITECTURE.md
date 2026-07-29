@@ -74,8 +74,10 @@ generation number rejects stale recognition results.
 The badge prefers Accessibility caret geometry, including Chromium text
 markers, and otherwise anchors to the pointer. The same one-time query captures
 the focused element frame when available, allowing the badge to sit above the
-complete field rather than obscure its text. It flips below at the top display
-edge. No role validation or geometry polling is added. The badge snapshots that
+complete field rather than obscure its text. A locality bound rejects focused
+terminal surfaces whose upper edge is far from the caret; those use the exact
+caret instead. Oversized field-only results fall back to the pointer. It flips
+below at the top display edge. No role validation or geometry polling is added. The badge snapshots that
 geometry once at recording start and preserves the initial panel origin across
 later states.
 While listening, the waveform and timer form a drag handle. Movement is clamped
