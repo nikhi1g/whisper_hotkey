@@ -5,26 +5,27 @@ whisper.cpp.
 
 `whisper_hotkey` is a background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
-English Whisper transcription at the current selection. The menu can instead
-select either side of Command, Shift, Option, or Control, plus Caps Lock,
+English Whisper transcription at the current selection. Advanced Settings can
+instead select either side of Command, Shift, Option, or Control, plus Caps Lock,
 Escape, or Fn/Globe. A selected modifier remains normal when combined with
 another key or a mouse click. A hold shorter than 250 ms is discarded, Escape
-cancels unless it is the selected trigger. The persistent **Recording Limit**
-submenu chooses an automatic stop from 30 seconds through one hour; ten minutes
+cancels unless it is the selected trigger. The persistent **Recording limit**
+picker chooses an automatic stop from 30 seconds through one hour; ten minutes
 is the default.
 
 The app has no Dock icon, live transcript, or success notification. Its
 menu-bar symbol changes for ready, listening, transcribing, inserting, setup,
-and error states. Its menu includes persistent checked controls for the gesture,
-dictation key, local Whisper model, and recording limit. While recording, the
-caret badge shows a scrolling audio-reactive waveform, elapsed time, **Stop and
-Insert**, and **Send**. Stop and Insert behaves like hotkey release; Send inserts
-and then presses Return. The badge continuously shows elapsed/limit time and a
-thin progress track, making its automatic stopping point visible throughout the
+and error states. Its compact menu keeps only immediate actions; persistent
+key, gesture, model, duration, and Open at Login controls live in a separate
+native **Advanced Settings…** window. While recording, the caret badge shows a
+scrolling audio-reactive waveform, elapsed time, **Stop and Insert**, and
+**Send**. Stop and Insert behaves like hotkey release; Send inserts and then
+presses Return. The badge continuously shows elapsed/limit time and a thin
+progress track, making its automatic stopping point visible throughout the
 recording. The badge uses a borderless flat surface with a restrained system
 shadow and no gradients. In the final 30 seconds one solid warning color pulses
-and deepens from orange toward red. Its timer
-and two circular controls sit directly beside the waveform.
+and deepens from orange toward red. Its timer and two circular controls sit
+directly beside the waveform.
 
 ## Quick start
 
@@ -53,14 +54,13 @@ Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
 2. Hold bare Right Command while speaking.
 3. Release Right Command and leave the destination focused until insertion.
 
-Choose a trigger from **Dictation Key**, then choose **Press and Hold** or
-**Toggle** from the checked **Dictation Mode** submenu. In Toggle mode, tap and
-release the selected key once to start, speak while the badge waveform is
-active, then tap and release it again to transcribe and insert. The badge's
-square button is an equivalent stop-and-insert action; its arrow button
-additionally presses Return
-after the paste succeeds. Ordinary typing and selected-modifier shortcuts remain
-available between the two taps.
+Open **Advanced Settings…**, choose a **Dictation key**, then choose **Press and
+Hold** or **Toggle** under **Input behavior**. In Toggle mode, tap and release
+the selected key once to start, speak while the badge waveform is active, then
+tap and release it again to transcribe and insert. The badge's square button is
+an equivalent stop-and-insert action; its arrow button additionally presses
+Return after the paste succeeds. Ordinary typing and selected-modifier
+shortcuts remain available between the two taps.
 
 Caps Lock always uses toggle mode because macOS reports lock-state changes
 rather than a normal hold/release pair; its normal capitalization state remains
@@ -86,7 +86,7 @@ Pasting into a non-text control may do nothing or invoke that application's
 ordinary paste behavior.
 
 After a transcription, the menu item **Copy Last Dictation** permanently copies
-the latest transcript to the system clipboard. It is disabled until a transcript
+the latest transcript to the system clipboard. It appears after a transcript
 exists. Only that one transcript is held in memory; it is replaced on the next
 dictation and discarded when the app quits.
 
@@ -165,7 +165,7 @@ The installed runtime uses:
 - `/opt/homebrew/opt/ggml/`
 - `~/.cache/whisper/ggml-base.en.bin`
 
-The model menu offers:
+The Advanced Settings model picker offers:
 
 - **Base English (Fast, 141 MB)** — installed default and smallest option.
 - **Small English (More Accurate, 465 MB)** — installed.

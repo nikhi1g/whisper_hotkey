@@ -26,6 +26,12 @@ transcript history. During dictation, capture and model preload begin together.
 Release, Stop, or Send finalizes the WAV, transcribes once, inserts it, tears
 down the helper, and deletes the private audio directory.
 
+The status menu contains only immediate actions. A lazy native Advanced Settings
+window owns the key, input behavior, model, recording-limit, and Open at Login
+controls; AppDelegate remains the preference source of truth. The window is
+created on first use, refreshes through application/state events, and never
+polls. Setup remains a separate permissions-and-files repair surface.
+
 ## Module boundaries
 
 | Target | Responsibility |
@@ -33,7 +39,7 @@ down the helper, and deletes the private audio directory.
 | `WhisperHotkeyCore` | State machine, contracts, model and limit preferences |
 | `WhisperHotkeyASR` | Capture, helper lifecycle, whisper.cpp invocation, sanitization |
 | `WhisperHotkeySystem` | Global input, Accessibility, pasteboard, Command-V/Return |
-| `WhisperHotkeyShell` | Menu, setup, badge, login item, local control socket |
+| `WhisperHotkeyShell` | Menu, Setup and Advanced Settings, badge, login item, local control socket |
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
 | `whisper_hotkey` | Terminal control client |
 | `WhisperModelHelper` | Per-dictation C++ bridge to whisper.cpp |

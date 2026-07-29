@@ -53,28 +53,6 @@ final class MenuBarControllerTests: XCTestCase {
         )
     }
 
-    func testRecordingLimitParentTitleExposesSelection() {
-        XCTAssertEqual(
-            RecordingLimitMenuPresentation.title(for: .seconds30),
-            "Recording Limit: 30 Seconds"
-        )
-        XCTAssertEqual(
-            RecordingLimitMenuPresentation.title(for: .hour1),
-            "Recording Limit: 1 Hour"
-        )
-    }
-
-    func testDictationModeTitlesAreExplicit() {
-        XCTAssertEqual(
-            DictationModeMenuPresentation.title(for: .hold),
-            "Dictation Mode: Press and Hold"
-        )
-        XCTAssertEqual(
-            DictationModeMenuPresentation.title(for: .toggle),
-            "Dictation Mode: Toggle"
-        )
-    }
-
     @MainActor
     func testSystemSymbolsExistOnSupportedMacOS() {
         let states: [MenuBarState] = [
@@ -106,18 +84,12 @@ final class MenuBarControllerTests: XCTestCase {
         let controller = MenuBarController(
             toggleDictationEnabled: true,
             selectedHotkey: .rightOption,
-            selectedModel: .baseEnglish,
-            recordingLimit: .minutes5,
-            availableModels: [.baseEnglish],
             hasLastDictation: false,
             actions: MenuBarActions(
                 showSetup: {},
+                showAdvancedSettings: {},
                 cancelDictation: {},
                 copyLastDictation: {},
-                selectDictationMode: { _ in },
-                selectHotkey: { _ in },
-                selectModel: { _ in },
-                selectRecordingLimit: { _ in },
                 restart: { restartCount += 1 },
                 quit: {}
             )
@@ -135,74 +107,125 @@ final class MenuBarControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testDictationModeOffersExplicitHoldAndToggleChoices() {
-        var selectedModes: [HotkeyActivationMode] = []
+    func testIdleMenuKeepsOnlyImmediateActionsAndRoutesAdvancedSettings() {
+        var advancedSettingsCount = 0
         let controller = MenuBarController(
             toggleDictationEnabled: true,
             selectedHotkey: .rightOption,
-            selectedModel: .baseEnglish,
-            recordingLimit: .minutes5,
-            availableModels: [.baseEnglish],
             hasLastDictation: false,
             actions: MenuBarActions(
                 showSetup: {},
+                showAdvancedSettings: { advancedSettingsCount += 1 },
                 cancelDictation: {},
                 copyLastDictation: {},
-                selectDictationMode: { selectedModes.append($0) },
-                selectHotkey: { _ in },
-                selectModel: { _ in },
-                selectRecordingLimit: { _ in },
                 restart: {},
                 quit: {}
             )
         )
 
         XCTAssertEqual(
-            controller.dictationModeStateForTesting(.hold),
-            .off
+            controller.visibleMenuItemTitlesForTesting,
+            [
+                "Starting…",
+                "",
+                "Open Setup…",
+                "Advanced Settings…",
+                "",
+                "Restart whisper_hotkey",
+                "Quit whisper_hotkey",
+            ]
         )
-        XCTAssertEqual(
-            controller.dictationModeStateForTesting(.toggle),
-            .on
+        XCTAssertFalse(
+            controller.menuItemTitlesForTesting.contains("Dictation Mode")
         )
-        controller.activateDictationModeForTesting(.hold)
-        controller.activateDictationModeForTesting(.toggle)
-        XCTAssertEqual(selectedModes, [.hold, .toggle])
+        XCTAssertFalse(
+            controller.menuItemTitlesForTesting.contains("Dictation Key")
+        )
+        XCTAssertFalse(
+            controller.menuItemTitlesForTesting.contains("Whisper Model")
+        )
+        XCTAssertFalse(
+            controller.menuItemTitlesForTesting.contains("Recording Limit")
+        )
+
+        controller.activateMenuItemForTesting(titled: "Advanced Settings…")
+        XCTAssertEqual(advancedSettingsCount, 1)
     }
 
     @MainActor
-    func testCapsLockForcesToggleAndDisablesHoldChoice() {
+    func testBusyMenuShowsCancelAndDisablesConfigurationWindows() {
+        var cancellationCount = 0
         let controller = MenuBarController(
             toggleDictationEnabled: false,
-            selectedHotkey: .capsLock,
-            selectedModel: .baseEnglish,
-            recordingLimit: .minutes5,
-            availableModels: [.baseEnglish],
+            selectedHotkey: .rightCommand,
             hasLastDictation: false,
             actions: MenuBarActions(
                 showSetup: {},
-                cancelDictation: {},
+                showAdvancedSettings: {},
+                cancelDictation: { cancellationCount += 1 },
                 copyLastDictation: {},
-                selectDictationMode: { _ in },
-                selectHotkey: { _ in },
-                selectModel: { _ in },
-                selectRecordingLimit: { _ in },
                 restart: {},
                 quit: {}
             )
         )
 
-        XCTAssertEqual(
-            controller.dictationModeStateForTesting(.toggle),
-            .on
+        controller.update(
+            .listening,
+            toggleDictationEnabled: false,
+            selectedHotkey: .rightCommand,
+            hasLastDictation: false
+        )
+
+        XCTAssertTrue(
+            controller.visibleMenuItemTitlesForTesting.contains(
+                "Cancel Dictation"
+            )
         )
         XCTAssertEqual(
-            controller.dictationModeIsEnabledForTesting(.hold),
+            controller.menuItemIsEnabledForTesting(titled: "Open Setup…"),
             false
         )
         XCTAssertEqual(
-            controller.dictationModeIsEnabledForTesting(.toggle),
-            true
+            controller.menuItemIsEnabledForTesting(
+                titled: "Advanced Settings…"
+            ),
+            false
+        )
+        controller.activateMenuItemForTesting(titled: "Cancel Dictation")
+        XCTAssertEqual(cancellationCount, 1)
+    }
+
+    @MainActor
+    func testCopyLastDictationAppearsOnlyAfterAResultExists() {
+        let controller = MenuBarController(
+            toggleDictationEnabled: false,
+            selectedHotkey: .rightCommand,
+            hasLastDictation: false,
+            actions: MenuBarActions(
+                showSetup: {},
+                showAdvancedSettings: {},
+                cancelDictation: {},
+                copyLastDictation: {},
+                restart: {},
+                quit: {}
+            )
+        )
+
+        XCTAssertFalse(
+            controller.visibleMenuItemTitlesForTesting.contains(
+                "Copy Last Dictation"
+            )
+        )
+        controller.update(
+            .idle,
+            toggleDictationEnabled: false,
+            selectedHotkey: .rightCommand,
+            hasLastDictation: true
+        )
+        XCTAssertTrue(
+            controller.visibleMenuItemTitlesForTesting.contains(
+                "Copy Last Dictation"
+            )
         )
     }
 }

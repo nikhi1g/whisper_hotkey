@@ -11,6 +11,14 @@ import WhisperHotkeySystem
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let errorPresentationDuration: Duration = .seconds(2)
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
+    private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
+        selectedHotkey: .rightCommand,
+        activationMode: .hold,
+        selectedModel: .baseEnglish,
+        recordingLimit: .minutes10,
+        availableModels: [],
+        configurationEnabled: false
+    )
 
     private enum CompletionBehavior {
         case insert
@@ -90,12 +98,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         ),
         loginItemManager: loginItemManager
     )
+    private var advancedSettingsWindowController:
+        AdvancedSettingsWindowController?
     private lazy var menuBarController = MenuBarController(
         toggleDictationEnabled: effectiveToggleDictationEnabled,
         selectedHotkey: selectedHotkey,
-        selectedModel: selectedModel,
-        recordingLimit: recordingLimit,
-        availableModels: availableModels,
         hasLastDictation: false,
         actions: MenuBarActions(
             showSetup: { [weak self] in
@@ -105,23 +112,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 _ = self.setupWindowController.showIfNeeded(force: true)
                 self.reconcileRuntime(showSetupIfNeeded: false)
             },
+            showAdvancedSettings: { [weak self] in
+                self?.showAdvancedSettings()
+            },
             cancelDictation: { [weak self] in
                 self?.process(.cancel)
             },
             copyLastDictation: { [weak self] in
                 self?.copyLastDictation()
-            },
-            selectDictationMode: { [weak self] mode in
-                self?.selectDictationMode(mode)
-            },
-            selectHotkey: { [weak self] hotkey in
-                self?.selectHotkey(hotkey)
-            },
-            selectModel: { [weak self] model in
-                self?.selectModel(model)
-            },
-            selectRecordingLimit: { [weak self] limit in
-                self?.selectRecordingLimit(limit)
             },
             restart: { [weak self] in
                 self?.restartApplication()
@@ -168,9 +166,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             .starting,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
-            selectedModel: selectedModel,
-            recordingLimit: recordingLimit,
-            availableModels: availableModels,
             hasLastDictation: lastDictation != nil
         )
         reconcileRuntime(showSetupIfNeeded: true)
@@ -819,14 +814,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateMenuBar() {
+        defer {
+            advancedSettingsWindowController?.refreshIfVisible()
+        }
         if startupError != nil {
             menuBarController.update(
                 .failed,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
-                selectedModel: selectedModel,
-                recordingLimit: recordingLimit,
-                availableModels: availableModels,
                 hasLastDictation: lastDictation != nil
             )
             return
@@ -836,9 +831,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 .unavailable,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
-                selectedModel: selectedModel,
-                recordingLimit: recordingLimit,
-                availableModels: availableModels,
                 hasLastDictation: lastDictation != nil
             )
             return
@@ -864,11 +856,52 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             state,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
+            hasLastDictation: lastDictation != nil
+        )
+    }
+
+    private var advancedSettingsState: AdvancedSettingsState {
+        AdvancedSettingsState(
+            selectedHotkey: selectedHotkey,
+            activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
             recordingLimit: recordingLimit,
             availableModels: availableModels,
-            hasLastDictation: lastDictation != nil
+            configurationEnabled: !machine.phase.isBusy
         )
+    }
+
+    private func showAdvancedSettings() {
+        guard !machine.phase.isBusy else {
+            return
+        }
+        if advancedSettingsWindowController == nil {
+            advancedSettingsWindowController = AdvancedSettingsWindowController(
+                stateProvider: { [weak self] in
+                    self?.advancedSettingsState
+                        ?? Self.unavailableAdvancedSettingsState
+                },
+                actions: AdvancedSettingsActions(
+                    selectDictationMode: { [weak self] mode in
+                        self?.selectDictationMode(mode)
+                    },
+                    selectHotkey: { [weak self] hotkey in
+                        self?.selectHotkey(hotkey)
+                    },
+                    selectModel: { [weak self] model in
+                        self?.selectModel(model)
+                    },
+                    selectRecordingLimit: { [weak self] limit in
+                        self?.selectRecordingLimit(limit)
+                    },
+                    loginItemChanged: { [weak self] in
+                        self?.setupWindowController.refresh()
+                    }
+                ),
+                loginItemManager: loginItemManager
+            )
+        }
+        advancedSettingsWindowController?.showSettings()
     }
 
     private var effectiveToggleDictationEnabled: Bool {
@@ -880,7 +913,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func selectDictationMode(_ mode: HotkeyActivationMode) {
-        guard mode != .hold || !selectedHotkey.requiresToggleMode else {
+        guard !machine.phase.isBusy,
+              mode != .hold || !selectedHotkey.requiresToggleMode
+        else {
             return
         }
         let enabled = mode == .toggle
@@ -897,7 +932,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func selectHotkey(_ hotkey: HotkeyKey) {
-        guard selectedHotkey != hotkey else {
+        guard !machine.phase.isBusy, selectedHotkey != hotkey else {
             return
         }
         selectedHotkey = hotkey

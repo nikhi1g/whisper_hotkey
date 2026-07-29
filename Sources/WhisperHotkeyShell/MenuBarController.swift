@@ -1,5 +1,4 @@
 import AppKit
-import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 public enum MenuBarState: Equatable, Sendable {
@@ -81,33 +80,24 @@ public enum MenuBarState: Equatable, Sendable {
 @MainActor
 public struct MenuBarActions {
     public var showSetup: () -> Void
+    public var showAdvancedSettings: () -> Void
     public var cancelDictation: () -> Void
     public var copyLastDictation: () -> Void
-    public var selectDictationMode: (HotkeyActivationMode) -> Void
-    public var selectHotkey: (HotkeyKey) -> Void
-    public var selectModel: (DictationModel) -> Void
-    public var selectRecordingLimit: (RecordingLimit) -> Void
     public var restart: () -> Void
     public var quit: () -> Void
 
     public init(
         showSetup: @escaping () -> Void,
+        showAdvancedSettings: @escaping () -> Void,
         cancelDictation: @escaping () -> Void,
         copyLastDictation: @escaping () -> Void,
-        selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
-        selectHotkey: @escaping (HotkeyKey) -> Void,
-        selectModel: @escaping (DictationModel) -> Void,
-        selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         restart: @escaping () -> Void,
         quit: @escaping () -> Void
     ) {
         self.showSetup = showSetup
+        self.showAdvancedSettings = showAdvancedSettings
         self.cancelDictation = cancelDictation
         self.copyLastDictation = copyLastDictation
-        self.selectDictationMode = selectDictationMode
-        self.selectHotkey = selectHotkey
-        self.selectModel = selectModel
-        self.selectRecordingLimit = selectRecordingLimit
         self.restart = restart
         self.quit = quit
     }
@@ -132,42 +122,29 @@ public final class MenuBarController: NSObject {
         action: #selector(copyLastDictation),
         keyEquivalent: ""
     )
-    private let dictationModeMenu = NSMenu(title: "Dictation Mode")
-    private let dictationModeItem = NSMenuItem(
-        title: "Dictation Mode",
-        action: nil,
+    private let setupItem = NSMenuItem(
+        title: "Open Setup…",
+        action: #selector(showSetup),
         keyEquivalent: ""
     )
-    private var dictationModeItems: [HotkeyActivationMode: NSMenuItem] = [:]
-    private let hotkeyMenu = NSMenu(title: "Dictation Key")
-    private var hotkeyItems: [HotkeyKey: NSMenuItem] = [:]
-    private let modelMenu = NSMenu(title: "Whisper Model")
-    private var modelItems: [DictationModel: NSMenuItem] = [:]
-    private let recordingLimitMenu = NSMenu(title: "Recording Limit")
-    private let recordingLimitItem = NSMenuItem(
-        title: "Recording Limit",
-        action: nil,
-        keyEquivalent: ""
+    private let advancedSettingsItem = NSMenuItem(
+        title: "Advanced Settings…",
+        action: #selector(showAdvancedSettings),
+        keyEquivalent: ","
     )
     private let restartItem = NSMenuItem(
         title: "Restart whisper_hotkey",
         action: #selector(restart),
         keyEquivalent: ""
     )
-    private var recordingLimitItems: [RecordingLimit: NSMenuItem] = [:]
-    private var availableModels: Set<DictationModel>
 
     public init(
         toggleDictationEnabled: Bool,
         selectedHotkey: HotkeyKey,
-        selectedModel: DictationModel,
-        recordingLimit: RecordingLimit,
-        availableModels: Set<DictationModel>,
         hasLastDictation: Bool,
         actions: MenuBarActions
     ) {
         self.actions = actions
-        self.availableModels = availableModels
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -177,88 +154,19 @@ public final class MenuBarController: NSObject {
         menu.addItem(.separator())
 
         cancelItem.target = self
+        cancelItem.isHidden = true
         menu.addItem(cancelItem)
 
         copyLastDictationItem.target = self
         copyLastDictationItem.isEnabled = hasLastDictation
+        copyLastDictationItem.isHidden = !hasLastDictation
         menu.addItem(copyLastDictationItem)
 
-        dictationModeItem.submenu = dictationModeMenu
-        for mode in [HotkeyActivationMode.hold, .toggle] {
-            let item = NSMenuItem(
-                title: DictationModeMenuPresentation.optionTitle(for: mode),
-                action: #selector(selectDictationMode(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = mode.rawValue
-            dictationModeMenu.addItem(item)
-            dictationModeItems[mode] = item
-        }
-        menu.addItem(dictationModeItem)
-
-        let hotkeyItem = NSMenuItem(
-            title: "Dictation Key",
-            action: nil,
-            keyEquivalent: ""
-        )
-        hotkeyItem.submenu = hotkeyMenu
-        for hotkey in HotkeyKey.allCases {
-            let item = NSMenuItem(
-                title: hotkey.displayName,
-                action: #selector(selectHotkey(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = hotkey.rawValue
-            item.state = hotkey == selectedHotkey ? .on : .off
-            hotkeyMenu.addItem(item)
-            hotkeyItems[hotkey] = item
-        }
-        menu.addItem(hotkeyItem)
-
-        let modelItem = NSMenuItem(
-            title: "Whisper Model",
-            action: nil,
-            keyEquivalent: ""
-        )
-        modelItem.submenu = modelMenu
-        for model in DictationModel.allCases {
-            let item = NSMenuItem(
-                title: model.menuTitle,
-                action: #selector(selectModel(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = model.rawValue
-            item.state = model == selectedModel ? .on : .off
-            modelMenu.addItem(item)
-            modelItems[model] = item
-        }
-        menu.addItem(modelItem)
-
-        recordingLimitItem.submenu = recordingLimitMenu
-        for limit in RecordingLimit.allCases {
-            let item = NSMenuItem(
-                title: limit.displayName,
-                action: #selector(selectRecordingLimit(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = limit.rawValue
-            item.state = limit == recordingLimit ? .on : .off
-            recordingLimitMenu.addItem(item)
-            recordingLimitItems[limit] = item
-        }
-        menu.addItem(recordingLimitItem)
-
-        let setupItem = NSMenuItem(
-            title: "Open Setup…",
-            action: #selector(showSetup),
-            keyEquivalent: ""
-        )
         setupItem.target = self
         menu.addItem(setupItem)
+
+        advancedSettingsItem.target = self
+        menu.addItem(advancedSettingsItem)
         menu.addItem(.separator())
 
         restartItem.target = self
@@ -277,9 +185,6 @@ public final class MenuBarController: NSObject {
             .starting,
             toggleDictationEnabled: toggleDictationEnabled,
             selectedHotkey: selectedHotkey,
-            selectedModel: selectedModel,
-            recordingLimit: recordingLimit,
-            availableModels: availableModels,
             hasLastDictation: hasLastDictation
         )
     }
@@ -288,48 +193,19 @@ public final class MenuBarController: NSObject {
         _ state: MenuBarState,
         toggleDictationEnabled: Bool,
         selectedHotkey: HotkeyKey,
-        selectedModel: DictationModel,
-        recordingLimit: RecordingLimit,
-        availableModels: Set<DictationModel>,
         hasLastDictation: Bool
     ) {
-        self.availableModels = availableModels
         let stateTitle = state.title(
             toggleDictationEnabled: toggleDictationEnabled,
             hotkey: selectedHotkey
         )
         stateItem.title = stateTitle
         cancelItem.isEnabled = state.canCancel
+        cancelItem.isHidden = !state.canCancel
         copyLastDictationItem.isEnabled = hasLastDictation
-        let selectedMode: HotkeyActivationMode =
-            selectedHotkey.requiresToggleMode || toggleDictationEnabled
-                ? .toggle
-                : .hold
-        dictationModeItem.title = DictationModeMenuPresentation.title(
-            for: selectedMode
-        )
-        for (mode, item) in dictationModeItems {
-            item.state = mode == selectedMode ? .on : .off
-            item.isEnabled = mode != .hold || !selectedHotkey.requiresToggleMode
-        }
-        for (hotkey, item) in hotkeyItems {
-            item.state = hotkey == selectedHotkey ? .on : .off
-        }
-        for (model, item) in modelItems {
-            let installed = availableModels.contains(model)
-            item.title = installed
-                ? model.menuTitle
-                : "\(model.menuTitle) (Not Installed)"
-            item.state = model == selectedModel ? .on : .off
-            item.isEnabled = installed && !state.canCancel
-        }
-        for (limit, item) in recordingLimitItems {
-            item.state = limit == recordingLimit ? .on : .off
-            item.isEnabled = !state.canCancel
-        }
-        recordingLimitItem.title = RecordingLimitMenuPresentation.title(
-            for: recordingLimit
-        )
+        copyLastDictationItem.isHidden = !hasLastDictation
+        setupItem.isEnabled = !state.canCancel
+        advancedSettingsItem.isEnabled = !state.canCancel
 
         guard let button = statusItem.button else {
             return
@@ -353,49 +229,16 @@ public final class MenuBarController: NSObject {
         actions.showSetup()
     }
 
+    @objc private func showAdvancedSettings() {
+        actions.showAdvancedSettings()
+    }
+
     @objc private func cancelDictation() {
         actions.cancelDictation()
     }
 
     @objc private func copyLastDictation() {
         actions.copyLastDictation()
-    }
-
-    @objc private func selectDictationMode(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let mode = HotkeyActivationMode(rawValue: rawValue)
-        else {
-            return
-        }
-        actions.selectDictationMode(mode)
-    }
-
-    @objc private func selectHotkey(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let hotkey = HotkeyKey(rawValue: rawValue)
-        else {
-            return
-        }
-        actions.selectHotkey(hotkey)
-    }
-
-    @objc private func selectModel(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let model = DictationModel(rawValue: rawValue),
-              availableModels.contains(model)
-        else {
-            return
-        }
-        actions.selectModel(model)
-    }
-
-    @objc private func selectRecordingLimit(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let limit = RecordingLimit(rawValue: rawValue)
-        else {
-            return
-        }
-        actions.selectRecordingLimit(limit)
     }
 
     @objc private func quit() {
@@ -410,6 +253,10 @@ public final class MenuBarController: NSObject {
         statusItem.menu?.items.map(\.title) ?? []
     }
 
+    var visibleMenuItemTitlesForTesting: [String] {
+        statusItem.menu?.items.filter { !$0.isHidden }.map(\.title) ?? []
+    }
+
     func activateMenuItemForTesting(titled title: String) {
         guard let menu = statusItem.menu,
               let index = menu.items.firstIndex(where: { $0.title == title })
@@ -419,45 +266,8 @@ public final class MenuBarController: NSObject {
         menu.performActionForItem(at: index)
     }
 
-    func activateDictationModeForTesting(_ mode: HotkeyActivationMode) {
-        guard let item = dictationModeItems[mode],
-              let index = dictationModeMenu.items.firstIndex(of: item)
-        else {
-            return
-        }
-        dictationModeMenu.performActionForItem(at: index)
+    func menuItemIsEnabledForTesting(titled title: String) -> Bool? {
+        statusItem.menu?.items.first(where: { $0.title == title })?.isEnabled
     }
 
-    func dictationModeStateForTesting(
-        _ mode: HotkeyActivationMode
-    ) -> NSControl.StateValue? {
-        dictationModeItems[mode]?.state
-    }
-
-    func dictationModeIsEnabledForTesting(
-        _ mode: HotkeyActivationMode
-    ) -> Bool? {
-        dictationModeItems[mode]?.isEnabled
-    }
-}
-
-enum DictationModeMenuPresentation {
-    static func title(for mode: HotkeyActivationMode) -> String {
-        "Dictation Mode: \(optionTitle(for: mode))"
-    }
-
-    static func optionTitle(for mode: HotkeyActivationMode) -> String {
-        switch mode {
-        case .hold:
-            "Press and Hold"
-        case .toggle:
-            "Toggle"
-        }
-    }
-}
-
-enum RecordingLimitMenuPresentation {
-    static func title(for limit: RecordingLimit) -> String {
-        "Recording Limit: \(limit.displayName)"
-    }
 }

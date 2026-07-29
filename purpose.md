@@ -4,18 +4,22 @@
 text while keeping its always-running cost as close to zero as practical.
 
 The app has no Dock presence. A lightweight menu-bar item shows current state
-and offers setup, cancellation, restart, and quit controls without polling.
+and offers only immediate actions: setup, Advanced Settings, cancellation,
+copying the last dictation, restart, and quit. Configuration pickers do not
+expand the status menu.
 Restart appears immediately before Quit, completes normal cleanup, and uses the
 signed bundled one-shot launcher to reopen the installed app only after the old
 process exits. It starts at
 login as a visible macOS background item: a signed, one-shot Service Management
 LaunchAgent opens the main app and immediately exits. The app can be started,
-stopped, inspected, or disabled from the terminal. A one-time setup window
-handles Microphone, Accessibility, and Input Monitoring permissions.
+stopped, inspected, or disabled from the terminal. A one-time Setup window
+handles Microphone, Accessibility, and Input Monitoring permissions. A separate
+lazy Advanced Settings window owns persistent behavior and launch preferences;
+it is not constructed until opened and has no polling task.
 
-The menu's **Dictation Key** submenu selects Right/Left Command, Shift, Option,
-or Control, Caps Lock, Escape, or Fn/Globe and persists that choice. Right
-Command is the default. A selected modifier remains usable in ordinary
+Advanced Settings' **Dictation key** picker selects Right/Left Command, Shift,
+Option, or Control, Caps Lock, Escape, or Fn/Globe and persists that choice.
+Right Command is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
 arms capture without polling, after which the microphone starts and the
@@ -23,25 +27,26 @@ installed Base English whisper.cpp model loads asynchronously. Releasing after
 at least 250 milliseconds transcribes once, pastes at the current focus, and
 unloads the model. A faster tap does nothing.
 
-The checked **Dictation Mode** submenu offers explicit **Press and Hold** and
-**Toggle** choices. The selected mode persists across launches. Toggle changes
+The **Input behavior** picker offers explicit **Press and Hold** and **Toggle**
+choices. The selected mode persists across launches. Toggle changes
 the bare gesture to tap-to-start and tap-again-to-finish. Caps Lock always uses
 toggle mode because macOS exposes its lock-state changes rather than a
 momentary hold/release pair;
 its normal lock state is otherwise left to macOS. Escape is a dedicated,
 consumed trigger when selected, so cancellation remains available from the menu
 instead of the same key. For every other selection, Escape cancels either mode.
-Changing the selected key cancels an active dictation cleanly. The checked
-**Recording Limit** submenu persists a choice from 30 seconds through one hour;
-ten minutes is the default, and reaching the chosen limit finalizes
-automatically. Bare gestures are ignored while a previous dictation is
-finishing.
+Advanced Settings and Setup controls are disabled during active dictation so
+they cannot steal the destination focus. The **Recording limit** picker persists
+a choice from 30 seconds through one hour; ten minutes is the default, and
+reaching the chosen limit finalizes automatically. Bare gestures are ignored
+while a previous dictation is finishing.
 
-The checked **Whisper Model** submenu persists Base English (default), Small
-English, Medium English, or Large-v3 Turbo Q5. Missing local model files remain
-visible but cannot be selected; the app never downloads them. The accuracy-first
-decoder keeps a beam width of five, uses Metal and flash attention, and gives
-whisper.cpp half of the Mac's logical CPUs up to an eight-thread cap.
+The **Whisper model** picker persists Base English (default), Small English,
+Medium English, or Large-v3 Turbo Q5. Missing local model files remain visible
+but cannot be selected; the app never downloads them. The accuracy-first decoder
+keeps a beam width of five, uses Metal and flash attention, and gives whisper.cpp
+half of the Mac's logical CPUs up to an eight-thread cap. **Open at login** uses
+the existing signed one-shot login service and respects explicit opt-out.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a
