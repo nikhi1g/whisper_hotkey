@@ -1,6 +1,6 @@
 # Local models
 
-Version 2.5.0 uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 2.6.0 uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention. Recognition is English-only and entirely local.
 
 | Menu choice | File | Download | Tradeoff |

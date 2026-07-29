@@ -1,27 +1,21 @@
-# whisper_hotkey 2.5.0: Live Flow
+# whisper_hotkey 2.6.0: Personalization
 
-Version 2.5 makes private, low-resource, system-wide dictation feel continuous:
-Pause Mode inserts speech after natural pauses, while the compact HUD follows
-the focused text control until the user chooses a position.
+Version 2.6 makes whisper_hotkey easier to configure, understand, and
+personalize while preserving its local, low-resource dictation workflow.
 
 ## Highlights
 
-- Use **Pause Mode** for ordered, phrase-by-phrase live insertion from one
-  uninterrupted private recording and one session-scoped model helper.
-- Start inserting after a responsive 450 ms pause target that adapts between
-  300 and 750 ms to the current speaking cadence.
-- Preserve continuation punctuation and casing with a private, bounded
-  prior-phrase prompt.
-- Let the fixed-size HUD follow newly focused text controls during dictation
-  through event-driven Accessibility notifications with no polling or idle cost.
-- Drag the HUD to lock its position for the current dictation; the next session
-  returns to automatic placement.
-- Keep compact composers unobscured while rejecting oversized terminal
-  containers in favor of the active caret.
-- Stop and insert with the HUD or dictation key, submit with Return or Send, and
-  discard the complete active dictation with Escape.
-- Retain the low-cost waveform, silence gate, configurable local models,
-  recording limits, login item, and terminal controls from version 2.0.
+- Configure behavior and recognition faster with one-click segmented controls.
+- Choose among eleven restrained HUD themes, including GitHub Dark Dimmed,
+  Nord, Dracula, Solarized Dark, Rosé Pine, and High Contrast.
+- Learn every gesture, completion key, HUD control, behavior, model, and menu
+  action from the built-in User Guide.
+- Review the current key, behavior, model, recording limit, theme, and login
+  state in a compact Settings summary.
+- See empty recordings dismiss twice as quickly through the one-second
+  No Speech Detected status.
+- Retain Press and Hold, Toggle, Pause Mode, configurable local models,
+  caret-aware HUD placement, recording limits, and terminal controls.
 
 Clone the repository and run:
 

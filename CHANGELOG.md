@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.6.0: 2026-07-28
+
+Personalization release.
+
 - Simplified the user-facing settings name to Settings throughout the UI
 - Replaced the three-choice behavior and four-choice model menus with one-click
   segmented chips
