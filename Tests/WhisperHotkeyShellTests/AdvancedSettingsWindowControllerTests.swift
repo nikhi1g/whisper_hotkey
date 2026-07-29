@@ -35,6 +35,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 mode: .toggle,
                 model: .smallEnglish,
                 keepModelReady: true,
+                internalDictionaryEntries: ["Codex", "Claude Code"],
                 limit: .minutes5,
                 availableModels: [.baseEnglish, .smallEnglish]
             )
@@ -46,6 +47,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .smallEnglish)
         XCTAssertTrue(controller.keepModelReadyForTesting)
+        XCTAssertEqual(
+            controller.internalDictionaryEntriesForTesting,
+            ["Codex", "Claude Code"]
+        )
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes5)
         XCTAssertEqual(controller.selectedThemeForTesting, .githubDarkDimmed)
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
@@ -80,7 +85,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 570)
+            CGSize(width: 620, height: 630)
         )
         XCTAssertEqual(
             controller.window?.title,
@@ -136,7 +141,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             }
         )
         XCTAssertTrue(
-            ["Dictation key", "Recording limit", "Theme", "Open at Login"].allSatisfy {
+            [
+                "Dictation key", "Internal dictionary", "Recording limit",
+                "Theme", "Open at Login",
+            ].allSatisfy {
                 title in rows.contains(where: { $0.title == title })
             }
         )
@@ -170,6 +178,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedModels: [DictationModel] = []
         var selectedEngines: [RecognitionEngine] = []
         var readinessSelections: [Bool] = []
+        var dictionarySelections: [[String]] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeTheme] = []
         let controller = AdvancedSettingsWindowController(
@@ -180,6 +189,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectModel: { selectedModels.append($0) },
                 selectEngine: { selectedEngines.append($0) },
                 setKeepModelReady: { readinessSelections.append($0) },
+                setInternalDictionary: { dictionarySelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) }
             ),
@@ -192,6 +202,9 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectModelForTesting(.largeV3TurboQ5)
         controller.selectEngineForTesting(.whisperKitCoreML)
         controller.setKeepModelReadyForTesting(true)
+        controller.setInternalDictionaryForTesting(
+            [" Codex ", "Claude Code", "codex"]
+        )
         controller.selectLimitForTesting(.minutes30)
         controller.selectThemeForTesting(.nord)
 
@@ -200,6 +213,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
         XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
         XCTAssertEqual(readinessSelections, [true])
+        XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.nord])
 
@@ -208,6 +222,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             mode: .toggle,
             model: .largeV3TurboQ5,
             keepModelReady: true,
+            internalDictionaryEntries: ["Codex", "Claude Code"],
             limit: .minutes30,
             theme: .nord,
             availableModels: Set(DictationModel.allCases),
@@ -221,6 +236,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
         XCTAssertEqual(controller.selectedEngineForTesting, .whisperCppMetal)
         XCTAssertTrue(controller.keepModelReadyForTesting)
+        XCTAssertEqual(
+            controller.internalDictionaryEntriesForTesting,
+            ["Codex", "Claude Code"]
+        )
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes30)
         XCTAssertEqual(controller.selectedThemeForTesting, .nord)
         XCTAssertEqual(controller.optionCountsForTesting, initialCounts)
@@ -276,6 +295,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectHotkey: { _ in mutationCount += 1 },
                 selectModel: { _ in mutationCount += 1 },
                 setKeepModelReady: { _ in mutationCount += 1 },
+                setInternalDictionary: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },
                 loginItemChanged: { mutationCount += 1 }
@@ -289,6 +309,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.smallEnglish)
         controller.setKeepModelReadyForTesting(true)
+        controller.setInternalDictionaryForTesting(["Codex"])
         controller.selectLimitForTesting(.seconds30)
         controller.selectThemeForTesting(.dracula)
         controller.setLoginItemForTesting(enabled: true)
@@ -416,6 +437,7 @@ private func makeAdvancedSettingsState(
     mode: HotkeyActivationMode = .hold,
     model: DictationModel = .baseEnglish,
     keepModelReady: Bool = false,
+    internalDictionaryEntries: [String] = [],
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
     availableModels: Set<DictationModel> = [.baseEnglish],
@@ -427,6 +449,7 @@ private func makeAdvancedSettingsState(
         activationMode: mode,
         selectedModel: model,
         keepModelReady: keepModelReady,
+        internalDictionaryEntries: internalDictionaryEntries,
         recordingLimit: limit,
         selectedTheme: theme,
         availableModels: availableModels,

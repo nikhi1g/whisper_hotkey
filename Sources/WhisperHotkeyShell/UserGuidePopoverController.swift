@@ -135,6 +135,11 @@ enum UserGuideContent {
                             ? "On: the selected model stays loaded for the fastest response and higher idle memory use."
                             : "Off: the model loads during each dictation and unloads afterward to minimize idle memory."
                     ),
+                    UserGuideRow(
+                        key: "terms",
+                        title: "Internal dictionary",
+                        detail: "Add names and technical phrases to bias recognition toward their exact spelling. Use commas or Return to create tokens."
+                    ),
                 ]
             ),
             UserGuideSection(

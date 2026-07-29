@@ -51,6 +51,13 @@ Changing the dropdown updates the existing badge, Settings window, and open
 opaque User Guide in place. No window, worker, timer, model, or observer is
 added.
 
+The Internal dictionary is stored as a normalized array of words or phrases in
+UserDefaults. The app precomputes a capped 320-character prompt at launch and
+whenever the token field changes. Normal dictation sends that prompt through
+the owned helper's stdin. Pause Mode combines it with the existing bounded
+session tail. No dictionary worker, file watcher, model, or timer exists at
+idle, and prompt contents are never logged or exposed as process arguments.
+
 ## Module boundaries
 
 | Target | Responsibility |

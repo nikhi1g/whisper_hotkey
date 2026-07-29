@@ -108,6 +108,14 @@ square button is an equivalent stop-and-insert action; its arrow button
 additionally presses Return after the final paste succeeds. Ordinary typing and
 selected-modifier shortcuts remain available between the two taps.
 
+Settings also includes an **Internal dictionary** token field. Add exact names
+or technical phrases such as `Codex`, `Claude Code`, or `MLX`, separated by
+commas or Return. Entries persist locally, preserve their case, and bias every
+recognition mode toward those spellings. The generated Whisper prompt is capped
+at 320 characters, travels only over the helper's private stdin, and is never
+logged or placed in process arguments. Dictionary editing and normalization
+run only at launch or while Settings is open, with no idle task.
+
 Caps Lock cannot use Press and Hold because macOS reports lock-state changes
 rather than a normal hold/release pair; its normal capitalization state remains
 under macOS control. Escape is reserved for aborting active dictation and is not

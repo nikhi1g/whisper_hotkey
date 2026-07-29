@@ -4,9 +4,103 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
     public static let recognitionEngine = "recognitionEngine"
     public static let keepModelReady = "keepModelReady"
+    public static let internalDictionary = "internalDictionary"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
+}
+
+/// User-supplied words and phrases that bias local Whisper decoding.
+///
+/// Entries are persisted as an array so phrases retain their spaces and case.
+/// The generated prompt is deliberately bounded to keep its recognition cost
+/// effectively constant even if preferences are edited outside the app.
+public struct InternalDictionary: Equatable, Sendable {
+    public static let maximumEntries = 64
+    public static let maximumEntryCharacters = 80
+    public static let maximumPromptCharacters = 320
+
+    public let entries: [String]
+    public let prompt: String?
+
+    public init(entries: [String]) {
+        let normalized = Self.normalized(entries)
+        self.entries = normalized
+        self.prompt = Self.makePrompt(from: normalized)
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        Self(
+            entries: defaults.stringArray(
+                forKey: WhisperHotkeyPreferenceKeys.internalDictionary
+            ) ?? []
+        )
+    }
+
+    public func persist(defaults: UserDefaults = .standard) {
+        defaults.set(
+            entries,
+            forKey: WhisperHotkeyPreferenceKeys.internalDictionary
+        )
+    }
+
+    private static func normalized(_ entries: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        var promptCharacterCount = 0
+        result.reserveCapacity(min(entries.count, maximumEntries))
+
+        for rawEntry in entries {
+            let entry = rawEntry
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(maximumEntryCharacters)
+            guard !entry.isEmpty else {
+                continue
+            }
+            let value = String(entry)
+            let identity = value.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+            guard seen.insert(identity).inserted else {
+                continue
+            }
+            let separatorCount = result.isEmpty ? 0 : 2
+            guard promptCharacterCount + separatorCount + value.count
+                    <= maximumPromptCharacters
+            else {
+                continue
+            }
+            result.append(value)
+            promptCharacterCount += separatorCount + value.count
+            if result.count == maximumEntries {
+                break
+            }
+        }
+        return result
+    }
+
+    private static func makePrompt(from entries: [String]) -> String? {
+        guard !entries.isEmpty else {
+            return nil
+        }
+
+        var included: [String] = []
+        var characterCount = 0
+        for entry in entries {
+            let separatorCount = included.isEmpty ? 0 : 2
+            guard characterCount + separatorCount + entry.count
+                    <= maximumPromptCharacters
+            else {
+                break
+            }
+            included.append(entry)
+            characterCount += separatorCount + entry.count
+        }
+        return included.isEmpty ? nil : included.joined(separator: ", ")
+    }
 }
 
 public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {

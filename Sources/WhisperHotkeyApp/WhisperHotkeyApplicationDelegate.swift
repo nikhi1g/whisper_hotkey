@@ -16,6 +16,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         selectedModel: .baseEnglish,
         selectedEngine: .whisperCppMetal,
         keepModelReady: false,
+        internalDictionaryEntries: [],
         recordingLimit: .minutes10,
         availableModels: [],
         availableEngines: [],
@@ -67,6 +68,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedEngine = RecognitionEngine.selected()
     private var keepModelReady =
         WhisperModelReadinessPreference.keepsModelReady()
+    private var internalDictionary = InternalDictionary.selected()
     private var recordingLimit = RecordingLimit.selected()
     private var selectedTheme = BadgeTheme.selected()
 
@@ -596,6 +598,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let generation = sessionGeneration
         let precedingCleanup = recognizerCleanupTask
         let sessionPreload = preloadTask
+        let recognitionPrompt = internalDictionary.prompt
         recognitionTask = Task { @MainActor [weak self, recognizer] in
             defer {
                 audio.delete()
@@ -608,7 +611,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     await sessionPreload.value
                 }
                 try Task.checkCancellation()
-                let transcript = try await recognizer.transcribe(audio)
+                let transcript = try await recognizer.transcribe(
+                    audio,
+                    prompt: recognitionPrompt
+                )
                 guard let self,
                       runtimeReadyForHotkey,
                       !isTerminating,
@@ -747,6 +753,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let generation = sessionGeneration
         let precedingRecognition = recognitionTask
         let sessionPreload = preloadTask
+        let recognitionPrompt = RecognitionPrompt.combined(
+            dictionaryPrompt: internalDictionary.prompt,
+            contextPrompt: pauseSessionPrompt
+        )
         recognitionTask = Task { @MainActor [weak self, recognizer] in
             defer { audio.delete() }
             if let precedingRecognition {
@@ -768,7 +778,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             do {
                 let transcript = try await recognizer.transcribeChunk(
                     audio,
-                    prompt: pauseSessionPrompt
+                    prompt: recognitionPrompt
                 )
                 guard !Task.isCancelled,
                       generation == sessionGeneration,
@@ -1143,6 +1153,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectedModel: selectedModel,
             selectedEngine: selectedEngine,
             keepModelReady: keepModelReady,
+            internalDictionaryEntries: internalDictionary.entries,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
             availableModels: availableModels,
@@ -1176,6 +1187,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     setKeepModelReady: { [weak self] enabled in
                         self?.setKeepModelReady(enabled)
+                    },
+                    setInternalDictionary: { [weak self] entries in
+                        self?.setInternalDictionary(entries)
                     },
                     selectRecordingLimit: { [weak self] limit in
                         self?.selectRecordingLimit(limit)
@@ -1299,6 +1313,19 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         configureModelReadiness()
         updateMenuBar()
+    }
+
+    private func setInternalDictionary(_ entries: [String]) {
+        guard !machine.phase.isBusy else {
+            return
+        }
+        let updated = InternalDictionary(entries: entries)
+        guard updated != internalDictionary else {
+            return
+        }
+        internalDictionary = updated
+        updated.persist()
+        advancedSettingsWindowController?.refreshIfVisible()
     }
 
     private func configureModelReadiness(

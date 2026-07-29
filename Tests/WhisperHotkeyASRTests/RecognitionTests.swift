@@ -569,6 +569,36 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(readiness, .idle)
     }
 
+    func testOrdinaryDictationSendsVocabularyPromptOverHelperStdin()
+        async throws
+    {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf '%s\\n' '{"event":"ready"}'
+            IFS= read -r command
+            printf '%s\\n' "$command" >> "${0}.commands"
+            printf '%s\\n' '{"event":"result","text":"Codex"}'
+            """
+        )
+        defer { fixture.delete() }
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration
+        )
+
+        let transcript = try await recognizer.transcribe(
+            fixture.makeAudio(),
+            prompt: "Codex, Claude Code"
+        )
+
+        XCTAssertEqual(transcript, "Codex")
+        XCTAssertTrue(
+            try fixture.helperCommands().contains(
+                #""prompt":"Codex, Claude Code""#
+            )
+        )
+    }
+
     func testKeepModelReadyReusesHelperAcrossOrdinaryDictations()
         async throws
     {

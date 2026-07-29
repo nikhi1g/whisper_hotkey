@@ -83,7 +83,18 @@ as muted model chips but cannot be selected; the app never downloads them. The
 full model description is available from each chip's native help text. The
 accuracy-first decoder
 keeps a beam width of five on whisper.cpp, uses Metal and flash attention, and gives whisper.cpp
-half of the Mac's logical CPUs up to an eight-thread cap. The persistent
+half of the Mac's logical CPUs up to an eight-thread cap. The
+**Internal dictionary** stores up to 64 user-defined words or phrases as native
+preference strings. Settings presents them as editable tokens: commas and Return
+commit an entry and Backspace removes one. Entries are trimmed, capped, and
+deduplicated case-insensitively. The complete saved list fits a precomputed
+prompt of at most 320 characters and combines with the existing bounded Pause
+Mode context.
+Dictionary parsing happens only at launch or while Settings is edited; it adds
+no idle task, process, model, or network work. The prompt remains local, travels
+only through the owned helper's stdin, and is never logged or placed in process
+arguments.
+The persistent
 **Keep Model Ready** switch sits directly below the model picker and defaults
 off. When enabled, the selected helper and model preload once and remain ready
 between dictations for the shortest recognition startup time, at the cost of

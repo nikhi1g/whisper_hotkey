@@ -8,6 +8,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedModel: DictationModel
     public let selectedEngine: RecognitionEngine
     public let keepModelReady: Bool
+    public let internalDictionaryEntries: [String]
     public let recordingLimit: RecordingLimit
     public let selectedTheme: BadgeTheme
     public let availableModels: Set<DictationModel>
@@ -20,6 +21,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         selectedModel: DictationModel,
         selectedEngine: RecognitionEngine = .defaultEngine,
         keepModelReady: Bool = false,
+        internalDictionaryEntries: [String] = [],
         recordingLimit: RecordingLimit,
         selectedTheme: BadgeTheme = .defaultTheme,
         availableModels: Set<DictationModel>,
@@ -31,6 +33,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.selectedModel = selectedModel
         self.selectedEngine = selectedEngine
         self.keepModelReady = keepModelReady
+        self.internalDictionaryEntries = internalDictionaryEntries
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
         self.availableModels = availableModels
@@ -46,6 +49,7 @@ public struct AdvancedSettingsActions {
     public var selectModel: (DictationModel) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
     public var setKeepModelReady: (Bool) -> Void
+    public var setInternalDictionary: ([String]) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeTheme) -> Void
     public var loginItemChanged: () -> Void
@@ -56,6 +60,7 @@ public struct AdvancedSettingsActions {
         selectModel: @escaping (DictationModel) -> Void,
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         setKeepModelReady: @escaping (Bool) -> Void = { _ in },
+        setInternalDictionary: @escaping ([String]) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
         loginItemChanged: @escaping () -> Void = {}
@@ -65,6 +70,7 @@ public struct AdvancedSettingsActions {
         self.selectModel = selectModel
         self.selectEngine = selectEngine
         self.setKeepModelReady = setKeepModelReady
+        self.setInternalDictionary = setInternalDictionary
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
         self.loginItemChanged = loginItemChanged
@@ -102,7 +108,8 @@ enum DictationModelPresentation {
 @MainActor
 public final class AdvancedSettingsWindowController:
     NSWindowController,
-    NSWindowDelegate
+    NSWindowDelegate,
+    NSTokenFieldDelegate
 {
     public typealias StateProvider = () -> AdvancedSettingsState
 
@@ -117,6 +124,7 @@ public final class AdvancedSettingsWindowController:
     private let keepModelReadyLabel = NSTextField(
         labelWithString: "Keep model ready"
     )
+    private let internalDictionaryField = NSTokenField()
     private let recordingLimitPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
     private let loginItemToggle = NSButton(
@@ -160,7 +168,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 570),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 630),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -212,6 +220,10 @@ public final class AdvancedSettingsWindowController:
         select(model: state.selectedModel)
         select(engine: state.selectedEngine)
         keepModelReadySwitch.state = state.keepModelReady ? .on : .off
+        if window?.firstResponder !== internalDictionaryField.currentEditor() {
+            internalDictionaryField.objectValue =
+                state.internalDictionaryEntries
+        }
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         select(rawValue: state.selectedTheme.rawValue, in: themePopup)
 
@@ -220,6 +232,7 @@ public final class AdvancedSettingsWindowController:
         modelControl.isEnabled = state.configurationEnabled
         engineControl.isEnabled = state.configurationEnabled
         keepModelReadySwitch.isEnabled = state.configurationEnabled
+        internalDictionaryField.isEnabled = state.configurationEnabled
         keepModelReadyLabel.textColor = state.configurationEnabled
             ? .labelColor
             : .disabledControlTextColor
@@ -269,6 +282,8 @@ public final class AdvancedSettingsWindowController:
     }
 
     public func windowWillClose(_ notification: Notification) {
+        window?.makeFirstResponder(nil)
+        commitInternalDictionary()
         userGuidePopover.close()
         NSApp.deactivate()
     }
@@ -367,6 +382,18 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
+    @objc private func updateInternalDictionary(_ sender: NSTokenField) {
+        commitInternalDictionary()
+    }
+
+    public func controlTextDidEndEditing(_ notification: Notification) {
+        guard notification.object as? NSTokenField === internalDictionaryField
+        else {
+            return
+        }
+        commitInternalDictionary()
+    }
+
     @objc private func selectTheme(_ sender: NSPopUpButton) {
         guard stateProvider().configurationEnabled,
               let rawValue = sender.selectedItem?.representedObject as? String,
@@ -439,6 +466,22 @@ public final class AdvancedSettingsWindowController:
         keepModelReadySwitch.toolTip =
             "Keeps the selected Whisper model loaded for the fastest transcription."
         keepModelReadySwitch.setAccessibilityLabel("Keep Model Ready")
+        internalDictionaryField.delegate = self
+        internalDictionaryField.target = self
+        internalDictionaryField.action =
+            #selector(updateInternalDictionary(_:))
+        internalDictionaryField.tokenStyle = .rounded
+        internalDictionaryField.tokenizingCharacterSet =
+            CharacterSet(charactersIn: ",\n")
+        internalDictionaryField.placeholderString =
+            "Add words or phrases, then press Return"
+        internalDictionaryField.toolTip =
+            "Biases local recognition toward these spellings. Separate entries with commas or Return."
+        internalDictionaryField.setAccessibilityLabel("Internal Dictionary")
+        internalDictionaryField.maximumNumberOfLines = 3
+        internalDictionaryField.lineBreakMode = .byWordWrapping
+        internalDictionaryField.cell?.wraps = true
+        internalDictionaryField.cell?.usesSingleLineMode = false
         configure(
             recordingLimitPopup,
             values: RecordingLimit.allCases.map {
@@ -533,6 +576,29 @@ public final class AdvancedSettingsWindowController:
             loginItemSettingsButton.isHidden = false
         }
         loginItemToggle.isEnabled = status != .unknown
+    }
+
+    private func commitInternalDictionary() {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        let rawEntries: [String]
+        if let entries = internalDictionaryField.objectValue as? [String] {
+            rawEntries = entries
+        } else {
+            rawEntries = internalDictionaryField.stringValue.components(
+                separatedBy: CharacterSet(charactersIn: ",\n")
+            )
+        }
+        let dictionary = InternalDictionary(entries: rawEntries)
+        internalDictionaryField.objectValue = dictionary.entries
+        guard dictionary.entries
+                != stateProvider().internalDictionaryEntries
+        else {
+            return
+        }
+        actions.setInternalDictionary(dictionary.entries)
     }
 
     private func updateSummary(
@@ -664,6 +730,14 @@ public final class AdvancedSettingsWindowController:
         let recognitionGrid = makeGrid()
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
         addRow(to: recognitionGrid, title: "Engine", control: engineControl)
+        addRow(
+            to: recognitionGrid,
+            title: "Internal dictionary",
+            control: internalDictionaryField
+        )
+        internalDictionaryField.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: 52
+        ).isActive = true
         let readinessControls = NSStackView(
             views: [keepModelReadySwitch, keepModelReadyLabel]
         )
@@ -832,6 +906,7 @@ public final class AdvancedSettingsWindowController:
             && modelControl.isEnabled
             && engineControl.isEnabled
             && keepModelReadySwitch.isEnabled
+            && internalDictionaryField.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
     }
@@ -863,6 +938,7 @@ public final class AdvancedSettingsWindowController:
             ("mode", modeControl),
             ("model", modelControl),
             ("engine", engineControl),
+            ("internal dictionary", internalDictionaryField),
             ("readiness switch", keepModelReadySwitch),
             ("readiness label", keepModelReadyLabel),
             ("limit", recordingLimitPopup),
@@ -977,6 +1053,15 @@ public final class AdvancedSettingsWindowController:
 
     var keepModelReadyForTesting: Bool {
         keepModelReadySwitch.state == .on
+    }
+
+    var internalDictionaryEntriesForTesting: [String] {
+        internalDictionaryField.objectValue as? [String] ?? []
+    }
+
+    func setInternalDictionaryForTesting(_ entries: [String]) {
+        internalDictionaryField.objectValue = entries
+        updateInternalDictionary(internalDictionaryField)
     }
 
     func selectLimitForTesting(_ limit: RecordingLimit) {

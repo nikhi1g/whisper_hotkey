@@ -376,8 +376,15 @@ public actor WhisperRecognizer {
         }
     }
 
-    public func transcribe(_ audio: WhisperAudioFile) async throws -> String {
-        try await transcribe(audio, keepHelperLoaded: false)
+    public func transcribe(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil
+    ) async throws -> String {
+        try await transcribe(
+            audio,
+            keepHelperLoaded: false,
+            prompt: prompt
+        )
     }
 
     /// Transcribes one ordered chunk while retaining the model process for the
