@@ -119,7 +119,7 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.holdActivationFired())
     }
 
-    func testEscapeStopsAndInsertsActiveHoldAndConsumesItsKeyPair() {
+    func testEscapeCancelsActiveHoldAndConsumesItsKeyPair() {
         var reducer = GlobalInputReducer()
         _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
         XCTAssertEqual(reducer.holdActivationFired(), .pressed)
@@ -128,7 +128,7 @@ final class HotkeyTests: XCTestCase {
             reducer.route(key(.keyDown, MacVirtualKey.escape, command: true)),
             GlobalInputRouting(
                 consume: true,
-                actions: [.disarmHold, .hotkey(.stopAndInsert)]
+                actions: [.disarmHold, .hotkey(.cancel)]
             )
         )
         XCTAssertEqual(
@@ -260,23 +260,41 @@ final class HotkeyTests: XCTestCase {
         )
     }
 
-    func testEscapeStopsAndInsertsToggleSessionAfterCommandIsReleased() {
-        var reducer = GlobalInputReducer(activationMode: .toggle)
-        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
-        _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false))
-
-        XCTAssertEqual(
-            reducer.route(key(.keyDown, MacVirtualKey.escape, command: false)),
-            GlobalInputRouting(
-                consume: true,
-                actions: [.hotkey(.stopAndInsert)]
+    func testEscapeCancelsToggleAndPauseSessionsAfterHotkeyRelease() {
+        for mode in [HotkeyActivationMode.toggle, .pause] {
+            var reducer = GlobalInputReducer(activationMode: mode)
+            _ = reducer.route(
+                key(
+                    .flagsChanged,
+                    MacVirtualKey.rightCommand,
+                    command: true
+                )
             )
-        )
-        XCTAssertEqual(
-            reducer.route(key(.keyUp, MacVirtualKey.escape, command: false)),
-            GlobalInputRouting(consume: true)
-        )
-        XCTAssertNil(reducer.reset())
+            _ = reducer.route(
+                key(
+                    .flagsChanged,
+                    MacVirtualKey.rightCommand,
+                    command: false
+                )
+            )
+
+            XCTAssertEqual(
+                reducer.route(
+                    key(.keyDown, MacVirtualKey.escape, command: false)
+                ),
+                GlobalInputRouting(
+                    consume: true,
+                    actions: [.hotkey(.cancel)]
+                )
+            )
+            XCTAssertEqual(
+                reducer.route(
+                    key(.keyUp, MacVirtualKey.escape, command: false)
+                ),
+                GlobalInputRouting(consume: true)
+            )
+            XCTAssertNil(reducer.reset())
+        }
     }
 
     func testReturnSendsActiveToggleSessionAndConsumesItsKeyPair() {
@@ -438,21 +456,8 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.holdActivationFired())
     }
 
-    func testEscapeCanBeDedicatedHoldKey() {
-        var reducer = GlobalInputReducer(hotkey: .escape)
-
-        XCTAssertEqual(
-            reducer.route(key(.keyDown, MacVirtualKey.escape, command: false)),
-            GlobalInputRouting(consume: true, actions: [.armHold])
-        )
-        XCTAssertEqual(reducer.holdActivationFired(), .pressed)
-        XCTAssertEqual(
-            reducer.route(key(.keyUp, MacVirtualKey.escape, command: false)),
-            GlobalInputRouting(
-                consume: true,
-                actions: [.disarmHold, .hotkey(.released)]
-            )
-        )
+    func testEscapeIsReservedAndCannotDecodeAsASelectableHotkey() {
+        XCTAssertNil(HotkeyKey(rawValue: "escape"))
     }
 
     func testCapsLockAlwaysUsesSuccessiveToggleEvents() {

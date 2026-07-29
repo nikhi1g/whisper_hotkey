@@ -530,9 +530,12 @@ int main(int argc, char ** argv) {
         whisper_full_params params = whisper_full_default_params(
             options.strategy
         );
+        const std::string prompt = command["prompt"];
         params.n_threads = options.threads;
         params.translate = false;
         params.no_context = true;
+        params.initial_prompt = prompt.empty() ? nullptr : prompt.c_str();
+        params.carry_initial_prompt = false;
         params.no_timestamps = true;
         params.print_special = false;
         params.print_progress = false;

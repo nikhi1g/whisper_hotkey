@@ -146,6 +146,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var lastDictation: String?
     private var pauseSessionDidInsert = false
     private var pauseBoundaryInProgress = false
+    private var pauseSessionPrompt: String?
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
     private var startupBadgeVisible = false
@@ -510,6 +511,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionPrompt = nil
 
         let precedingCleanup = recognizerCleanupTask
         preloadTask = Task.detached(priority: .userInitiated) { [recognizer] in
@@ -740,7 +742,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             do {
-                let transcript = try await recognizer.transcribeChunk(audio)
+                let transcript = try await recognizer.transcribeChunk(
+                    audio,
+                    prompt: pauseSessionPrompt
+                )
                 guard !Task.isCancelled,
                       generation == sessionGeneration,
                       machine.phase == .listening
@@ -781,6 +786,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             pauseSessionDidInsert = true
+            pauseSessionPrompt = lastDictation.flatMap(
+                DictationContextPrompt.boundedTail
+            )
             logger.info("Pause-mode chunk inserted")
             updateMenuBar()
 
@@ -835,6 +843,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionPrompt = nil
         let cancelledPreload = preloadTask
         cancelledPreload?.cancel()
         preloadTask = nil
@@ -1245,6 +1254,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionPrompt = nil
         preloadTask?.cancel()
         preloadTask = nil
         recognitionTask?.cancel()

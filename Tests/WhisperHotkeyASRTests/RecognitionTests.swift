@@ -133,7 +133,8 @@ final class RecognitionTests: XCTestCase {
         let data = try WhisperHelperProtocol.transcribeCommand(
             audioURL: URL(
                 fileURLWithPath: #"/private/a folder/"quoted".wav"#
-            )
+            ),
+            prompt: "Codex continues this sentence,"
         )
         XCTAssertEqual(data.last, 0x0A)
         XCTAssertEqual(data.filter { $0 == 0x0A }.count, 1)
@@ -147,6 +148,10 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(
             object["audioPath"],
             #"/private/a folder/"quoted".wav"#
+        )
+        XCTAssertEqual(
+            object["prompt"],
+            "Codex continues this sentence,"
         )
     }
 
@@ -459,6 +464,7 @@ final class RecognitionTests: XCTestCase {
             printf '%s\\n' '{"event":"ready"}'
             count=0
             while IFS= read -r command; do
+                printf '%s\\n' "$command" >> "${0}.commands"
                 count=$((count + 1))
                 printf '{"event":"result","text":"chunk %s"}\\n' "$count"
             done
@@ -473,13 +479,19 @@ final class RecognitionTests: XCTestCase {
             fixture.makeAudio()
         )
         let second = try await recognizer.transcribeChunk(
-            fixture.makeAudio()
+            fixture.makeAudio(),
+            prompt: "The first phrase continues,"
         )
         await recognizer.finishContinuousSession()
 
         XCTAssertEqual(first, "chunk 1")
         XCTAssertEqual(second, "chunk 2")
         XCTAssertEqual(try fixture.helperAttemptCount(), 1)
+        XCTAssertTrue(
+            try fixture.helperCommands().contains(
+                #""prompt":"The first phrase continues,""#
+            )
+        )
         let readiness = await recognizer.readiness
         XCTAssertEqual(readiness, .idle)
     }
@@ -850,6 +862,17 @@ private final class RecognitionFixture {
         try attemptCount(
             executableURL: configuration.commandLineExecutableURL
         )
+    }
+
+    func helperCommands() throws -> String {
+        guard let helperURL = configuration.helperExecutableURL else {
+            return ""
+        }
+        let commands = URL(fileURLWithPath: helperURL.path + ".commands")
+        guard FileManager.default.fileExists(atPath: commands.path) else {
+            return ""
+        }
+        return try String(contentsOf: commands, encoding: .utf8)
     }
 
     private func attemptCount(executableURL: URL?) throws -> Int {

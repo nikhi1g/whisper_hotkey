@@ -18,7 +18,7 @@ lazy Advanced Settings window owns persistent behavior and launch preferences;
 it is not constructed until opened and has no polling task.
 
 Advanced Settings' **Dictation key** picker selects Right/Left Command, Shift,
-Option, or Control, Caps Lock, Escape, or Fn/Globe and persists that choice.
+Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Command is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
@@ -34,16 +34,22 @@ uses that same gesture but treats roughly 850 milliseconds of silence following
 confirmed speech as a phrase boundary. It immediately rotates to a fresh
 private WAV, transcribes and pastes completed phrases in strict order, and keeps
 listening until the user stops the session. It reuses one loaded helper during
-the active session, but retains no model or audio worker at idle. Caps Lock
+the active session. Every later phrase receives a private, bounded 240-character
+tail of the current session as its initial Whisper prompt so punctuation and
+casing can follow the preceding phrase instead of treating every pause as a new
+utterance. The prompt travels only over the owned helper's stdin, is never a
+process argument, and does not grow with session length. The app retains no
+model or audio worker at idle. Caps Lock
 cannot use Press and Hold because macOS exposes its lock-state changes rather
 than a momentary hold/release pair; it can use Toggle or Pause Mode.
-its normal lock state is otherwise left to macOS. Escape is a dedicated,
-consumed trigger when selected. During active dictation, Escape otherwise acts
-exactly like Stop and Insert: it finalizes, transcribes, and inserts without
-pressing Return. Return and keypad Enter act exactly like Send: they finalize,
-insert, and then post one unmodified Return. Both key pairs are consumed only
-for an active dictation; ordinary Escape and Return remain untouched. True
-cancellation and audio discard remain available from the menu.
+Its normal lock state is otherwise left to macOS. Escape is reserved as an
+unambiguous abort action: during active dictation it stops capture, cancels
+queued or active recognition, deletes the private audio, and inserts nothing.
+It cannot be selected as the dictation trigger; a legacy stored Escape choice
+migrates to Right Command. Return and keypad Enter act exactly like Send: they
+finalize, insert, and then post one unmodified Return. These keys are consumed
+only for an active dictation; ordinary Escape and Return remain untouched.
+Cancellation and audio discard are also available from the menu.
 Advanced Settings and Setup controls are disabled during active dictation so
 they cannot steal the destination focus. The **Recording limit** picker persists
 a choice from 30 seconds through one hour; ten minutes is the default, and

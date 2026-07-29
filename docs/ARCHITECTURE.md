@@ -27,6 +27,8 @@ Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
 helper, and deletes the private audio directory. Pause Mode instead rotates the
 WAV after 850 milliseconds of post-speech silence, serially transcribes and
 pastes each phrase, and reuses the loaded helper until the active session ends.
+The next decode is conditioned on at most 240 trailing characters from the
+current session, sent through the helper's private JSON-line stdin channel.
 
 The status menu contains only immediate actions. A lazy native Advanced Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login
@@ -59,7 +61,9 @@ Hold mode uses one cancellable 150 ms timer; toggle and Pause modes use
 successive bare presses. Pause boundaries come from the recorder's existing
 speech-energy detector. Capture rotates and resumes during the silence, while
 recognition tasks form a strict serial chain so phrases can never paste out of
-order. Effects are serialized through the main-actor state machine, and a
+order. Because the next task starts only after the prior result is accepted, it
+can use a bounded prior-text prompt to preserve continuation punctuation and
+casing. Effects are serialized through the main-actor state machine, and a
 generation number rejects stale recognition results.
 
 The badge prefers Accessibility caret geometry, including Chromium text

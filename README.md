@@ -6,10 +6,11 @@ whisper.cpp.
 `whisper_hotkey` is a background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
 English Whisper transcription at the current selection. Advanced Settings can
-instead select either side of Command, Shift, Option, or Control, plus Caps Lock,
-Escape, or Fn/Globe. A selected modifier remains normal when combined with
-another key or a mouse click. A hold shorter than 250 ms is discarded, Escape
-cancels unless it is the selected trigger. The persistent **Recording limit**
+instead select either side of Command, Shift, Option, or Control, plus Caps Lock
+or Fn/Globe. A selected modifier remains normal when combined with another key
+or a mouse click. A hold shorter than 250 ms is discarded. Escape always cancels
+an active dictation and safely discards its pending audio and result. The
+persistent **Recording limit**
 picker chooses an automatic stop from 30 seconds through one hour; ten minutes
 is the default.
 
@@ -20,9 +21,9 @@ key, gesture, model, duration, and Open at Login controls live in a separate
 native **Advanced Settings…** window. While recording, the caret badge shows a
 scrolling audio-reactive waveform, elapsed time, **Stop and Insert**, and
 **Send**. Stop and Insert behaves like hotkey release; Send inserts and then
-presses Return. While dictating, Escape is the keyboard shortcut for Stop and
-Insert, and Return or keypad Enter is the keyboard shortcut for Send. These keys
-behave normally when dictation is inactive. The badge normally shows only
+presses Return. While dictating, Escape aborts and inserts nothing; Return or
+keypad Enter is the keyboard shortcut for Send. These keys behave normally when
+dictation is inactive. The badge normally shows only
 elapsed time. In the final minute,
 it switches to a remaining-time countdown whose text shifts from orange to red
 and reveals the thin limit track; shorter limits use their full duration for the
@@ -71,16 +72,19 @@ tap and release the selected key once to start, speak while the badge waveform
 is active, then tap and release it again to transcribe and insert. Pause Mode
 uses the same start/stop gesture but automatically transcribes and pastes each
 phrase after about 850 milliseconds of silence, then keeps listening. This gives
-live, phrase-by-phrase typing without sending audio to a service. The badge's
+live, phrase-by-phrase typing without sending audio to a service. Each decode
+receives only the final 240 characters of the current session as private local
+context, helping Whisper preserve mid-sentence casing and punctuation across
+pause boundaries without unbounded context growth. The badge's
 square button is an equivalent stop-and-insert action; its arrow button
 additionally presses Return after the final paste succeeds. Ordinary typing and
 selected-modifier shortcuts remain available between the two taps.
 
-Caps Lock always uses toggle mode because macOS reports lock-state changes
+Caps Lock cannot use Press and Hold because macOS reports lock-state changes
 rather than a normal hold/release pair; its normal capitalization state remains
-under macOS control. Selecting Escape makes it a dedicated consumed trigger, so
-use **Cancel Dictation** in the menu to cancel. For every other trigger, Escape
-continues to cancel.
+under macOS control. Escape is reserved for aborting active dictation and is not
+available as a dictation trigger. An older stored Escape-trigger preference
+safely falls back to Right Command.
 
 In hold mode, a single cancellable 150 ms timer distinguishes a deliberate bare
 hold from a shortcut. The microphone and model do not start during that dwell.
@@ -199,7 +203,9 @@ bare-key release. A normal dictation owns the model helper only until its one
 insertion. Pause Mode reuses one helper and loaded model for its ordered phrase
 chunks, then terminates it when the session stops, is cancelled, reaches its
 limit, or fails. Capture restarts during the detected silence before the prior
-chunk is decoded, minimizing missed speech. Idle operation is event-driven; no
+chunk is decoded, minimizing missed speech. Its bounded context reaches the
+helper over the private stdin protocol, never as a process argument. Idle
+operation is event-driven; no
 Whisper model, transcription helper, polling worker, audio, or transcript
 history remains resident. The menu-bar icon is updated only by state
 transitions. The waveform and pause detector read the existing capture callback

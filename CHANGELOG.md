@@ -5,7 +5,12 @@
 - Added Pause Mode for automatic ordered phrase insertion after natural pauses
 - Reused one loaded Whisper helper during an active Pause Mode session while
   preserving zero model/audio-worker residency at idle
-- Made Escape stop, transcribe, and insert active dictation without submitting
+- Added bounded local prior-phrase context for continuation punctuation and
+  casing across Pause Mode chunks
+- Made Escape unambiguously abort active dictation, discard its private audio,
+  cancel recognition, and insert nothing
+- Reserved Escape for cancellation and migrated legacy Escape triggers to Right
+  Command
 - Made Return and keypad Enter stop, insert, and submit active dictation
 - Preserved ordinary Escape and Return behavior outside active dictation
 

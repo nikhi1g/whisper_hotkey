@@ -31,7 +31,6 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
     case rightControl
     case leftControl
     case capsLock
-    case escape
     case function
 
     public var displayName: String {
@@ -54,8 +53,6 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
             "Left Control"
         case .capsLock:
             "Caps Lock"
-        case .escape:
-            "Escape"
         case .function:
             "Fn / Globe"
         }
@@ -81,8 +78,6 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
             MacVirtualKey.leftControl
         case .capsLock:
             MacVirtualKey.capsLock
-        case .escape:
-            MacVirtualKey.escape
         case .function:
             MacVirtualKey.function
         }
@@ -92,10 +87,6 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
     /// pair through the macOS flags-changed stream.
     public var requiresToggleMode: Bool {
         self == .capsLock
-    }
-
-    var consumesKeyEvents: Bool {
-        self == .escape
     }
 
     func modifierIsDown(in flags: CGEventFlags) -> Bool {
@@ -119,8 +110,6 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
             .maskAlphaShift
         case .function:
             .maskSecondaryFn
-        case .escape:
-            nil
         }
     }
 }
@@ -252,8 +241,8 @@ public struct GlobalInputReducer: Sendable {
             return routeSelectedHotkey(event)
         }
 
-        if hotkey != .escape, event.keyCode == MacVirtualKey.escape {
-            return routeCompletionKey(event, action: .stopAndInsert)
+        if event.keyCode == MacVirtualKey.escape {
+            return routeCompletionKey(event, action: .cancel)
         }
 
         if event.keyCode == MacVirtualKey.returnKey
@@ -336,13 +325,13 @@ public struct GlobalInputReducer: Sendable {
 
         case .keyDown:
             guard !hotkeyIsDown, !event.isAutoRepeat else {
-                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+                return GlobalInputRouting(consume: false)
             }
             return armHoldHotkey()
 
         case .keyUp:
             guard hotkeyIsDown else {
-                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+                return GlobalInputRouting(consume: false)
             }
             return releaseHoldHotkey()
         }
@@ -352,7 +341,7 @@ public struct GlobalInputReducer: Sendable {
         hotkeyIsDown = true
         bareHotkeyCandidate = true
         return GlobalInputRouting(
-            consume: hotkey.consumesKeyEvents,
+            consume: false,
             actions: [.armHold]
         )
     }
@@ -366,7 +355,7 @@ public struct GlobalInputReducer: Sendable {
         }
         dictationHoldIsActive = false
         return GlobalInputRouting(
-            consume: hotkey.consumesKeyEvents,
+            consume: false,
             actions: actions
         )
     }
@@ -386,13 +375,13 @@ public struct GlobalInputReducer: Sendable {
 
         case .keyDown:
             guard !hotkeyIsDown, !event.isAutoRepeat else {
-                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+                return GlobalInputRouting(consume: false)
             }
             return armToggleHotkey()
 
         case .keyUp:
             guard hotkeyIsDown else {
-                return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+                return GlobalInputRouting(consume: false)
             }
             return releaseToggleHotkey()
         }
@@ -401,7 +390,7 @@ public struct GlobalInputReducer: Sendable {
     private mutating func armToggleHotkey() -> GlobalInputRouting {
         hotkeyIsDown = true
         bareHotkeyCandidate = true
-        return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+        return GlobalInputRouting(consume: false)
     }
 
     private mutating func releaseToggleHotkey() -> GlobalInputRouting {
@@ -409,12 +398,12 @@ public struct GlobalInputReducer: Sendable {
         let shouldToggle = bareHotkeyCandidate
         bareHotkeyCandidate = false
         guard shouldToggle else {
-            return GlobalInputRouting(consume: hotkey.consumesKeyEvents)
+            return GlobalInputRouting(consume: false)
         }
         let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
         toggleSessionIsActive.toggle()
         return GlobalInputRouting(
-            consume: hotkey.consumesKeyEvents,
+            consume: false,
             actions: [.hotkey(action)]
         )
     }

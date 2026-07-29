@@ -189,6 +189,7 @@ enum WhisperHelperProtocol {
     private struct CommandEnvelope: Encodable {
         let command = "transcribe"
         let audioPath: String
+        let prompt: String?
     }
 
     static func parse(_ line: String) throws -> WhisperHelperEvent {
@@ -220,9 +221,12 @@ enum WhisperHelperProtocol {
         }
     }
 
-    static func transcribeCommand(audioURL: URL) throws -> Data {
+    static func transcribeCommand(
+        audioURL: URL,
+        prompt: String? = nil
+    ) throws -> Data {
         var data = try JSONEncoder().encode(
-            CommandEnvelope(audioPath: audioURL.path)
+            CommandEnvelope(audioPath: audioURL.path, prompt: prompt)
         )
         data.append(0x0A)
         return data
@@ -273,8 +277,15 @@ public actor WhisperRecognizer {
 
     /// Transcribes one ordered chunk while retaining the model process for the
     /// next chunk in the same active pause-mode session.
-    public func transcribeChunk(_ audio: WhisperAudioFile) async throws -> String {
-        try await transcribe(audio, keepHelperLoaded: true)
+    public func transcribeChunk(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil
+    ) async throws -> String {
+        try await transcribe(
+            audio,
+            keepHelperLoaded: true,
+            prompt: prompt
+        )
     }
 
     public func finishContinuousSession() {
@@ -286,7 +297,8 @@ public actor WhisperRecognizer {
 
     private func transcribe(
         _ audio: WhisperAudioFile,
-        keepHelperLoaded: Bool
+        keepHelperLoaded: Bool,
+        prompt: String? = nil
     ) async throws -> String {
         defer { audio.delete() }
         let lease = try ensureLease()
@@ -304,6 +316,7 @@ public actor WhisperRecognizer {
                 let helper = try await preparedHelper()
                 let transcript = try await helper.transcribe(
                     audioURL: audio.url,
+                    prompt: prompt,
                     timeout: options.transcriptionTimeout
                 )
                 return try cleanedTranscript(transcript)
@@ -652,12 +665,14 @@ private final class WhisperHelperSession: @unchecked Sendable {
 
     func transcribe(
         audioURL: URL,
+        prompt: String?,
         timeout: TimeInterval
     ) async throws -> String {
         do {
             try inputHandle.write(
                 contentsOf: WhisperHelperProtocol.transcribeCommand(
-                    audioURL: audioURL
+                    audioURL: audioURL,
+                    prompt: prompt
                 )
             )
         } catch {
