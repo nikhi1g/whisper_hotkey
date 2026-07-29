@@ -72,11 +72,17 @@ reaching the chosen limit finalizes automatically. Bare gestures are ignored
 while a previous dictation is finishing.
 
 The **Whisper model** picker persists Base English (default), Small English,
-Medium English, or Large-v3 Turbo Q5. Missing local model files remain visible
+Medium English, or Large-v3 Turbo Q5. Its adjacent **Engine** selector offers
+the default whisper.cpp Metal path, an optional whisper.cpp Core ML encoder
+path, and an optional native WhisperKit Core ML and Neural Engine path. Only
+the selected engine is loaded. The two Core ML choices require their verified
+local artifacts and remain disabled when those artifacts are absent. They
+perform no runtime download and fall back only by an explicit user selection,
+never silently. Missing local model files remain visible
 as muted model chips but cannot be selected; the app never downloads them. The
 full model description is available from each chip's native help text. The
 accuracy-first decoder
-keeps a beam width of five, uses Metal and flash attention, and gives whisper.cpp
+keeps a beam width of five on whisper.cpp, uses Metal and flash attention, and gives whisper.cpp
 half of the Mac's logical CPUs up to an eight-thread cap. The persistent
 **Keep Model Ready** switch sits directly below the model picker and defaults
 off. When enabled, the selected helper and model preload once and remain ready

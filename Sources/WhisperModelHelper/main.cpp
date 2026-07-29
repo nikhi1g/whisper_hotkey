@@ -25,6 +25,7 @@ struct Options {
     std::string model_path;
     int threads = 4;
     int beam_size = 5;
+    bool require_coreml = false;
     whisper_sampling_strategy strategy = WHISPER_SAMPLING_BEAM_SEARCH;
 };
 
@@ -114,6 +115,8 @@ bool parse_options(int argc, char ** argv, Options * options) {
             } else {
                 return false;
             }
+        } else if (argument == "--require-coreml") {
+            options->require_coreml = true;
         } else {
             return false;
         }
@@ -472,6 +475,17 @@ int main(int argc, char ** argv) {
 
     whisper_log_set(discard_whisper_log, nullptr);
     ggml_backend_load_all();
+    const char * system_info = whisper_print_system_info();
+    if (options.require_coreml
+        && (system_info == nullptr
+            || std::string(system_info).find("COREML = 1")
+                == std::string::npos)) {
+        return emit_error(
+            "coreml_unavailable",
+            "Whisper helper was not built with Core ML",
+            69
+        );
+    }
     whisper_context_params context_params =
         whisper_context_default_params();
     context_params.use_gpu = true;

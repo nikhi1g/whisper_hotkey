@@ -23,11 +23,20 @@ let package = Package(
             targets: ["WhisperHotkeyLoginLauncher"]
         ),
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/argmaxinc/argmax-oss-swift.git",
+            revision: "8fcbfed028415b0b90f0f10ee7b0303c53b600a0"
+        ),
+    ],
     targets: [
         .target(name: "WhisperHotkeyCore"),
         .target(
             name: "WhisperHotkeyASR",
-            dependencies: ["WhisperHotkeyCore"]
+            dependencies: [
+                "WhisperHotkeyCore",
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
+            ]
         ),
         .target(
             name: "WhisperHotkeySystem",

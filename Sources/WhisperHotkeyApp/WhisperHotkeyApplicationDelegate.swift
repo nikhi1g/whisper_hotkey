@@ -14,9 +14,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         selectedHotkey: .rightCommand,
         activationMode: .hold,
         selectedModel: .baseEnglish,
+        selectedEngine: .whisperCppMetal,
         keepModelReady: false,
         recordingLimit: .minutes10,
         availableModels: [],
+        availableEngines: [],
         configurationEnabled: false
     )
 
@@ -62,6 +64,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedDictationMode =
         WhisperHotkeyApplicationDelegate.loadDictationMode()
     private var selectedModel = DictationModel.selected()
+    private var selectedEngine = RecognitionEngine.selected()
     private var keepModelReady =
         WhisperModelReadinessPreference.keepsModelReady()
     private var recordingLimit = RecordingLimit.selected()
@@ -1138,10 +1141,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectedHotkey: selectedHotkey,
             activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
+            selectedEngine: selectedEngine,
             keepModelReady: keepModelReady,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
             availableModels: availableModels,
+            availableEngines: availableEngines,
             configurationEnabled: !machine.phase.isBusy
         )
     }
@@ -1165,6 +1170,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectModel: { [weak self] model in
                         self?.selectModel(model)
+                    },
+                    selectEngine: { [weak self] engine in
+                        self?.selectEngine(engine)
                     },
                     setKeepModelReady: { [weak self] enabled in
                         self?.setKeepModelReady(enabled)
@@ -1257,6 +1265,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(
             model.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.dictationModel
+        )
+        configureModelReadiness(reloadSelectedModel: true)
+        reconcileRuntime(showSetupIfNeeded: false)
+        setupWindowController.refresh()
+    }
+
+    private func selectEngine(_ engine: RecognitionEngine) {
+        guard !machine.phase.isBusy,
+              engineAvailable(engine, model: selectedModel),
+              selectedEngine != engine
+        else {
+            return
+        }
+        selectedEngine = engine
+        UserDefaults.standard.set(
+            engine.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
         )
         configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
@@ -1418,7 +1443,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             modelAvailable: readiness.modelAvailable,
             hotkey: selectedHotkey.displayName,
             hotkeyMode: hotkeyActivationMode.rawValue,
-            model: selectedModel.displayName,
+            model: "\(selectedModel.displayName), \(selectedEngine.displayName)",
             recordingLimit: recordingLimit.displayName,
             threadCount: WhisperRuntimeDiscovery.recommendedThreadCount(),
             lastError: machine.lastError ?? startupError
@@ -1438,15 +1463,30 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func modelAvailable(_ model: DictationModel) -> Bool {
-        var isDirectory = ObjCBool(false)
-        return FileManager.default.fileExists(
-            atPath: WhisperHotkeyPaths.modelURL(for: model).path,
-            isDirectory: &isDirectory
-        ) && !isDirectory.boolValue
+        engineAvailable(selectedEngine, model: model)
+    }
+
+    private var availableEngines: Set<RecognitionEngine> {
+        Set(RecognitionEngine.allCases.filter {
+            engineAvailable($0, model: selectedModel)
+        })
+    }
+
+    private func engineAvailable(
+        _ engine: RecognitionEngine,
+        model: DictationModel
+    ) -> Bool {
+        (try? WhisperRuntimeDiscovery.discover(
+            model: model,
+            engine: engine
+        )) != nil
     }
 
     private var helperAvailable: Bool {
-        WhisperRuntimeDiscovery.helperCandidates().contains {
+        if selectedEngine == .whisperKitCoreML {
+            return true
+        }
+        return WhisperRuntimeDiscovery.helperCandidates().contains {
             FileManager.default.isExecutableFile(atPath: $0.path)
         }
     }

@@ -56,13 +56,19 @@ added.
 | Target | Responsibility |
 | --- | --- |
 | `WhisperHotkeyCore` | State machine, contracts, model and limit preferences |
-| `WhisperHotkeyASR` | Capture, helper lifecycle, whisper.cpp invocation, sanitization |
+| `WhisperHotkeyASR` | Capture, exclusive engine lifecycle, whisper.cpp or WhisperKit invocation, sanitization |
 | `WhisperHotkeySystem` | Global input, Accessibility, pasteboard, Command-V/Return |
 | `WhisperHotkeyShell` | Menu, Setup and Settings, badge, login item, local control socket |
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
 | `whisper_hotkey` | Terminal control client |
 | `WhisperModelHelper` | Session-owned C++ bridge that can decode ordered WAV chunks with one model load |
 | `WhisperHotkeyLoginLauncher` | Signed one-shot login and post-exit restart launcher |
+
+The recognition engine preference is orthogonal to model size. Metal and the
+Core ML encoder option use the owned C++ helper. WhisperKit is an in-process,
+pinned Swift package using Core ML GPU and Neural Engine compute units. Only
+one path can be active, all consume the same private WAV contract, and no path
+may download at runtime or silently fall back to another selected engine.
 
 ## State and delivery
 

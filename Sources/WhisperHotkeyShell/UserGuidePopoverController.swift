@@ -109,6 +109,26 @@ enum UserGuideContent {
                         detail: "A muted chip means its local model file is not installed."
                     ),
                     UserGuideRow(
+                        key: "metal",
+                        title: "whisper.cpp Metal",
+                        detail: "Default path: fast GPU decoding with the smallest app overhead."
+                    ),
+                    UserGuideRow(
+                        key: "core ml",
+                        title: "whisper.cpp Core ML Encoder",
+                        detail: "Runs the audio encoder on Core ML while whisper.cpp decodes the text."
+                    ),
+                    UserGuideRow(
+                        key: "ane",
+                        title: "WhisperKit",
+                        detail: "Native Core ML path optimized for Apple GPU and Neural Engine execution."
+                    ),
+                    UserGuideRow(
+                        key: state.selectedEngine.displayName.lowercased(),
+                        title: "Selected engine",
+                        detail: state.selectedEngine.menuTitle
+                    ),
+                    UserGuideRow(
                         key: state.keepModelReady ? "on" : "off",
                         title: "Keep Model Ready",
                         detail: state.keepModelReady

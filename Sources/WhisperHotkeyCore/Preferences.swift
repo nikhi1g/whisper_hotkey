@@ -2,10 +2,52 @@ import Foundation
 
 public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
+    public static let recognitionEngine = "recognitionEngine"
     public static let keepModelReady = "keepModelReady"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
+}
+
+public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
+    case whisperCppMetal
+    case whisperCppCoreML
+    case whisperKitCoreML
+
+    public static let defaultEngine: Self = .whisperCppMetal
+
+    public var displayName: String {
+        switch self {
+        case .whisperCppMetal:
+            "Metal"
+        case .whisperCppCoreML:
+            "Core ML Encoder"
+        case .whisperKitCoreML:
+            "WhisperKit"
+        }
+    }
+
+    public var menuTitle: String {
+        switch self {
+        case .whisperCppMetal:
+            "whisper.cpp Metal (Current)"
+        case .whisperCppCoreML:
+            "whisper.cpp Core ML Encoder"
+        case .whisperKitCoreML:
+            "WhisperKit Core ML and Neural Engine"
+        }
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        guard let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+        ) else {
+            return .defaultEngine
+        }
+        return Self(rawValue: rawValue) ?? .defaultEngine
+    }
 }
 
 public enum WhisperModelReadinessPreference {
@@ -119,6 +161,19 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
             "ggml-medium.en.bin"
         case .largeV3TurboQ5:
             "ggml-large-v3-turbo-q5_0.bin"
+        }
+    }
+
+    public var whisperKitFolderName: String {
+        switch self {
+        case .baseEnglish:
+            "openai_whisper-base.en"
+        case .smallEnglish:
+            "openai_whisper-small.en"
+        case .mediumEnglish:
+            "openai_whisper-medium.en"
+        case .largeV3TurboQ5:
+            "openai_whisper-large-v3-v20240930_626MB"
         }
     }
 

@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import XCTest
 @testable import WhisperHotkeyASR
+import WhisperHotkeyCore
 
 final class RecognitionTests: XCTestCase {
     func testHelperArgumentsUseAccuracyFirstDefaults() {
@@ -218,6 +219,78 @@ final class RecognitionTests: XCTestCase {
             homeDirectory: root
         )
         XCTAssertEqual(configuration.modelURL, model)
+    }
+
+    func testDiscoveryRequiresCompleteExplicitAcceleratedArtifacts() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let coreMLModel = WhisperHotkeyPaths.coreMLModelURL(
+            for: .baseEnglish,
+            homeDirectory: home
+        )
+        let encoder = WhisperHotkeyPaths.coreMLEncoderURL(
+            for: .baseEnglish,
+            homeDirectory: home
+        )
+        try FileManager.default.createDirectory(
+            at: coreMLModel.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data([0]).write(to: coreMLModel)
+        XCTAssertThrowsError(
+            try WhisperRuntimeDiscovery.discover(
+                model: .baseEnglish,
+                engine: .whisperCppCoreML,
+                environment: ["WHISPER_HOTKEY_COREML": "1"],
+                homeDirectory: home
+            )
+        )
+        try FileManager.default.createDirectory(
+            at: encoder,
+            withIntermediateDirectories: true
+        )
+        let coreMLConfiguration = try WhisperRuntimeDiscovery.discover(
+            model: .baseEnglish,
+            engine: .whisperCppCoreML,
+            environment: ["WHISPER_HOTKEY_COREML": "1"],
+            homeDirectory: home
+        )
+        XCTAssertEqual(coreMLConfiguration.modelURL, coreMLModel)
+
+        let whisperKit = WhisperHotkeyPaths.whisperKitModelURL(
+            for: .baseEnglish,
+            homeDirectory: home
+        )
+        try FileManager.default.createDirectory(
+            at: whisperKit,
+            withIntermediateDirectories: true
+        )
+        for name in [
+            "AudioEncoder.mlmodelc",
+            "MelSpectrogram.mlmodelc",
+            "TextDecoder.mlmodelc",
+        ] {
+            try FileManager.default.createDirectory(
+                at: whisperKit.appendingPathComponent(name),
+                withIntermediateDirectories: true
+            )
+        }
+        try Data("{}".utf8).write(
+            to: whisperKit.appendingPathComponent("tokenizer.json")
+        )
+        try Data("{}".utf8).write(
+            to: whisperKit.appendingPathComponent("tokenizer_config.json")
+        )
+        let whisperKitConfiguration = try WhisperRuntimeDiscovery.discover(
+            model: .baseEnglish,
+            engine: .whisperKitCoreML,
+            environment: [:],
+            homeDirectory: home
+        )
+        XCTAssertEqual(whisperKitConfiguration.modelURL, whisperKit)
+        XCTAssertEqual(whisperKitConfiguration.engine, .whisperKitCoreML)
     }
 
     func testThreadBudgetUsesHalfTheMachineUpToEight() {

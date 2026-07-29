@@ -90,8 +90,62 @@ def bundle(products: Path) -> None:
     shutil.copy2(products / "whisper_hotkey", DIST / "whisper_hotkey")
     shutil.copy2(ROOT / "purpose.md", RESOURCES / "purpose.md")
     shutil.copy2(ASSETS / "AppIcon.icns", RESOURCES / "AppIcon.icns")
+    if os.environ.get("WHISPER_HOTKEY_COREML") == "1":
+        (RESOURCES / "CoreMLEnabled").touch()
     write_info_plist()
     write_login_agent_plist()
+
+
+def bundled_dynamic_libraries() -> list[Path]:
+    prefix = os.environ.get("WHISPER_CPP_PREFIX", "").strip()
+    if not prefix:
+        return []
+    prefix_path = Path(prefix).resolve()
+    helper = MACOS / "WhisperModelHelper"
+    pending = [helper]
+    copied: dict[Path, Path] = {}
+    while pending:
+        binary = pending.pop()
+        result = subprocess.run(
+            ["/usr/bin/otool", "-L", str(binary)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in result.stdout.splitlines()[1:]:
+            dependency_text = line.strip().split(" (", 1)[0]
+            if dependency_text.startswith("@rpath/"):
+                dependency = prefix_path / "lib" / Path(dependency_text).name
+                if not dependency.exists():
+                    continue
+            else:
+                dependency = Path(dependency_text)
+                try:
+                    dependency.resolve().relative_to(prefix_path)
+                except (ValueError, FileNotFoundError):
+                    continue
+            source = dependency.resolve()
+            destination = FRAMEWORKS / Path(dependency_text).name
+            if source not in copied:
+                shutil.copy2(source, destination)
+                destination.chmod(0o755)
+                copied[source] = destination
+                pending.append(destination)
+            run([
+                "/usr/bin/install_name_tool",
+                "-change",
+                dependency_text,
+                f"@rpath/{destination.name}",
+                str(binary),
+            ])
+    for library in copied.values():
+        run([
+            "/usr/bin/install_name_tool",
+            "-id",
+            f"@rpath/{library.name}",
+            str(library),
+        ])
+    return list(copied.values())
 
 
 def signing_identity() -> str:
@@ -115,8 +169,9 @@ def signing_identity() -> str:
     )
 
 
-def sign(identity: str) -> None:
+def sign(identity: str, libraries: list[Path]) -> None:
     targets = [
+        *((library, None) for library in libraries),
         (MACOS / "WhisperModelHelper", None),
         (MACOS / LOGIN_LAUNCHER_NAME, LOGIN_AGENT_LABEL),
         (DIST / "whisper_hotkey", None),
@@ -149,8 +204,9 @@ def main() -> None:
     products = swift_build()
     DIST.mkdir(parents=True, exist_ok=True)
     bundle(products)
+    libraries = bundled_dynamic_libraries()
     identity = signing_identity()
-    sign(identity)
+    sign(identity, libraries)
     print(APP)
 
 

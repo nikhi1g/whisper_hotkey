@@ -71,6 +71,37 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
+    func testRecognitionEnginesDefaultToMetalAndPersist() {
+        let suite = "whisper_hotkey-engines-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(
+            RecognitionEngine.selected(defaults: defaults),
+            .whisperCppMetal
+        )
+        XCTAssertEqual(
+            RecognitionEngine.allCases,
+            [.whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML]
+        )
+        defaults.set(
+            RecognitionEngine.whisperKitCoreML.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+        )
+        XCTAssertEqual(
+            RecognitionEngine.selected(defaults: defaults),
+            .whisperKitCoreML
+        )
+        defaults.set(
+            "unknown",
+            forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+        )
+        XCTAssertEqual(
+            RecognitionEngine.selected(defaults: defaults),
+            .whisperCppMetal
+        )
+    }
+
     func testRecordingLimitsCoverThirtySecondsThroughOneHour() {
         XCTAssertEqual(RecordingLimit.allCases.first?.seconds, 30)
         XCTAssertEqual(RecordingLimit.allCases.last?.seconds, 3_600)

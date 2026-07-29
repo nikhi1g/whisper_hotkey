@@ -6,29 +6,35 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedHotkey: HotkeyKey
     public let activationMode: HotkeyActivationMode
     public let selectedModel: DictationModel
+    public let selectedEngine: RecognitionEngine
     public let keepModelReady: Bool
     public let recordingLimit: RecordingLimit
     public let selectedTheme: BadgeTheme
     public let availableModels: Set<DictationModel>
+    public let availableEngines: Set<RecognitionEngine>
     public let configurationEnabled: Bool
 
     public init(
         selectedHotkey: HotkeyKey,
         activationMode: HotkeyActivationMode,
         selectedModel: DictationModel,
+        selectedEngine: RecognitionEngine = .defaultEngine,
         keepModelReady: Bool = false,
         recordingLimit: RecordingLimit,
         selectedTheme: BadgeTheme = .defaultTheme,
         availableModels: Set<DictationModel>,
+        availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
         configurationEnabled: Bool
     ) {
         self.selectedHotkey = selectedHotkey
         self.activationMode = activationMode
         self.selectedModel = selectedModel
+        self.selectedEngine = selectedEngine
         self.keepModelReady = keepModelReady
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
         self.availableModels = availableModels
+        self.availableEngines = availableEngines
         self.configurationEnabled = configurationEnabled
     }
 }
@@ -38,6 +44,7 @@ public struct AdvancedSettingsActions {
     public var selectDictationMode: (HotkeyActivationMode) -> Void
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
+    public var selectEngine: (RecognitionEngine) -> Void
     public var setKeepModelReady: (Bool) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeTheme) -> Void
@@ -47,6 +54,7 @@ public struct AdvancedSettingsActions {
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
+        selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         setKeepModelReady: @escaping (Bool) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
@@ -55,6 +63,7 @@ public struct AdvancedSettingsActions {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
+        self.selectEngine = selectEngine
         self.setKeepModelReady = setKeepModelReady
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
@@ -103,6 +112,7 @@ public final class AdvancedSettingsWindowController:
     private let hotkeyPopup = NSPopUpButton()
     private let modeControl = NSSegmentedControl()
     private let modelControl = NSSegmentedControl()
+    private let engineControl = NSSegmentedControl()
     private let keepModelReadySwitch = NSSwitch()
     private let keepModelReadyLabel = NSTextField(
         labelWithString: "Keep model ready"
@@ -150,7 +160,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 570),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -200,6 +210,7 @@ public final class AdvancedSettingsWindowController:
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
         select(mode: state.activationMode)
         select(model: state.selectedModel)
+        select(engine: state.selectedEngine)
         keepModelReadySwitch.state = state.keepModelReady ? .on : .off
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         select(rawValue: state.selectedTheme.rawValue, in: themePopup)
@@ -207,6 +218,7 @@ public final class AdvancedSettingsWindowController:
         hotkeyPopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
         modelControl.isEnabled = state.configurationEnabled
+        engineControl.isEnabled = state.configurationEnabled
         keepModelReadySwitch.isEnabled = state.configurationEnabled
         keepModelReadyLabel.textColor = state.configurationEnabled
             ? .labelColor
@@ -222,6 +234,19 @@ public final class AdvancedSettingsWindowController:
             )
             modelControl.setToolTip(
                 installed ? model.menuTitle : "\(model.menuTitle): Not Installed",
+                forSegment: index
+            )
+        }
+        for (index, engine) in RecognitionEngine.allCases.enumerated() {
+            let installed = state.availableEngines.contains(engine)
+            engineControl.setEnabled(
+                state.configurationEnabled && installed,
+                forSegment: index
+            )
+            engineControl.setToolTip(
+                installed
+                    ? engine.menuTitle
+                    : "\(engine.menuTitle): Required local files are not installed",
                 forSegment: index
             )
         }
@@ -299,6 +324,25 @@ public final class AdvancedSettingsWindowController:
             return
         }
         actions.selectModel(model)
+        refresh()
+    }
+
+    @objc private func selectEngine(_ sender: NSSegmentedControl) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              RecognitionEngine.allCases.indices.contains(
+                sender.selectedSegment
+              )
+        else {
+            refresh()
+            return
+        }
+        let engine = RecognitionEngine.allCases[sender.selectedSegment]
+        guard state.availableEngines.contains(engine) else {
+            refresh()
+            return
+        }
+        actions.selectEngine(engine)
         refresh()
     }
 
@@ -385,6 +429,11 @@ public final class AdvancedSettingsWindowController:
             ),
             action: #selector(selectModel(_:))
         )
+        configure(
+            engineControl,
+            labels: RecognitionEngine.allCases.map(\.displayName),
+            action: #selector(selectEngine(_:))
+        )
         keepModelReadySwitch.target = self
         keepModelReadySwitch.action = #selector(toggleKeepModelReady(_:))
         keepModelReadySwitch.toolTip =
@@ -454,6 +503,10 @@ public final class AdvancedSettingsWindowController:
         helpButton.action = #selector(toggleUserGuide)
         helpButton.toolTip = "Open User Guide"
         helpButton.setAccessibilityLabel("Open User Guide")
+        NSLayoutConstraint.activate([
+            helpButton.widthAnchor.constraint(equalToConstant: 24),
+            helpButton.heightAnchor.constraint(equalToConstant: 24),
+        ])
     }
 
     private func updateLoginItemControls(_ status: LoginItemStatus) {
@@ -492,6 +545,7 @@ public final class AdvancedSettingsWindowController:
         )
         modelSummary.stringValue =
             "\(DictationModelPresentation.chipTitle(for: state.selectedModel)) "
+            + "\(state.selectedEngine.displayName) "
             + (state.keepModelReady ? "Ready" : "On Demand")
         limitSummary.stringValue = state.recordingLimit.displayName
         themeSummary.stringValue = state.selectedTheme.summaryName
@@ -562,6 +616,14 @@ public final class AdvancedSettingsWindowController:
         modelControl.selectedSegment = index
     }
 
+    private func select(engine: RecognitionEngine) {
+        guard let index = RecognitionEngine.allCases.firstIndex(of: engine)
+        else {
+            return
+        }
+        engineControl.selectedSegment = index
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         root.wantsLayer = true
@@ -601,6 +663,7 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionTitle)
         let recognitionGrid = makeGrid()
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        addRow(to: recognitionGrid, title: "Engine", control: engineControl)
         let readinessControls = NSStackView(
             views: [keepModelReadySwitch, keepModelReadyLabel]
         )
@@ -743,6 +806,15 @@ public final class AdvancedSettingsWindowController:
         return DictationModel.allCases[modelControl.selectedSegment]
     }
 
+    var selectedEngineForTesting: RecognitionEngine? {
+        guard RecognitionEngine.allCases.indices.contains(
+            engineControl.selectedSegment
+        ) else {
+            return nil
+        }
+        return RecognitionEngine.allCases[engineControl.selectedSegment]
+    }
+
     var selectedLimitForTesting: RecordingLimit? {
         selectedValue(in: recordingLimitPopup)
     }
@@ -758,6 +830,7 @@ public final class AdvancedSettingsWindowController:
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
             && modelControl.isEnabled
+            && engineControl.isEnabled
             && keepModelReadySwitch.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
@@ -772,6 +845,8 @@ public final class AdvancedSettingsWindowController:
             && modeControl.trackingMode == .selectOne
             && modelControl.segmentStyle == .rounded
             && modelControl.trackingMode == .selectOne
+            && engineControl.segmentStyle == .rounded
+            && engineControl.trackingMode == .selectOne
     }
 
     var controlsFitWindowForTesting: Bool {
@@ -787,6 +862,7 @@ public final class AdvancedSettingsWindowController:
             ("hotkey", hotkeyPopup),
             ("mode", modeControl),
             ("model", modelControl),
+            ("engine", engineControl),
             ("readiness switch", keepModelReadySwitch),
             ("readiness label", keepModelReadyLabel),
             ("limit", recordingLimitPopup),
@@ -825,6 +901,7 @@ public final class AdvancedSettingsWindowController:
             hotkeyPopup.numberOfItems,
             modeControl.segmentCount,
             modelControl.segmentCount,
+            engineControl.segmentCount,
             recordingLimitPopup.numberOfItems,
             themePopup.numberOfItems,
         ]
@@ -886,6 +963,11 @@ public final class AdvancedSettingsWindowController:
     func selectModelForTesting(_ model: DictationModel) {
         select(model: model)
         selectModel(modelControl)
+    }
+
+    func selectEngineForTesting(_ engine: RecognitionEngine) {
+        select(engine: engine)
+        selectEngine(engineControl)
     }
 
     func setKeepModelReadyForTesting(_ enabled: Bool) {

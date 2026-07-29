@@ -1,7 +1,7 @@
 # whisper_hotkey
 
 Private, local, low-resource dictation for any macOS application, powered by
-whisper.cpp.
+whisper.cpp or optional native Core ML engines.
 
 `whisper_hotkey` is a background macOS dictation utility. By default,
 hold the physical Right Command key, speak, and release to paste a local Base
@@ -65,13 +65,26 @@ cd whisper_hotkey
 
 The script installs Homebrew `whisper-cpp` when needed, downloads and verifies
 Base English, builds/signs the app, installs it in `/Applications`, launches it,
-and opens permission setup. With no Apple signing identity it clearly warns and
-uses an ad-hoc local signature; macOS may then request permissions again after a
-future rebuild.
+and opens permission setup. A stable Apple code-signing identity is required so
+privacy permissions remain attached to one stable application identity.
 
 Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
 `./run.sh --all-models` for all four. See [Models](docs/MODELS.md) and
 [Architecture](docs/ARCHITECTURE.md).
+
+The default engine remains whisper.cpp Metal. Two verified, opt-in Apple
+acceleration paths are available:
+
+```sh
+./run.sh --model turbo --engine coreml
+./run.sh --model turbo --engine whisperkit
+```
+
+The first builds the pinned whisper.cpp helper with Core ML encoder support.
+The second installs the pinned native WhisperKit model and tokenizer bundle.
+Both choices appear under **Engine** beside **Model** in Settings only when
+their required local artifacts are complete. The running app never downloads
+an engine or model.
 
 ## Use
 
@@ -209,6 +222,16 @@ The Settings model picker presents four one-click chips:
 
 Missing models remain visible but disabled. The running app never downloads
 weights; only the explicitly invoked bootstrap does.
+The adjacent Engine chips select one of three local paths:
+
+- **Metal**: the existing whisper.cpp GPU and flash-attention path.
+- **Core ML Encoder**: whisper.cpp decoding with its encoder on Core ML.
+- **WhisperKit**: native Swift Core ML execution using Apple GPU and Neural
+  Engine compute units.
+
+Only the selected engine loads. A Core ML option is disabled when its matching
+model artifacts are not installed, and an engine failure never silently changes
+the user's selection.
 The decoder keeps beam search at width five for accuracy, uses Metal and flash
 attention, and assigns half the available logical CPUs up to eight threads.
 The **Keep Model Ready** switch directly below the model chips defaults off.

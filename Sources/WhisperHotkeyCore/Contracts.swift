@@ -129,6 +129,54 @@ public enum WhisperHotkeyPaths {
             .standardizedFileURL
     }
 
+    public static func coreMLModelURL(
+        for model: DictationModel,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        homeDirectory
+            .appendingPathComponent(
+                ".cache/whisper/coreml",
+                isDirectory: true
+            )
+            .appendingPathComponent(model.fileName)
+            .standardizedFileURL
+    }
+
+    public static func coreMLEncoderURL(
+        for model: DictationModel,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        let modelURL = coreMLModelURL(
+            for: model,
+            homeDirectory: homeDirectory
+        )
+        var stem = modelURL.deletingPathExtension().lastPathComponent
+        if let quantizedRange = stem.range(
+            of: #"-q\d_\d$"#,
+            options: .regularExpression
+        ) {
+            stem.removeSubrange(quantizedRange)
+        }
+        return modelURL.deletingLastPathComponent()
+            .appendingPathComponent(
+                "\(stem)-encoder.mlmodelc",
+                isDirectory: true
+            )
+    }
+
+    public static func whisperKitModelURL(
+        for model: DictationModel,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        homeDirectory
+            .appendingPathComponent(
+                ".cache/whisperkit",
+                isDirectory: true
+            )
+            .appendingPathComponent(model.whisperKitFolderName, isDirectory: true)
+            .standardizedFileURL
+    }
+
     public static var modelPath: String {
         modelURL(for: DictationModel.selected()).path
     }

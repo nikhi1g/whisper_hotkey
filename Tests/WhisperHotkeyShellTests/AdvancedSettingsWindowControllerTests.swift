@@ -64,7 +64,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.summaryValuesForTesting,
             [
-                "Right Option", "Toggle", "Small Ready", "5 Minutes",
+                "Right Option", "Toggle", "Small Metal Ready", "5 Minutes",
                 "Dimmed", "Login On",
             ]
         )
@@ -80,7 +80,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 540)
+            CGSize(width: 620, height: 570)
         )
         XCTAssertEqual(
             controller.window?.title,
@@ -161,12 +161,14 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     func testEachPreferenceControlRoutesExactlyOnceAndRefreshDoesNotDuplicateOptions() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
-                availableModels: Set(DictationModel.allCases)
+                availableModels: Set(DictationModel.allCases),
+                availableEngines: Set(RecognitionEngine.allCases)
             )
         )
         var selectedHotkeys: [HotkeyKey] = []
         var selectedModes: [HotkeyActivationMode] = []
         var selectedModels: [DictationModel] = []
+        var selectedEngines: [RecognitionEngine] = []
         var readinessSelections: [Bool] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeTheme] = []
@@ -176,6 +178,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDictationMode: { selectedModes.append($0) },
                 selectHotkey: { selectedHotkeys.append($0) },
                 selectModel: { selectedModels.append($0) },
+                selectEngine: { selectedEngines.append($0) },
                 setKeepModelReady: { readinessSelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) }
@@ -187,6 +190,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectHotkeyForTesting(.leftShift)
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.largeV3TurboQ5)
+        controller.selectEngineForTesting(.whisperKitCoreML)
         controller.setKeepModelReadyForTesting(true)
         controller.selectLimitForTesting(.minutes30)
         controller.selectThemeForTesting(.nord)
@@ -194,6 +198,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedHotkeys, [.leftShift])
         XCTAssertEqual(selectedModes, [.toggle])
         XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
+        XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
         XCTAssertEqual(readinessSelections, [true])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.nord])
@@ -205,7 +210,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             keepModelReady: true,
             limit: .minutes30,
             theme: .nord,
-            availableModels: Set(DictationModel.allCases)
+            availableModels: Set(DictationModel.allCases),
+            availableEngines: Set(RecognitionEngine.allCases)
         )
         controller.refresh()
         controller.refresh()
@@ -213,6 +219,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedHotkeyForTesting, .leftShift)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
+        XCTAssertEqual(controller.selectedEngineForTesting, .whisperCppMetal)
         XCTAssertTrue(controller.keepModelReadyForTesting)
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes30)
         XCTAssertEqual(controller.selectedThemeForTesting, .nord)
@@ -412,6 +419,7 @@ private func makeAdvancedSettingsState(
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
     availableModels: Set<DictationModel> = [.baseEnglish],
+    availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
     configurationEnabled: Bool = true
 ) -> AdvancedSettingsState {
     AdvancedSettingsState(
@@ -422,6 +430,7 @@ private func makeAdvancedSettingsState(
         recordingLimit: limit,
         selectedTheme: theme,
         availableModels: availableModels,
+        availableEngines: availableEngines,
         configurationEnabled: configurationEnabled
     )
 }
