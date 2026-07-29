@@ -76,7 +76,12 @@ keeps a beam width of five, uses Metal and flash attention, and gives whisper.cp
 half of the Mac's logical CPUs up to an eight-thread cap. **Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
 The bottom of Settings reports the current key, behavior, model, recording
-limit, and login state as compact read-only summary chips.
+limit, theme, and login state as compact read-only summary chips.
+The **Theme** dropdown changes only the floating HUD and persists immediately.
+GitHub Dark Dimmed remains the default. Ten additional restrained presets are
+Midnight Indigo, Graphite, Nord, Dracula, Solarized Dark, Forest, Ocean, Rosé
+Pine, Light Frost, and High Contrast. Theme application is event-driven and
+adds no idle work.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a
@@ -133,7 +138,8 @@ states show Transcribing, Busy, or an
 actionable error. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. There is no live text preview or success
-confirmation.
+confirmation. No Speech Detected clears after one second; other errors remain
+visible for two seconds.
 
 Insertion always posts one local Command-V to the currently focused application.
 This naturally replaces the current selection in normal text controls. When

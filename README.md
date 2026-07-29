@@ -25,8 +25,10 @@ presses Return. While dictating, Escape aborts and inserts nothing; Return or
 keypad Enter is the keyboard shortcut for Send. These keys behave normally when
 dictation is inactive. The question-mark button in the lower-right of Settings
 opens the complete user guide. A compact row beside it summarizes the active
-key, behavior, model, recording limit, and login state. The badge normally shows
-only elapsed time. In the final minute,
+key, behavior, model, recording limit, theme, and login state. The Theme
+dropdown offers GitHub Dark Dimmed plus ten varied HUD presets and applies the
+choice immediately. The badge normally shows only elapsed time. In the final
+minute,
 it switches to a remaining-time countdown whose text shifts from orange to red
 and reveals the thin limit track; shorter limits use their full duration for the
 warning. The badge uses a borderless flat surface with a restrained system

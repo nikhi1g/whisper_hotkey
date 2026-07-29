@@ -43,6 +43,9 @@ permissions-and-files repair surface.
 The Settings help popover and configuration summary are created only with the
 Settings window. They derive from the same in-memory state provider, perform no
 I/O, and add no idle worker or timer.
+HUD themes are value-type palettes selected from a persisted core preference.
+Changing the dropdown updates the existing badge view and its layers in place;
+no window, worker, timer, model, or observer is added.
 
 ## Module boundaries
 

@@ -9,7 +9,6 @@ import WhisperHotkeySystem
 
 @MainActor
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
-    private static let errorPresentationDuration: Duration = .seconds(2)
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
     private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
         selectedHotkey: .rightCommand,
@@ -52,7 +51,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             sendAndSubmit: { [weak self] in
                 self?.finishFromBadge(.insertAndSubmit)
             }
-        )
+        ),
+        theme: selectedTheme
     )
     private var selectedHotkey = HotkeyKey(
         rawValue: UserDefaults.standard.string(forKey: "dictationHotkey") ?? ""
@@ -61,6 +61,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         WhisperHotkeyApplicationDelegate.loadDictationMode()
     private var selectedModel = DictationModel.selected()
     private var recordingLimit = RecordingLimit.selected()
+    private var selectedTheme = BadgeTheme.selected()
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -678,7 +679,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             completionBehavior = .insert
 
             guard pauseSessionDidInsert else {
-                fail("No speech detected.")
+                fail(
+                    "No speech detected.",
+                    presentationDuration: BadgePresentationDuration.noSpeech
+                )
                 return
             }
             if shouldSubmit {
@@ -836,7 +840,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return false
 
         case .emptyTranscript:
-            fail("No speech detected.")
+            fail(
+                "No speech detected.",
+                presentationDuration: BadgePresentationDuration.noSpeech
+            )
             return false
         }
     }
@@ -879,15 +886,25 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func fail(_ error: Error) {
         logger.error("Dictation failed: \(error.localizedDescription, privacy: .public)")
-        fail(userFacingMessage(for: error))
+        let duration = (error as? WhisperASRError) == .noSpeech
+            ? BadgePresentationDuration.noSpeech
+            : BadgePresentationDuration.standardError
+        fail(
+            userFacingMessage(for: error),
+            presentationDuration: duration
+        )
     }
 
-    private func fail(_ message: String) {
+    private func fail(
+        _ message: String,
+        presentationDuration: Duration =
+            BadgePresentationDuration.standardError
+    ) {
         process(.failed(message))
         errorPresentationTask?.cancel()
         errorPresentationTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: Self.errorPresentationDuration)
+                try await Task.sleep(for: presentationDuration)
             } catch {
                 return
             }
@@ -1113,6 +1130,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
             recordingLimit: recordingLimit,
+            selectedTheme: selectedTheme,
             availableModels: availableModels,
             configurationEnabled: !machine.phase.isBusy
         )
@@ -1140,6 +1158,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectRecordingLimit: { [weak self] limit in
                         self?.selectRecordingLimit(limit)
+                    },
+                    selectTheme: { [weak self] theme in
+                        self?.selectTheme(theme)
                     },
                     loginItemChanged: { [weak self] in
                         self?.setupWindowController.refresh()
@@ -1238,6 +1259,19 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             forKey: WhisperHotkeyPreferenceKeys.recordingLimit
         )
         updateMenuBar()
+    }
+
+    private func selectTheme(_ theme: BadgeTheme) {
+        guard !machine.phase.isBusy, selectedTheme != theme else {
+            return
+        }
+        selectedTheme = theme
+        UserDefaults.standard.set(
+            theme.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
+        )
+        badge.applyTheme(theme)
+        advancedSettingsWindowController?.refreshIfVisible()
     }
 
     private func copyLastDictation() {

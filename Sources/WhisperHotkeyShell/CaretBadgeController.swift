@@ -40,10 +40,14 @@ public final class CaretBadgeController {
     private var sessionPositionWasDragged = false
     private var lastVisibilityAssertion = TimeInterval.zero
 
-    public init(actions: CaretBadgeActions = .none) {
+    public init(
+        actions: CaretBadgeActions = .none,
+        theme: BadgeTheme = .defaultTheme
+    ) {
         badgeView = BadgeView(
             frame: CGRect(origin: .zero, size: BadgePlacement.defaultSize),
-            actions: actions
+            actions: actions,
+            theme: theme
         )
         panel = Self.makePanel(contentView: badgeView)
         badgeView.dragHandler = { [weak self] proposedOrigin in
@@ -77,6 +81,10 @@ public final class CaretBadgeController {
 
     public var isVisible: Bool {
         panel.isVisible
+    }
+
+    public func applyTheme(_ theme: BadgeTheme) {
+        badgeView.applyTheme(theme)
     }
 
     /// Presents a non-activating badge without changing the active application
@@ -373,6 +381,14 @@ public final class CaretBadgeController {
         badgeView.listeningTimerColorForTesting
     }
 
+    var appliedThemeForTesting: BadgeTheme {
+        badgeView.themeForTesting
+    }
+
+    var badgeBackgroundColorForTesting: NSColor {
+        badgeView.backgroundColorForTesting
+    }
+
     private static func hasGradientLayer(_ layer: CALayer?) -> Bool {
         guard let layer else {
             return false
@@ -435,6 +451,8 @@ private final class NonactivatingBadgePanel: NSPanel {
 @MainActor
 private final class BadgeView: NSView {
     private let actions: CaretBadgeActions
+    private var theme: BadgeTheme
+    private var palette: BadgeThemePalette
     private let statusLabel = NSTextField(labelWithString: "")
     private let timeLabel = NSTextField(labelWithString: "0:00")
     private let waveformView = AudioWaveformView()
@@ -456,17 +474,21 @@ private final class BadgeView: NSView {
         RuntimeBadgeLayout.size
     }
 
-    init(frame frameRect: NSRect, actions: CaretBadgeActions) {
+    init(
+        frame frameRect: NSRect,
+        actions: CaretBadgeActions,
+        theme: BadgeTheme
+    ) {
         self.actions = actions
+        self.theme = theme
+        palette = BadgeThemePalette.palette(for: theme)
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 14
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
 
-        limitTrackLayer.backgroundColor = NSColor.white
-            .withAlphaComponent(0.08)
-            .cgColor
+        limitTrackLayer.backgroundColor = palette.limitTrack.cgColor
         limitTrackLayer.cornerRadius = 0.75
         limitTrackLayer.isHidden = true
         layer?.addSublayer(limitTrackLayer)
@@ -476,19 +498,20 @@ private final class BadgeView: NSView {
         limitTrackLayer.addSublayer(limitProgressLayer)
 
         statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        statusLabel.textColor = .white
+        statusLabel.textColor = palette.primaryText
         statusLabel.alignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
         addSubview(statusLabel)
 
         waveformView.isHidden = true
+        waveformView.color = palette.waveform
         addSubview(waveformView)
 
         timeLabel.font = .monospacedDigitSystemFont(
             ofSize: 13,
             weight: .semibold
         )
-        timeLabel.textColor = .white
+        timeLabel.textColor = palette.primaryText
         timeLabel.alignment = .center
         timeLabel.isHidden = true
         addSubview(timeLabel)
@@ -497,8 +520,8 @@ private final class BadgeView: NSView {
             stopButton,
             symbol: "stop.fill",
             accessibilityLabel: "Stop and insert dictation",
-            background: NSColor.white.withAlphaComponent(0.07),
-            foreground: NSColor.white.withAlphaComponent(0.86),
+            background: palette.stopBackground,
+            foreground: palette.stopForeground,
             size: 32
         )
         stopButton.target = self
@@ -509,24 +532,38 @@ private final class BadgeView: NSView {
             sendButton,
             symbol: "arrow.up",
             accessibilityLabel: "Insert dictation and press Return",
-            background: NSColor(
-                calibratedRed: 0.91,
-                green: 0.94,
-                blue: 0.98,
-                alpha: 1
-            ),
-            foreground: NSColor(
-                calibratedRed: 0.10,
-                green: 0.12,
-                blue: 0.15,
-                alpha: 1
-            ),
+            background: palette.sendBackground,
+            foreground: palette.sendForeground,
             size: 34
         )
         sendButton.target = self
         sendButton.action = #selector(sendAndSubmit)
         addSubview(sendButton)
 
+        updatePresentation()
+    }
+
+    func applyTheme(_ theme: BadgeTheme) {
+        guard self.theme != theme else {
+            return
+        }
+        self.theme = theme
+        palette = BadgeThemePalette.palette(for: theme)
+        statusLabel.textColor = palette.primaryText
+        timeLabel.textColor = palette.primaryText
+        waveformView.color = palette.waveform
+        limitTrackLayer.backgroundColor = palette.limitTrack.cgColor
+        limitProgressLayer.backgroundColor = palette.waveform.cgColor
+        applyActionButtonStyle(
+            stopButton,
+            background: palette.stopBackground,
+            foreground: palette.stopForeground
+        )
+        applyActionButtonStyle(
+            sendButton,
+            background: palette.sendBackground,
+            foreground: palette.sendForeground
+        )
         updatePresentation()
     }
 
@@ -637,7 +674,7 @@ private final class BadgeView: NSView {
 
         guard metrics.isWarning else {
             layer?.backgroundColor = normalBackground.cgColor
-            timeLabel.textColor = .white
+            timeLabel.textColor = palette.primaryText
             limitTrackLayer.isHidden = true
             limitProgressLayer.backgroundColor = waveformColor.cgColor
             return
@@ -673,6 +710,7 @@ private final class BadgeView: NSView {
         sendButton.isHidden = presentation != .listening
         limitTrackLayer.isHidden = presentation != .listening
         layer?.backgroundColor = normalBackground.cgColor
+        statusLabel.textColor = palette.primaryText
 
         switch presentation {
         case .listening:
@@ -687,6 +725,7 @@ private final class BadgeView: NSView {
         case let .error(message):
             let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
             statusLabel.stringValue = trimmed.isEmpty ? "Dictation error" : trimmed
+            statusLabel.textColor = .white
             layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.94).cgColor
         case .hidden:
             statusLabel.stringValue = ""
@@ -697,16 +736,11 @@ private final class BadgeView: NSView {
     }
 
     private var normalBackground: NSColor {
-        NSColor(calibratedRed: 0.12, green: 0.14, blue: 0.17, alpha: 0.95)
+        palette.background
     }
 
     private var waveformColor: NSColor {
-        NSColor(
-            calibratedRed: 0.53,
-            green: 0.76,
-            blue: 1,
-            alpha: 1
-        )
+        palette.waveform
     }
 
     private func configureActionButton(
@@ -736,6 +770,15 @@ private final class BadgeView: NSView {
         button.layer?.masksToBounds = true
     }
 
+    private func applyActionButtonStyle(
+        _ button: NSButton,
+        background: NSColor,
+        foreground: NSColor
+    ) {
+        button.contentTintColor = foreground
+        button.layer?.backgroundColor = background.cgColor
+    }
+
     var listeningTextForTesting: String {
         timeLabel.stringValue
     }
@@ -746,6 +789,14 @@ private final class BadgeView: NSView {
 
     var listeningTimerColorForTesting: NSColor {
         timeLabel.textColor ?? .clear
+    }
+
+    var themeForTesting: BadgeTheme {
+        theme
+    }
+
+    var backgroundColorForTesting: NSColor {
+        palette.background
     }
 }
 
@@ -918,6 +969,13 @@ private final class BadgeActionButton: NSButton {
 @MainActor
 private final class AudioWaveformView: NSView {
     private var history = AudioWaveformHistory()
+    var color = BadgeThemePalette.palette(
+        for: .defaultTheme
+    ).waveform {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
     var level: CGFloat = 0 {
         didSet {
@@ -943,13 +1001,6 @@ private final class AudioWaveformView: NSView {
         let totalWidth = CGFloat(history.samples.count) * barWidth
             + CGFloat(history.samples.count - 1) * gap
         var x = (bounds.width - totalWidth) / 2
-        let activeColor = NSColor(
-            calibratedRed: 0.53,
-            green: 0.76,
-            blue: 1,
-            alpha: 1
-        )
-
         for sample in history.samples {
             let isQuiet = sample < 0.015
             let height = isQuiet
@@ -962,8 +1013,8 @@ private final class AudioWaveformView: NSView {
                 height: height
             )
             (isQuiet
-                ? activeColor.withAlphaComponent(0.38)
-                : activeColor
+                ? color.withAlphaComponent(0.38)
+                : color
             ).setFill()
             NSBezierPath(
                 roundedRect: rect,

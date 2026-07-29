@@ -4,6 +4,66 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
+    public static let badgeTheme = "badgeTheme"
+}
+
+public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
+    case githubDarkDimmed
+    case midnightIndigo
+    case graphite
+    case nord
+    case dracula
+    case solarizedDark
+    case forest
+    case ocean
+    case rosePine
+    case lightFrost
+    case highContrast
+
+    public static let defaultTheme: Self = .githubDarkDimmed
+
+    public var displayName: String {
+        switch self {
+        case .githubDarkDimmed: "GitHub Dark Dimmed"
+        case .midnightIndigo: "Midnight Indigo"
+        case .graphite: "Graphite"
+        case .nord: "Nord"
+        case .dracula: "Dracula"
+        case .solarizedDark: "Solarized Dark"
+        case .forest: "Forest"
+        case .ocean: "Ocean"
+        case .rosePine: "Rosé Pine"
+        case .lightFrost: "Light Frost"
+        case .highContrast: "High Contrast"
+        }
+    }
+
+    public var summaryName: String {
+        switch self {
+        case .githubDarkDimmed: "Dimmed"
+        case .midnightIndigo: "Indigo"
+        case .graphite: "Graphite"
+        case .nord: "Nord"
+        case .dracula: "Dracula"
+        case .solarizedDark: "Solarized"
+        case .forest: "Forest"
+        case .ocean: "Ocean"
+        case .rosePine: "Rosé Pine"
+        case .lightFrost: "Frost"
+        case .highContrast: "Contrast"
+        }
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        guard let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
+        ) else {
+            return .defaultTheme
+        }
+        return Self(rawValue: rawValue) ?? .defaultTheme
+    }
 }
 
 public enum DictationModel: String, CaseIterable, Codable, Sendable {

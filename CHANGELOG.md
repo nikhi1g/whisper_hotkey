@@ -10,6 +10,11 @@
   control, behavior, model, menu action, and privacy guarantee
 - Added compact live summary chips for the active key, behavior, model,
   recording limit, and login state
+- Fixed the User Guide rendering as a visible, selectable native text document
+- Removed redundant privacy copy from the minimal Settings footer
+- Halved the No Speech Detected badge duration from two seconds to one
+- Added a persistent Theme dropdown with GitHub Dark Dimmed and ten varied HUD
+  presets that apply immediately without idle work
 
 ## 2.5.0: 2026-07-28
 

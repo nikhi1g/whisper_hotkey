@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import WhisperHotkeyShell
+import WhisperHotkeyCore
 
 final class ListeningBadgeTests: XCTestCase {
     func testNormalTimerShowsOnlyElapsedTime() {
@@ -602,6 +603,30 @@ final class ListeningBadgeTests: XCTestCase {
             )
         )
         controller.hide()
+    }
+
+    @MainActor
+    func testEveryThemeAppliesImmediatelyWithAUniqueBackground() {
+        let controller = CaretBadgeController()
+        var backgrounds = Set<String>()
+
+        for theme in BadgeTheme.allCases {
+            controller.applyTheme(theme)
+            XCTAssertEqual(controller.appliedThemeForTesting, theme)
+            let color = try! XCTUnwrap(
+                controller.badgeBackgroundColorForTesting.usingColorSpace(.sRGB)
+            )
+            backgrounds.insert(
+                String(
+                    format: "%.4f,%.4f,%.4f,%.4f",
+                    color.redComponent,
+                    color.greenComponent,
+                    color.blueComponent,
+                    color.alphaComponent
+                )
+            )
+        }
+        XCTAssertEqual(backgrounds.count, BadgeTheme.allCases.count)
     }
 
     func testEveryBadgeLabelIsGeometricallyCenteredWithMargins() {

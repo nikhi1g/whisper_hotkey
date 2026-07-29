@@ -124,6 +124,11 @@ enum UserGuideContent {
                         detail: "Automatically finishes when the selected duration is reached."
                     ),
                     UserGuideRow(
+                        key: "theme",
+                        title: "Theme",
+                        detail: "Chooses one of eleven color presets for the floating HUD."
+                    ),
+                    UserGuideRow(
                         key: "login",
                         title: "Open at Login",
                         detail: "Keeps dictation ready after signing in to this Mac."
@@ -233,9 +238,12 @@ final class UserGuidePopoverController {
             popover.performClose(nil)
             return
         }
-        popover.contentViewController = UserGuideViewController(
+        let contentController = UserGuideViewController(
             sections: UserGuideContent.sections(for: stateProvider())
         )
+        contentController.preferredContentSize = NSSize(width: 440, height: 540)
+        popover.contentViewController = contentController
+        popover.contentSize = contentController.preferredContentSize
         popover.show(
             relativeTo: button.bounds,
             of: button,
@@ -253,8 +261,9 @@ final class UserGuidePopoverController {
 }
 
 @MainActor
-private final class UserGuideViewController: NSViewController {
+final class UserGuideViewController: NSViewController {
     private let sections: [UserGuideSection]
+    private var textView: NSTextView!
 
     init(sections: [UserGuideSection]) {
         self.sections = sections
@@ -284,23 +293,16 @@ private final class UserGuideViewController: NSViewController {
         header.addArrangedSubview(subtitle)
         root.addSubview(header)
 
-        let document = NSStackView()
-        document.orientation = .vertical
-        document.alignment = .leading
-        document.spacing = 18
-        document.edgeInsets = NSEdgeInsets(top: 2, left: 0, bottom: 12, right: 0)
-        document.translatesAutoresizingMaskIntoConstraints = false
-
-        for section in sections {
-            document.addArrangedSubview(makeSection(section))
-        }
-
-        let scrollView = NSScrollView()
+        let scrollView = NSTextView.scrollableTextView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
-        scrollView.documentView = document
+        guard let documentTextView = scrollView.documentView as? NSTextView else {
+            preconditionFailure("AppKit did not create a scrollable text view")
+        }
+        textView = documentTextView
+        configureTextView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(scrollView)
 
@@ -318,65 +320,101 @@ private final class UserGuideViewController: NSViewController {
             ),
             scrollView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 16),
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
-            document.widthAnchor.constraint(
-                equalTo: scrollView.contentView.widthAnchor,
-                constant: -10
-            ),
         ])
         view = root
     }
 
-    private func makeSection(_ section: UserGuideSection) -> NSView {
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-
-        let heading = NSTextField(labelWithString: section.title)
-        heading.font = .systemFont(ofSize: 10, weight: .semibold)
-        heading.textColor = .tertiaryLabelColor
-        stack.addArrangedSubview(heading)
-
-        for row in section.rows {
-            let rowView = makeRow(row)
-            stack.addArrangedSubview(rowView)
-            rowView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        }
-        return stack
+    private func configureTextView() {
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 0, height: 2)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textStorage?.setAttributedString(makeGuideText())
     }
 
-    private func makeRow(_ row: UserGuideRow) -> NSView {
-        let key = NSTextField(labelWithString: row.key)
-        key.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
-        key.alignment = .center
-        key.textColor = .secondaryLabelColor
-        key.wantsLayer = true
-        key.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
-        key.layer?.cornerRadius = 6
-        key.translatesAutoresizingMaskIntoConstraints = false
+    private func makeGuideText() -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let headingStyle = NSMutableParagraphStyle()
+        headingStyle.paragraphSpacingBefore = 6
+        headingStyle.paragraphSpacing = 8
+        let titleStyle = NSMutableParagraphStyle()
+        titleStyle.paragraphSpacing = 2
+        let detailStyle = NSMutableParagraphStyle()
+        detailStyle.paragraphSpacing = 12
 
-        let title = NSTextField(labelWithString: row.title)
-        title.font = .systemFont(ofSize: 13, weight: .medium)
+        for section in sections {
+            result.append(
+                NSAttributedString(
+                    string: "\(section.title)\n",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                        .foregroundColor: NSColor.tertiaryLabelColor,
+                        .paragraphStyle: headingStyle,
+                    ]
+                )
+            )
+            for row in section.rows {
+                let title = NSMutableAttributedString(
+                    string: "\(row.key.uppercased())  ",
+                    attributes: [
+                        .font: NSFont.monospacedSystemFont(
+                            ofSize: 11,
+                            weight: .medium
+                        ),
+                        .foregroundColor: NSColor.secondaryLabelColor,
+                        .paragraphStyle: titleStyle,
+                    ]
+                )
+                title.append(
+                    NSAttributedString(
+                        string: "\(row.title)\n",
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+                            .foregroundColor: NSColor.labelColor,
+                            .paragraphStyle: titleStyle,
+                        ]
+                    )
+                )
+                result.append(title)
+                result.append(
+                    NSAttributedString(
+                        string: "\(row.detail)\n",
+                        attributes: [
+                            .font: NSFont.systemFont(ofSize: 12),
+                            .foregroundColor: NSColor.secondaryLabelColor,
+                            .paragraphStyle: detailStyle,
+                        ]
+                    )
+                )
+            }
+        }
+        return result
+    }
 
-        let detail = NSTextField(wrappingLabelWithString: row.detail)
-        detail.font = .systemFont(ofSize: 12)
-        detail.textColor = .secondaryLabelColor
-        detail.maximumNumberOfLines = 2
+    var renderedTextForTesting: String {
+        loadViewIfNeeded()
+        return textView.string
+    }
 
-        let copy = NSStackView(views: [title, detail])
-        copy.orientation = .vertical
-        copy.alignment = .leading
-        copy.spacing = 2
-
-        let rowStack = NSStackView(views: [key, copy])
-        rowStack.orientation = .horizontal
-        rowStack.alignment = .top
-        rowStack.spacing = 12
-
-        NSLayoutConstraint.activate([
-            key.widthAnchor.constraint(equalToConstant: 82),
-            key.heightAnchor.constraint(equalToConstant: 24),
-        ])
-        return rowStack
+    var renderedTextHasVisibleFrameForTesting: Bool {
+        loadViewIfNeeded()
+        view.frame = NSRect(origin: .zero, size: preferredContentSize)
+        view.layoutSubtreeIfNeeded()
+        return textView.frame.width > 0
+            && (textView.enclosingScrollView?.frame.width ?? 0) > 0
+            && (textView.enclosingScrollView?.frame.height ?? 0) > 0
     }
 }

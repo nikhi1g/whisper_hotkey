@@ -7,6 +7,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let activationMode: HotkeyActivationMode
     public let selectedModel: DictationModel
     public let recordingLimit: RecordingLimit
+    public let selectedTheme: BadgeTheme
     public let availableModels: Set<DictationModel>
     public let configurationEnabled: Bool
 
@@ -15,6 +16,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         activationMode: HotkeyActivationMode,
         selectedModel: DictationModel,
         recordingLimit: RecordingLimit,
+        selectedTheme: BadgeTheme = .defaultTheme,
         availableModels: Set<DictationModel>,
         configurationEnabled: Bool
     ) {
@@ -22,6 +24,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.activationMode = activationMode
         self.selectedModel = selectedModel
         self.recordingLimit = recordingLimit
+        self.selectedTheme = selectedTheme
         self.availableModels = availableModels
         self.configurationEnabled = configurationEnabled
     }
@@ -33,6 +36,7 @@ public struct AdvancedSettingsActions {
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
+    public var selectTheme: (BadgeTheme) -> Void
     public var loginItemChanged: () -> Void
 
     public init(
@@ -40,12 +44,14 @@ public struct AdvancedSettingsActions {
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
+        selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
         loginItemChanged: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectRecordingLimit = selectRecordingLimit
+        self.selectTheme = selectTheme
         self.loginItemChanged = loginItemChanged
     }
 }
@@ -92,6 +98,7 @@ public final class AdvancedSettingsWindowController:
     private let modeControl = NSSegmentedControl()
     private let modelControl = NSSegmentedControl()
     private let recordingLimitPopup = NSPopUpButton()
+    private let themePopup = NSPopUpButton()
     private let loginItemToggle = NSButton(
         checkboxWithTitle: "Open automatically",
         target: nil,
@@ -109,6 +116,7 @@ public final class AdvancedSettingsWindowController:
     private let modeSummary = SettingsSummaryChip()
     private let modelSummary = SettingsSummaryChip()
     private let limitSummary = SettingsSummaryChip()
+    private let themeSummary = SettingsSummaryChip()
     private let loginSummary = SettingsSummaryChip()
     private lazy var userGuidePopover = UserGuidePopoverController(
         stateProvider: stateProvider
@@ -130,7 +138,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 470),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -180,11 +188,13 @@ public final class AdvancedSettingsWindowController:
         select(mode: state.activationMode)
         select(model: state.selectedModel)
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
+        select(rawValue: state.selectedTheme.rawValue, in: themePopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
         modelControl.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
+        themePopup.isEnabled = state.configurationEnabled
 
         for (index, model) in DictationModel.allCases.enumerated() {
             let installed = state.availableModels.contains(model)
@@ -290,6 +300,19 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
+    @objc private func selectTheme(_ sender: NSPopUpButton) {
+        guard stateProvider().configurationEnabled,
+              let rawValue = sender.selectedItem?.representedObject as? String,
+              let theme = BadgeTheme(rawValue: rawValue)
+        else {
+            refresh()
+            return
+        }
+        actionError = nil
+        actions.selectTheme(theme)
+        refresh()
+    }
+
     @objc private func toggleLoginItem(_ sender: NSButton) {
         guard stateProvider().configurationEnabled else {
             refresh()
@@ -347,6 +370,13 @@ public final class AdvancedSettingsWindowController:
                 ($0.displayName, $0.rawValue)
             },
             action: #selector(selectRecordingLimit(_:))
+        )
+        configure(
+            themePopup,
+            values: BadgeTheme.allCases.map {
+                ($0.displayName, $0.rawValue)
+            },
+            action: #selector(selectTheme(_:))
         )
     }
 
@@ -438,11 +468,12 @@ public final class AdvancedSettingsWindowController:
             for: state.selectedModel
         )
         limitSummary.stringValue = state.recordingLimit.displayName
+        themeSummary.stringValue = state.selectedTheme.summaryName
         switch loginStatus {
         case .enabled:
             loginSummary.stringValue = "Login On"
         case .requiresApproval:
-            loginSummary.stringValue = "Login Needs Approval"
+            loginSummary.stringValue = "Login Approval"
         case .notRegistered, .notFound:
             loginSummary.stringValue = "Login Off"
         case .unknown:
@@ -470,7 +501,7 @@ public final class AdvancedSettingsWindowController:
             detailLabel.textColor = .secondaryLabelColor
         } else {
             detailLabel.stringValue =
-                "Changes apply immediately and persist across launches. Audio remains local."
+                "Changes apply immediately and persist across launches."
             detailLabel.textColor = .secondaryLabelColor
         }
     }
@@ -542,6 +573,14 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionGrid)
         stack.setCustomSpacing(20, after: recognitionGrid)
 
+        let appearanceTitle = makeSectionTitle("APPEARANCE")
+        stack.addArrangedSubview(appearanceTitle)
+        let appearanceGrid = makeGrid()
+        addRow(to: appearanceGrid, title: "Theme", control: themePopup)
+        sizeColumns(in: appearanceGrid)
+        stack.addArrangedSubview(appearanceGrid)
+        stack.setCustomSpacing(20, after: appearanceGrid)
+
         let startupTitle = makeSectionTitle("STARTUP")
         stack.addArrangedSubview(startupTitle)
 
@@ -576,6 +615,7 @@ public final class AdvancedSettingsWindowController:
                 modeSummary,
                 modelSummary,
                 limitSummary,
+                themeSummary,
                 loginSummary,
             ]
         )
@@ -602,6 +642,7 @@ public final class AdvancedSettingsWindowController:
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
             detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -664,10 +705,15 @@ public final class AdvancedSettingsWindowController:
         selectedValue(in: recordingLimitPopup)
     }
 
+    var selectedThemeForTesting: BadgeTheme? {
+        selectedValue(in: themePopup)
+    }
+
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
             && modelControl.isEnabled
             && recordingLimitPopup.isEnabled
+            && themePopup.isEnabled
     }
 
     var modeControlEnabledForTesting: Bool {
@@ -691,9 +737,11 @@ public final class AdvancedSettingsWindowController:
             modeControl,
             modelControl,
             recordingLimitPopup,
+            themePopup,
             loginItemToggle,
             detailLabel,
             hotkeySummary,
+            themeSummary,
             loginSummary,
             helpButton,
         ].allSatisfy { view in
@@ -724,6 +772,7 @@ public final class AdvancedSettingsWindowController:
             modeControl.segmentCount,
             modelControl.segmentCount,
             recordingLimitPopup.numberOfItems,
+            themePopup.numberOfItems,
         ]
     }
 
@@ -761,6 +810,7 @@ public final class AdvancedSettingsWindowController:
             modeSummary.stringValue,
             modelSummary.stringValue,
             limitSummary.stringValue,
+            themeSummary.stringValue,
             loginSummary.stringValue,
         ]
     }
@@ -791,6 +841,11 @@ public final class AdvancedSettingsWindowController:
     func selectLimitForTesting(_ limit: RecordingLimit) {
         select(rawValue: limit.rawValue, in: recordingLimitPopup)
         selectRecordingLimit(recordingLimitPopup)
+    }
+
+    func selectThemeForTesting(_ theme: BadgeTheme) {
+        select(rawValue: theme.rawValue, in: themePopup)
+        selectTheme(themePopup)
     }
 
     func setLoginItemForTesting(enabled: Bool) {

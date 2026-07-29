@@ -15,13 +15,14 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
-    func testModelAndLimitPreferencesPersistAndRejectUnknownValues() {
+    func testModelLimitAndThemePreferencesPersistAndRejectUnknownValues() {
         let suite = "whisper_hotkey-tests-\(UUID().uuidString)"
         let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
         XCTAssertEqual(DictationModel.selected(defaults: defaults), .baseEnglish)
         XCTAssertEqual(RecordingLimit.selected(defaults: defaults), .minutes10)
+        XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .githubDarkDimmed)
 
         defaults.set(
             DictationModel.smallEnglish.rawValue,
@@ -31,8 +32,13 @@ final class PreferenceTests: XCTestCase {
             RecordingLimit.minutes30.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.recordingLimit
         )
+        defaults.set(
+            BadgeTheme.rosePine.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
+        )
         XCTAssertEqual(DictationModel.selected(defaults: defaults), .smallEnglish)
         XCTAssertEqual(RecordingLimit.selected(defaults: defaults), .minutes30)
+        XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .rosePine)
 
         defaults.set(
             "unknown",
@@ -42,8 +48,10 @@ final class PreferenceTests: XCTestCase {
             "unknown",
             forKey: WhisperHotkeyPreferenceKeys.recordingLimit
         )
+        defaults.set("unknown", forKey: WhisperHotkeyPreferenceKeys.badgeTheme)
         XCTAssertEqual(DictationModel.selected(defaults: defaults), .baseEnglish)
         XCTAssertEqual(RecordingLimit.selected(defaults: defaults), .minutes10)
+        XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .githubDarkDimmed)
     }
 
     func testRecordingLimitsCoverThirtySecondsThroughOneHour() {
@@ -52,6 +60,15 @@ final class PreferenceTests: XCTestCase {
         XCTAssertEqual(
             RecordingLimit.allCases.map(\.seconds),
             RecordingLimit.allCases.map(\.seconds).sorted()
+        )
+    }
+
+    func testThemePickerProvidesElevenNamedPresets() {
+        XCTAssertEqual(BadgeTheme.allCases.count, 11)
+        XCTAssertEqual(BadgeTheme.allCases.first, .githubDarkDimmed)
+        XCTAssertEqual(
+            Set(BadgeTheme.allCases.map(\.displayName)).count,
+            BadgeTheme.allCases.count
         )
     }
 }
