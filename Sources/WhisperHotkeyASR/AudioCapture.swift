@@ -563,10 +563,10 @@ private struct WhisperAudioLevelMeasurement {
 struct WhisperSpeechActivityDetector: Equatable {
     static let minimumSpeechDecibels = -48.0
     static let minimumSpeechDuration = 0.10
-    static let defaultPauseBoundary = 0.85
-    static let minimumPauseBoundary = 0.65
-    static let maximumPauseBoundary = 1.25
-    static let pauseMargin = 0.35
+    static let defaultPauseBoundary = 0.45
+    static let minimumPauseBoundary = 0.30
+    static let maximumPauseBoundary = 0.75
+    static let pauseMargin = 0.18
 
     private var currentSpeechDuration = 0.0
     private var longestSpeechDuration = 0.0

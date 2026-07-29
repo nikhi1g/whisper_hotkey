@@ -9,6 +9,8 @@
   casing across Pause Mode chunks
 - Kept Pause Mode capture uninterrupted in one private full-session recording
   while rotating lightweight inference segments at adaptive cadence boundaries
+- Reduced Pause Mode's adaptive boundary to a live 300–750 ms range with a
+  450 ms initial target
 - Made Escape unambiguously abort active dictation, discard its private audio,
   cancel recognition, and insert nothing
 - Reserved Escape for cancellation and migrated legacy Escape triggers to Right

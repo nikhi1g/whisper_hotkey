@@ -72,8 +72,8 @@ tap and release the selected key once to start, speak while the badge waveform
 is active, then tap and release it again to transcribe and insert. Pause Mode
 uses the same start/stop gesture but automatically transcribes and pastes each
 phrase after a natural pause, then keeps listening. The boundary begins at
-850 milliseconds and adapts between 650 and 1,250 milliseconds from the
-short pauses in the user's current speaking cadence. This gives live,
+450 milliseconds and adapts between 300 and 750 milliseconds from the short
+pauses in the user's current speaking cadence. This gives responsive live,
 phrase-by-phrase typing without sending audio to a service. Each decode
 receives only the final 240 characters of the current session as private local
 context, helping Whisper preserve mid-sentence casing and punctuation across

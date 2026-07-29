@@ -27,7 +27,7 @@ Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
 helper, and deletes the private audio directory. Pause Mode retains one
 uninterrupted full-session WAV and writes a parallel current inference segment
 from the already-converted callback buffer. Its pause threshold begins at
-850 milliseconds and adapts within 650–1,250 milliseconds from resumed pauses.
+450 milliseconds and adapts within 300–750 milliseconds from resumed pauses.
 A boundary rotates only the inference segment, serially transcribes and pastes
 the phrase, and reuses the loaded helper until the active session ends.
 The next decode is conditioned on at most 240 trailing characters from the

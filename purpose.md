@@ -31,8 +31,8 @@ The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, an
 **Pause Mode** choices. The selected mode persists across launches. Toggle
 changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
-sub-boundary pauses in the user's current cadence. It starts at 850 milliseconds
-and remains between 650 and 1,250 milliseconds. One uninterrupted private WAV
+sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
+and remains between 300 and 750 milliseconds. One uninterrupted private WAV
 retains the complete session while the same converted samples feed a small
 current inference segment. A phrase boundary rotates only that segment—never
 the microphone or full recording—then transcribes and pastes phrases in strict

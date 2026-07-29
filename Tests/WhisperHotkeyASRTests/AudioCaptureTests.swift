@@ -313,7 +313,7 @@ final class AudioCaptureTests: XCTestCase {
 
         XCTAssertEqual(
             detector.pauseBoundarySilence,
-            0.75,
+            0.58,
             accuracy: 0.001
         )
         let next = detector.nextSegmentPreservingCadence()
