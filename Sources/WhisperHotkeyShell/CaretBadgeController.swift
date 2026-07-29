@@ -35,6 +35,7 @@ public final class CaretBadgeController {
     private var lastCaretFrame: CGRect?
     private var lastFieldFrame: CGRect?
     private var lastScreenFrame: CGRect?
+    private var lastPointerFallback: CGPoint?
     private var sessionPanelOrigin: CGPoint?
     private var lastVisibilityAssertion = TimeInterval.zero
 
@@ -82,7 +83,8 @@ public final class CaretBadgeController {
         _ presentation: BadgePresentation,
         caretFrame: CGRect? = nil,
         fieldFrame: CGRect? = nil,
-        screenFrame: CGRect? = nil
+        screenFrame: CGRect? = nil,
+        pointerLocation: CGPoint? = nil
     ) {
         guard presentation != .hidden else {
             hide()
@@ -97,25 +99,34 @@ public final class CaretBadgeController {
             lastCaretFrame = nil
             lastFieldFrame = nil
             lastScreenFrame = nil
+            lastPointerFallback = nil
             sessionPanelOrigin = nil
         }
 
         if lastScreenFrame == nil {
-            let runtimeAnchor = BadgePlacement.runtimeAnchor(
+            let runtimeAnchor = BadgePlacement.resolvedRuntimeAnchor(
                 caretFrame: caretFrame,
                 fieldFrame: fieldFrame,
-                pointerLocation: NSEvent.mouseLocation
+                pointerLocation: pointerLocation ?? NSEvent.mouseLocation
             )
             let visibleFrame = screenFrame
-                ?? screen(containing: runtimeAnchor)?.visibleFrame
+                ?? screen(containing: runtimeAnchor.frame)?.visibleFrame
                 ?? NSScreen.main?.visibleFrame
 
             guard let visibleFrame else {
                 panel.orderOut(nil)
                 return
             }
-            lastCaretFrame = runtimeAnchor
-            lastFieldFrame = nil
+            switch runtimeAnchor {
+            case let .accessibility(frame):
+                lastCaretFrame = frame
+                lastFieldFrame = nil
+                lastPointerFallback = nil
+            case let .pointer(location):
+                lastCaretFrame = nil
+                lastFieldFrame = nil
+                lastPointerFallback = location
+            }
             lastScreenFrame = visibleFrame
         }
 
@@ -144,6 +155,18 @@ public final class CaretBadgeController {
                 screenFrame: visibleFrame,
                 badgeSize: size
             )
+        } else if let lastPointerFallback {
+            let sendButtonFrame = ListeningBadgeLayout().sendButtonFrame
+            frame = BadgePlacement.frame(
+                pointerLocation: lastPointerFallback,
+                badgeHotspot: CGPoint(
+                    x: sendButtonFrame.midX,
+                    y: sendButtonFrame.midY
+                ),
+                screenFrame: visibleFrame,
+                badgeSize: size
+            )
+            sessionPanelOrigin = frame.origin
         } else {
             frame = BadgePlacement.frame(
                 caretFrame: lastCaretFrame,
@@ -163,6 +186,7 @@ public final class CaretBadgeController {
         lastCaretFrame = nil
         lastFieldFrame = nil
         lastScreenFrame = nil
+        lastPointerFallback = nil
         sessionPanelOrigin = nil
     }
 

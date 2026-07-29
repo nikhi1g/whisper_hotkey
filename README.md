@@ -31,6 +31,9 @@ status, so the badge never jumps or collapses around shorter text.
 The same microphone levels provide a lightweight voice-activity gate: sustained
 speech proceeds to Whisper, while silence and brief key or click transients are
 discarded as no speech instead of being decoded into a hallucinated phrase.
+When an app exposes no text caret, pointer fallback centers the Send/Enter button
+under the current pointer, so toggle-mode dictation can be completed with a
+stationary click. The badge remains clamped inside the visible display.
 
 ## Quick start
 

@@ -244,6 +244,37 @@ final class ListeningBadgeTests: XCTestCase {
         controller.hide()
     }
 
+    @MainActor
+    func testPointerFallbackPlacesClickableSendButtonUnderPointer() {
+        var submitted = 0
+        let controller = CaretBadgeController(
+            actions: CaretBadgeActions(
+                stopAndInsert: {},
+                sendAndSubmit: { submitted += 1 }
+            )
+        )
+        let pointer = CGPoint(x: 700, y: 500)
+        controller.present(
+            .listening,
+            caretFrame: nil,
+            fieldFrame: nil,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+            pointerLocation: pointer
+        )
+        let frame = controller.panelFrameForTesting
+        let sendButtonFrame = ListeningBadgeLayout().sendButtonFrame
+        let localPointer = CGPoint(
+            x: pointer.x - frame.minX,
+            y: pointer.y - frame.minY
+        )
+
+        XCTAssertEqual(localPointer.x, sendButtonFrame.midX)
+        XCTAssertEqual(localPointer.y, sendButtonFrame.midY)
+        controller.clickBadgeForTesting(at: localPointer)
+        XCTAssertEqual(submitted, 1)
+        controller.hide()
+    }
+
     func testWaveformHistoryIsSensitiveAndScrolls() {
         var history = AudioWaveformHistory(capacity: 3)
         history.append(0.1)

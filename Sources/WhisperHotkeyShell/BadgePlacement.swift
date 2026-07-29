@@ -1,5 +1,19 @@
 import CoreGraphics
 
+enum BadgeRuntimeAnchor: Equatable {
+    case accessibility(CGRect)
+    case pointer(CGPoint)
+
+    var frame: CGRect {
+        switch self {
+        case let .accessibility(frame):
+            frame
+        case let .pointer(location):
+            CGRect(origin: location, size: CGSize(width: 1, height: 1))
+        }
+    }
+}
+
 public enum BadgePlacement {
     public static let defaultSize = CGSize(width: 132, height: 34)
 
@@ -11,12 +25,23 @@ public enum BadgePlacement {
         fieldFrame: CGRect?,
         pointerLocation: CGPoint
     ) -> CGRect {
-        usable(caretFrame)
-            ?? usable(fieldFrame)
-            ?? CGRect(
-                origin: pointerLocation,
-                size: CGSize(width: 1, height: 1)
-            )
+        resolvedRuntimeAnchor(
+            caretFrame: caretFrame,
+            fieldFrame: fieldFrame,
+            pointerLocation: pointerLocation
+        ).frame
+    }
+
+    static func resolvedRuntimeAnchor(
+        caretFrame: CGRect?,
+        fieldFrame: CGRect?,
+        pointerLocation: CGPoint
+    ) -> BadgeRuntimeAnchor {
+        if let accessibilityFrame = usable(caretFrame)
+            ?? usable(fieldFrame) {
+            return .accessibility(accessibilityFrame)
+        }
+        return .pointer(pointerLocation)
     }
 
     /// Computes placement for an available anchor while keeping the badge
@@ -97,6 +122,47 @@ public enum BadgePlacement {
             y: min(max(origin.y, minimumY), maximumY),
             width: size.width,
             height: size.height
+        )
+    }
+
+    /// Places a chosen point inside the badge directly beneath the pointer.
+    /// The caller supplies the interactive hotspot, such as the center of the
+    /// Send button. Screen clamping remains authoritative at display edges.
+    public static func frame(
+        pointerLocation: CGPoint,
+        badgeHotspot: CGPoint,
+        screenFrame: CGRect,
+        badgeSize: CGSize,
+        screenInset: CGFloat = 8
+    ) -> CGRect {
+        let visibleFrame = screenFrame.standardized
+        let size = CGSize(
+            width: min(
+                max(0, badgeSize.width),
+                max(0, visibleFrame.width - (screenInset * 2))
+            ),
+            height: min(
+                max(0, badgeSize.height),
+                max(0, visibleFrame.height - (screenInset * 2))
+            )
+        )
+        guard size.width > 0, size.height > 0 else {
+            return CGRect(origin: visibleFrame.origin, size: .zero)
+        }
+
+        let hotspot = CGPoint(
+            x: min(max(0, badgeHotspot.x), size.width),
+            y: min(max(0, badgeHotspot.y), size.height)
+        )
+        let proposedOrigin = CGPoint(
+            x: pointerLocation.x - hotspot.x,
+            y: pointerLocation.y - hotspot.y
+        )
+        return frame(
+            preservingOrigin: proposedOrigin,
+            screenFrame: visibleFrame,
+            badgeSize: size,
+            screenInset: screenInset
         )
     }
 

@@ -58,10 +58,12 @@ and the persistent menu-bar state icon. Standard selection ranges and
 Chromium-style text markers are both used to locate the caret. Exact caret
 geometry is feasible only when the destination app exposes one of those
 Accessibility representations. If it does not, the badge snapshots the current
-pointer position once when recording begins. The badge keeps that exact initial
-frame—including origin, width, and height—through listening and all following
-status states; it does not poll, follow the pointer, shrink for short status
-text, or resize during the session. This fallback affects presentation only and
+pointer position once when recording begins and centers the Send/Enter button
+under that pointer, enabling key, speak, click without pointer travel. The badge
+keeps that exact initial frame—including origin, width, and height—through
+listening and all following status states; it does not poll, follow the pointer,
+shrink for short status text, or resize during the session. Screen-edge clamping
+keeps the complete badge visible. This fallback affects presentation only and
 never validates or changes the paste destination. While listening, the compact
 badge shows a sensitive scrolling 23-sample waveform read from the existing
 audio callback at 20 Hz, an elapsed and limit timer, a thin duration-progress
