@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Tightened the fixed HUD from 218 by 44 points to a true 203 by 42-point
+  capsule with smaller margins and waveform cell
+- Equalized Stop and Send as 32-point circular controls while preserving the
+  longest countdown without clipping
+- Removed the borderless panel's system shadow so the opaque theme background
+  is the complete HUD silhouette
+
 ## 2.9.0: 2026-07-29
 
 Apple Acceleration release.

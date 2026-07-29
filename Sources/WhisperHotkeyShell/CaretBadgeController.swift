@@ -67,7 +67,7 @@ public final class CaretBadgeController {
         panel.contentView = contentView
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.level = .statusBar
         panel.hidesOnDeactivate = false
         panel.canHide = false
@@ -484,7 +484,7 @@ private final class BadgeView: NSView {
         palette = BadgeThemePalette.palette(for: theme)
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = 14
+        layer?.cornerRadius = RuntimeBadgeLayout.size.height / 2
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
 
@@ -534,7 +534,7 @@ private final class BadgeView: NSView {
             accessibilityLabel: "Insert dictation and press Return",
             background: palette.sendBackground,
             foreground: palette.sendForeground,
-            size: 34
+            size: 32
         )
         sendButton.target = self
         sendButton.action = #selector(sendAndSubmit)
@@ -627,6 +627,7 @@ private final class BadgeView: NSView {
 
     override func layout() {
         super.layout()
+        layer?.cornerRadius = bounds.height / 2
         statusLabel.frame = BadgeTextLayout.centeredFrame(
             in: bounds,
             horizontalInset: StatusBadgeLayout.horizontalMargin,
@@ -809,15 +810,15 @@ struct ListeningBadgeLayout: Equatable {
     let limitTrackFrame: CGRect
 
     init() {
-        let height: CGFloat = 44
-        let horizontalMargin: CGFloat = 10
-        let waveformWidth: CGFloat = 76
-        let waveformHeight: CGFloat = 22
-        let timeWidth: CGFloat = 50
+        let height: CGFloat = 42
+        let horizontalMargin: CGFloat = 8
+        let waveformWidth: CGFloat = 68
+        let waveformHeight: CGFloat = 20
+        let timeWidth: CGFloat = 46
         let stopDiameter: CGFloat = 32
-        let sendDiameter: CGFloat = 34
-        let contentGap: CGFloat = 2
-        let buttonGap: CGFloat = 2
+        let sendDiameter: CGFloat = 32
+        let contentGap: CGFloat = 3
+        let buttonGap: CGFloat = 3
 
         var x = horizontalMargin
         waveformFrame = CGRect(
@@ -852,9 +853,9 @@ struct ListeningBadgeLayout: Equatable {
             height: height
         )
         limitTrackFrame = CGRect(
-            x: horizontalMargin + 3,
-            y: 4,
-            width: size.width - (horizontalMargin + 3) * 2,
+            x: horizontalMargin + 2,
+            y: 3.5,
+            width: size.width - (horizontalMargin + 2) * 2,
             height: 1.5
         )
     }

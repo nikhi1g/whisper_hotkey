@@ -120,8 +120,10 @@ geometry polling is performed. If no Accessibility
 geometry is available, the badge snapshots the current
 pointer position once when recording begins and centers the Send/Enter button
 under that pointer, enabling key, speak, click without pointer travel. The badge
-keeps one immutable width and height through listening and all following status
-states. While it remains undragged, a recording-only Accessibility focus observer
+uses a tight true-capsule silhouette with equal circular Stop and Send controls,
+compact waveform and timer cells, and one immutable width and height through
+listening and all following status states. While it remains undragged, a
+recording-only Accessibility focus observer
 snaps it to newly focused controls within or across applications; this is
 event-driven and has no timer or idle activity. It never follows the pointer.
 While listening, its waveform and timer surfaces form a drag handle; Stop and
@@ -145,8 +147,8 @@ duration from the existing callback, without a second audio pass. Flat silence
 and short mechanical transients are treated as no speech, so Whisper cannot
 invent a phrase from an empty recording. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord
-cancellation. The badge has no outline or gradient; a restrained system shadow
-separates it from the destination.
+cancellation. The badge has no outline, gradient, or panel shadow; its opaque
+theme background alone separates it from the destination.
 The update task exists only while recording. The panel joins every application,
 Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
