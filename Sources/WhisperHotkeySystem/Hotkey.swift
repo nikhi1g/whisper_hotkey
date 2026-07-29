@@ -8,6 +8,7 @@ public enum MacVirtualKey {
     public static let x: Int64 = 7
     public static let returnKey: Int64 = 36
     public static let escape: Int64 = 53
+    public static let keypadEnter: Int64 = 76
     public static let rightCommand: Int64 = 54
     public static let leftCommand: Int64 = 55
     public static let leftShift: Int64 = 56
@@ -177,7 +178,7 @@ public struct GlobalInputRouting: Equatable, Sendable {
 public struct GlobalInputReducer: Sendable {
     public private(set) var hotkey: HotkeyKey
     public private(set) var hotkeyIsDown = false
-    public private(set) var escapeIsBeingConsumed = false
+    public private(set) var completionKeyBeingConsumed: Int64?
     public private(set) var activationMode: HotkeyActivationMode
     private var bareHotkeyCandidate = false
     private var dictationHoldIsActive = false
@@ -209,7 +210,7 @@ public struct GlobalInputReducer: Sendable {
         activationMode = effectiveMode
         hotkeyIsDown = false
         bareHotkeyCandidate = false
-        escapeIsBeingConsumed = false
+        completionKeyBeingConsumed = nil
         dictationHoldIsActive = false
         toggleSessionIsActive = false
         return action
@@ -227,7 +228,7 @@ public struct GlobalInputReducer: Sendable {
         }
         hotkeyIsDown = false
         bareHotkeyCandidate = false
-        escapeIsBeingConsumed = false
+        completionKeyBeingConsumed = nil
         dictationHoldIsActive = false
         toggleSessionIsActive = false
         return action
@@ -251,7 +252,13 @@ public struct GlobalInputReducer: Sendable {
         }
 
         if hotkey != .escape, event.keyCode == MacVirtualKey.escape {
-            return routeEscape(event)
+            return routeCompletionKey(event, action: .stopAndInsert)
+        }
+
+        if event.keyCode == MacVirtualKey.returnKey
+            || event.keyCode == MacVirtualKey.keypadEnter
+        {
+            return routeCompletionKey(event, action: .insertAndSubmit)
         }
 
         var actions: [GlobalInputAction] = []
@@ -298,7 +305,7 @@ public struct GlobalInputReducer: Sendable {
         bareHotkeyCandidate = false
         dictationHoldIsActive = false
         toggleSessionIsActive = false
-        escapeIsBeingConsumed = false
+        completionKeyBeingConsumed = nil
         return action
     }
 
@@ -422,10 +429,13 @@ public struct GlobalInputReducer: Sendable {
         return GlobalInputRouting(consume: false, actions: [.hotkey(action)])
     }
 
-    private mutating func routeEscape(_ event: GlobalKeyEvent) -> GlobalInputRouting {
+    private mutating func routeCompletionKey(
+        _ event: GlobalKeyEvent,
+        action: HotkeyAction
+    ) -> GlobalInputRouting {
         switch event.kind {
         case .keyDown:
-            if escapeIsBeingConsumed {
+            if completionKeyBeingConsumed == event.keyCode {
                 return GlobalInputRouting(consume: true)
             }
             if hotkeyIsDown, !dictationHoldIsActive {
@@ -437,7 +447,7 @@ public struct GlobalInputReducer: Sendable {
             guard dictationHoldIsActive || toggleSessionIsActive else {
                 return GlobalInputRouting(consume: false)
             }
-            escapeIsBeingConsumed = true
+            completionKeyBeingConsumed = event.keyCode
             bareHotkeyCandidate = false
             let shouldDisarmHold = dictationHoldIsActive
             dictationHoldIsActive = false
@@ -446,14 +456,14 @@ public struct GlobalInputReducer: Sendable {
             if shouldDisarmHold {
                 actions.append(.disarmHold)
             }
-            actions.append(.hotkey(.cancel))
+            actions.append(.hotkey(action))
             return GlobalInputRouting(consume: true, actions: actions)
 
         case .keyUp:
-            guard escapeIsBeingConsumed else {
+            guard completionKeyBeingConsumed == event.keyCode else {
                 return GlobalInputRouting(consume: false)
             }
-            escapeIsBeingConsumed = false
+            completionKeyBeingConsumed = nil
             return GlobalInputRouting(consume: true)
 
         case .flagsChanged:
@@ -716,14 +726,19 @@ public final class GlobalHotkeyMonitor {
                 )
             case .disarmHold:
                 cancelHoldActivation()
-            case .hotkey(.released):
+            case let .hotkey(hotkeyAction):
+                let insertionContext: DictationInsertionContext?
+                switch hotkeyAction {
+                case .released, .stopAndInsert, .insertAndSubmit:
+                    insertionContext = captureInsertionContext()
+                case .pressed, .cancel:
+                    insertionContext = nil
+                }
                 handler(
-                    .released,
-                    captureInsertionContext(),
+                    hotkeyAction,
+                    insertionContext,
                     pending.timestampNanoseconds
                 )
-            case let .hotkey(hotkeyAction):
-                handler(hotkeyAction, nil, pending.timestampNanoseconds)
             }
         }
     }

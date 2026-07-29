@@ -22,6 +22,8 @@ public enum DictationPhase: String, Codable, CaseIterable, Sendable {
 public enum HotkeyAction: Equatable, Sendable {
     case pressed
     case released
+    case stopAndInsert
+    case insertAndSubmit
     case cancel
 }
 

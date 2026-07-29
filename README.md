@@ -20,7 +20,10 @@ key, gesture, model, duration, and Open at Login controls live in a separate
 native **Advanced Settings…** window. While recording, the caret badge shows a
 scrolling audio-reactive waveform, elapsed time, **Stop and Insert**, and
 **Send**. Stop and Insert behaves like hotkey release; Send inserts and then
-presses Return. The badge normally shows only elapsed time. In the final minute,
+presses Return. While dictating, Escape is the keyboard shortcut for Stop and
+Insert, and Return or keypad Enter is the keyboard shortcut for Send. These keys
+behave normally when dictation is inactive. The badge normally shows only
+elapsed time. In the final minute,
 it switches to a remaining-time countdown whose text shifts from orange to red
 and reveals the thin limit track; shorter limits use their full duration for the
 warning. The badge uses a borderless flat surface with a restrained system

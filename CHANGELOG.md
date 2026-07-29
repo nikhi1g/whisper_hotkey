@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Made Escape stop, transcribe, and insert active dictation without submitting
+- Made Return and keypad Enter stop, insert, and submit active dictation
+- Preserved ordinary Escape and Return behavior outside active dictation
+
 ## 2.0.0 — 2026-07-28
 
 Major interaction and reliability release.

@@ -33,8 +33,12 @@ the bare gesture to tap-to-start and tap-again-to-finish. Caps Lock always uses
 toggle mode because macOS exposes its lock-state changes rather than a
 momentary hold/release pair;
 its normal lock state is otherwise left to macOS. Escape is a dedicated,
-consumed trigger when selected, so cancellation remains available from the menu
-instead of the same key. For every other selection, Escape cancels either mode.
+consumed trigger when selected. During active dictation, Escape otherwise acts
+exactly like Stop and Insert: it finalizes, transcribes, and inserts without
+pressing Return. Return and keypad Enter act exactly like Send: they finalize,
+insert, and then post one unmodified Return. Both key pairs are consumed only
+for an active dictation; ordinary Escape and Return remain untouched. True
+cancellation and audio discard remain available from the menu.
 Advanced Settings and Setup controls are disabled during active dictation so
 they cannot steal the destination focus. The **Recording limit** picker persists
 a choice from 30 seconds through one hour; ten minutes is the default, and

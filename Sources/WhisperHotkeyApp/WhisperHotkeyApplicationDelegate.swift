@@ -436,6 +436,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
             process(.hotkeyReleased(at: eventTime))
 
+        case .stopAndInsert:
+            finishFromKeyboard(.insert, insertionContext: suppliedContext)
+
+        case .insertAndSubmit:
+            finishFromKeyboard(
+                .insertAndSubmit,
+                insertionContext: suppliedContext
+            )
+
         case .cancel:
             process(.cancel)
         }
@@ -752,6 +761,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finishFromBadge(_ behavior: CompletionBehavior) {
+        finish(
+            behavior,
+            insertionContext: contextProvider.captureInsertionContext()
+        )
+    }
+
+    private func finishFromKeyboard(
+        _ behavior: CompletionBehavior,
+        insertionContext: DictationInsertionContext?
+    ) {
+        finish(behavior, insertionContext: insertionContext)
+    }
+
+    private func finish(
+        _ behavior: CompletionBehavior,
+        insertionContext suppliedContext: DictationInsertionContext?
+    ) {
         guard runtimeReadyForHotkey,
               !isTerminating,
               machine.phase == .preparing || machine.phase == .listening
@@ -759,7 +785,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return
         }
         completionBehavior = behavior
-        captureInsertionContext(contextProvider.captureInsertionContext())
+        captureInsertionContext(suppliedContext)
         process(.maximumDurationReached)
     }
 
