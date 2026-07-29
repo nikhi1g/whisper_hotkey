@@ -177,6 +177,45 @@ final class AudioCaptureTests: XCTestCase {
         )
         XCTAssertEqual(detector.presence, .absent)
     }
+
+    func testTrailingSilenceStartsOnlyAfterConfirmedSpeechAndResets() {
+        var detector = WhisperSpeechActivityDetector()
+        for _ in 0..<20 {
+            detector.observe(
+                decibels: -70,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        XCTAssertEqual(detector.trailingSilenceDuration, 0)
+
+        for _ in 0..<5 {
+            detector.observe(
+                decibels: -40,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        for _ in 0..<40 {
+            detector.observe(
+                decibels: -70,
+                frameCount: 320,
+                sampleRate: 16_000
+            )
+        }
+        XCTAssertEqual(
+            detector.trailingSilenceDuration,
+            0.8,
+            accuracy: 0.001
+        )
+
+        detector.observe(
+            decibels: -40,
+            frameCount: 320,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(detector.trailingSilenceDuration, 0)
+    }
 }
 
 private final class AudioTapInvocation: @unchecked Sendable {

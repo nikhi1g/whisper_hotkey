@@ -14,6 +14,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             DictationModePresentation.optionTitle(for: .toggle),
             "Toggle"
         )
+        XCTAssertEqual(
+            DictationModePresentation.optionTitle(for: .pause),
+            "Pause Mode"
+        )
     }
 
     @MainActor
@@ -125,11 +129,13 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
-        XCTAssertFalse(controller.modeControlEnabledForTesting)
+        XCTAssertTrue(controller.modeControlEnabledForTesting)
         XCTAssertTrue(controller.detailTextForTesting.contains("Caps Lock"))
         controller.selectModeForTesting(.hold)
         XCTAssertTrue(selectedModes.isEmpty)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
+        controller.selectModeForTesting(.pause)
+        XCTAssertEqual(selectedModes, [.pause])
     }
 
     @MainActor

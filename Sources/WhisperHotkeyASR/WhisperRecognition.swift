@@ -268,9 +268,33 @@ public actor WhisperRecognizer {
     }
 
     public func transcribe(_ audio: WhisperAudioFile) async throws -> String {
+        try await transcribe(audio, keepHelperLoaded: false)
+    }
+
+    /// Transcribes one ordered chunk while retaining the model process for the
+    /// next chunk in the same active pause-mode session.
+    public func transcribeChunk(_ audio: WhisperAudioFile) async throws -> String {
+        try await transcribe(audio, keepHelperLoaded: true)
+    }
+
+    public func finishContinuousSession() {
+        guard let activeLease else {
+            return
+        }
+        finishDictation(activeLease)
+    }
+
+    private func transcribe(
+        _ audio: WhisperAudioFile,
+        keepHelperLoaded: Bool
+    ) async throws -> String {
         defer { audio.delete() }
         let lease = try ensureLease()
-        defer { finishDictation(lease) }
+        defer {
+            if !keepHelperLoaded {
+                finishDictation(lease)
+            }
+        }
         guard audio.speechPresence != .absent else {
             throw WhisperASRError.noSpeech
         }
@@ -296,6 +320,7 @@ public actor WhisperRecognizer {
                 helperSession = nil
                 preloadTask = nil
                 readiness = .failed
+                cachedHelperFailure = nil
                 let configuration = try resolvedConfiguration()
                 let transcript = try await Self.runCommandLineFallback(
                     configuration: configuration,
@@ -304,6 +329,9 @@ public actor WhisperRecognizer {
                     processController: processController,
                     lease: lease
                 )
+                if keepHelperLoaded {
+                    readiness = .idle
+                }
                 return try cleanedTranscript(transcript)
             }
         } onCancel: {
@@ -632,7 +660,6 @@ private final class WhisperHelperSession: @unchecked Sendable {
                     audioURL: audioURL
                 )
             )
-            try inputHandle.close()
         } catch {
             terminate(wait: false)
             throw WhisperASRError.helperFailed("command channel closed")
@@ -641,10 +668,8 @@ private final class WhisperHelperSession: @unchecked Sendable {
         let event = try await nextEvent(timeout: timeout)
         switch event {
         case .result(let text):
-            await awaitProcessExit()
             return text
         case .error:
-            await awaitProcessExit()
             throw error(for: event)
         case .ready:
             throw WhisperASRError.helperProtocolFailure
@@ -692,17 +717,6 @@ private final class WhisperHelperSession: @unchecked Sendable {
             OwnedProcessTermination.terminate(process, wait: false)
         }
         throw WhisperASRError.recognitionTimedOut
-    }
-
-    private func awaitProcessExit() async {
-        let deadline = Date().addingTimeInterval(2)
-        while process.isRunning, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        if process.isRunning {
-            OwnedProcessTermination.terminate(process, wait: true)
-        }
-        processController.clear(process, lease: lease)
     }
 
     private func error(for event: WhisperHelperEvent) -> WhisperASRError {

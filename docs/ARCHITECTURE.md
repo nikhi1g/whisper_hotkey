@@ -23,8 +23,10 @@ flowchart LR
 At idle, only the event tap, menu item, local control socket, and app process
 remain. There is no audio engine, loaded model, helper, polling worker, or
 transcript history. During dictation, capture and model preload begin together.
-Release, Stop, or Send finalizes the WAV, transcribes once, inserts it, tears
-down the helper, and deletes the private audio directory.
+Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
+helper, and deletes the private audio directory. Pause Mode instead rotates the
+WAV after 850 milliseconds of post-speech silence, serially transcribes and
+pastes each phrase, and reuses the loaded helper until the active session ends.
 
 The status menu contains only immediate actions. A lazy native Advanced Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login
@@ -42,7 +44,7 @@ polls. Setup remains a separate permissions-and-files repair surface.
 | `WhisperHotkeyShell` | Menu, Setup and Advanced Settings, badge, login item, local control socket |
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
 | `whisper_hotkey` | Terminal control client |
-| `WhisperModelHelper` | Per-dictation C++ bridge to whisper.cpp |
+| `WhisperModelHelper` | Session-owned C++ bridge that can decode ordered WAV chunks with one model load |
 | `WhisperHotkeyLoginLauncher` | Signed one-shot login and post-exit restart launcher |
 
 ## State and delivery
@@ -53,8 +55,11 @@ idle → preparing → listening → transcribing → inserting → idle
 ```
 
 The input reducer distinguishes a bare modifier gesture from normal shortcuts.
-Hold mode uses one cancellable 150 ms timer; toggle mode uses successive bare
-presses. Effects are serialized through the main-actor state machine, and a
+Hold mode uses one cancellable 150 ms timer; toggle and Pause modes use
+successive bare presses. Pause boundaries come from the recorder's existing
+speech-energy detector. Capture rotates and resumes during the silence, while
+recognition tasks form a strict serial chain so phrases can never paste out of
+order. Effects are serialized through the main-actor state machine, and a
 generation number rejects stale recognition results.
 
 The badge prefers Accessibility caret geometry, including Chromium text

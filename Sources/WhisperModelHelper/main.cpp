@@ -494,87 +494,89 @@ int main(int argc, char ** argv) {
     emit_ready();
 
     std::string command_line;
-    if (!std::getline(std::cin, command_line)) {
-        return 0;
-    }
-    if (command_line.size() > kMaximumCommandBytes) {
-        return emit_error(
-            "invalid_command",
-            "command was too large",
-            65
-        );
-    }
-    std::map<std::string, std::string> command;
-    JSONParser parser(command_line);
-    if (!parser.parse_object(&command)
-        || command["command"] != "transcribe"
-        || command["audioPath"].empty()) {
-        return emit_error(
-            "invalid_command",
-            "expected one transcribe command",
-            65
-        );
-    }
-
-    std::vector<float> samples;
-    std::string error_code;
-    std::string error_message;
-    if (!load_private_wave(
-        command["audioPath"],
-        &samples,
-        &error_code,
-        &error_message
-    )) {
-        return emit_error(error_code, error_message, 66);
-    }
-
-    whisper_full_params params = whisper_full_default_params(
-        options.strategy
-    );
-    params.n_threads = options.threads;
-    params.translate = false;
-    params.no_context = true;
-    params.no_timestamps = true;
-    params.print_special = false;
-    params.print_progress = false;
-    params.print_realtime = false;
-    params.print_timestamps = false;
-    params.language = "en";
-    params.detect_language = false;
-    params.suppress_nst = true;
-    params.beam_search.beam_size = options.beam_size;
-
-    if (whisper_full(
-        context.get(),
-        params,
-        samples.data(),
-        static_cast<int>(samples.size())
-    ) != 0) {
-        return emit_error(
-            "inference_failed",
-            "local inference failed",
-            70
-        );
-    }
-
-    std::string transcript;
-    const int segment_count = whisper_full_n_segments(context.get());
-    for (int index = 0; index < segment_count; ++index) {
-        const char * text = whisper_full_get_segment_text(
-            context.get(),
-            index
-        );
-        if (text != nullptr) {
-            transcript += text;
+    while (std::getline(std::cin, command_line)) {
+        if (command_line.size() > kMaximumCommandBytes) {
+            return emit_error(
+                "invalid_command",
+                "command was too large",
+                65
+            );
         }
-    }
-    if (transcript.empty()) {
-        return emit_error(
-            "no_speech",
-            "no speech was detected",
-            67
+        std::map<std::string, std::string> command;
+        JSONParser parser(command_line);
+        if (!parser.parse_object(&command)
+            || command["command"] != "transcribe"
+            || command["audioPath"].empty()) {
+            return emit_error(
+                "invalid_command",
+                "expected a transcribe command",
+                65
+            );
+        }
+
+        std::vector<float> samples;
+        std::string error_code;
+        std::string error_message;
+        if (!load_private_wave(
+            command["audioPath"],
+            &samples,
+            &error_code,
+            &error_message
+        )) {
+            emit_error(error_code, error_message, 66);
+            continue;
+        }
+
+        whisper_full_params params = whisper_full_default_params(
+            options.strategy
         );
+        params.n_threads = options.threads;
+        params.translate = false;
+        params.no_context = true;
+        params.no_timestamps = true;
+        params.print_special = false;
+        params.print_progress = false;
+        params.print_realtime = false;
+        params.print_timestamps = false;
+        params.language = "en";
+        params.detect_language = false;
+        params.suppress_nst = true;
+        params.beam_search.beam_size = options.beam_size;
+
+        if (whisper_full(
+            context.get(),
+            params,
+            samples.data(),
+            static_cast<int>(samples.size())
+        ) != 0) {
+            emit_error(
+                "inference_failed",
+                "local inference failed",
+                70
+            );
+            continue;
+        }
+
+        std::string transcript;
+        const int segment_count = whisper_full_n_segments(context.get());
+        for (int index = 0; index < segment_count; ++index) {
+            const char * text = whisper_full_get_segment_text(
+                context.get(),
+                index
+            );
+            if (text != nullptr) {
+                transcript += text;
+            }
+        }
+        if (transcript.empty()) {
+            emit_error(
+                "no_speech",
+                "no speech was detected",
+                67
+            );
+            continue;
+        }
+        emit_result(transcript);
     }
-    emit_result(transcript);
     return 0;
 }

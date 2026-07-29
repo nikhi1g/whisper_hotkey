@@ -66,12 +66,15 @@ Use `./run.sh --model small`, `medium`, or `turbo` for another model, or
 3. Release Right Command and leave the destination focused until insertion.
 
 Open **Advanced Settings…**, choose a **Dictation key**, then choose **Press and
-Hold** or **Toggle** under **Input behavior**. In Toggle mode, tap and release
-the selected key once to start, speak while the badge waveform is active, then
-tap and release it again to transcribe and insert. The badge's square button is
-an equivalent stop-and-insert action; its arrow button additionally presses
-Return after the paste succeeds. Ordinary typing and selected-modifier
-shortcuts remain available between the two taps.
+Hold**, **Toggle**, or **Pause Mode** under **Input behavior**. In Toggle mode,
+tap and release the selected key once to start, speak while the badge waveform
+is active, then tap and release it again to transcribe and insert. Pause Mode
+uses the same start/stop gesture but automatically transcribes and pastes each
+phrase after about 850 milliseconds of silence, then keeps listening. This gives
+live, phrase-by-phrase typing without sending audio to a service. The badge's
+square button is an equivalent stop-and-insert action; its arrow button
+additionally presses Return after the final paste succeeds. Ordinary typing and
+selected-modifier shortcuts remain available between the two taps.
 
 Caps Lock always uses toggle mode because macOS reports lock-state changes
 rather than a normal hold/release pair; its normal capitalization state remains
@@ -191,13 +194,16 @@ The decoder keeps beam search at width five for accuracy, uses Metal and flash
 attention, and assigns half the available logical CPUs up to eight threads.
 
 In hold mode, audio capture and model preload begin together only after the
-150 ms bare-key dwell. In toggle mode they begin after the first bare-key
-release. The model helper is owned only for that dictation and is terminated
-after insertion, cancellation, or failure. Idle operation is event-driven; no
+150 ms bare-key dwell. In toggle and Pause modes they begin after the first
+bare-key release. A normal dictation owns the model helper only until its one
+insertion. Pause Mode reuses one helper and loaded model for its ordered phrase
+chunks, then terminates it when the session stops, is cancelled, reaches its
+limit, or fails. Capture restarts during the detected silence before the prior
+chunk is decoded, minimizing missed speech. Idle operation is event-driven; no
 Whisper model, transcription helper, polling worker, audio, or transcript
 history remains resident. The menu-bar icon is updated only by state
-transitions. The waveform reads the existing capture buffer at 20 Hz only while
-recording; it adds no idle timer or second audio pipeline.
+transitions. The waveform and pause detector read the existing capture callback
+at 20 Hz only while recording; they add no idle timer or second audio pipeline.
 
 Temporary audio lives in a mode-0700 directory as a mode-0600 WAV and is removed
 after the session. Logs contain state transitions and errors, never audio or

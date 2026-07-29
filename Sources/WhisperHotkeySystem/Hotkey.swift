@@ -134,6 +134,7 @@ public enum GlobalKeyEventKind: Equatable, Sendable {
 public enum HotkeyActivationMode: String, Codable, Hashable, Sendable {
     case hold
     case toggle
+    case pause
 }
 
 public struct GlobalKeyEvent: Equatable, Sendable {
@@ -189,9 +190,10 @@ public struct GlobalInputReducer: Sendable {
         hotkey: HotkeyKey = .rightCommand
     ) {
         self.hotkey = hotkey
-        self.activationMode = hotkey.requiresToggleMode
-            ? .toggle
-            : activationMode
+        self.activationMode = Self.effectiveMode(
+            activationMode,
+            for: hotkey
+        )
     }
 
     /// Reconfiguring the gesture is a cancellation boundary. This avoids
@@ -200,8 +202,7 @@ public struct GlobalInputReducer: Sendable {
     public mutating func setActivationMode(
         _ mode: HotkeyActivationMode
     ) -> HotkeyAction? {
-        let effectiveMode: HotkeyActivationMode =
-            hotkey.requiresToggleMode ? .toggle : mode
+        let effectiveMode = Self.effectiveMode(mode, for: hotkey)
         guard activationMode != effectiveMode else {
             return nil
         }
@@ -223,7 +224,7 @@ public struct GlobalInputReducer: Sendable {
         let action: HotkeyAction? =
             dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
         hotkey = newHotkey
-        if newHotkey.requiresToggleMode {
+        if newHotkey.requiresToggleMode && activationMode == .hold {
             activationMode = .toggle
         }
         hotkeyIsDown = false
@@ -237,7 +238,7 @@ public struct GlobalInputReducer: Sendable {
     /// The app state machine remains authoritative if a toggle press is
     /// rejected because transcription or insertion is already busy.
     public mutating func synchronizeToggleSession(isActive: Bool) {
-        guard activationMode == .toggle else {
+        guard activationMode != .hold else {
             return
         }
         toggleSessionIsActive = isActive
@@ -315,7 +316,7 @@ public struct GlobalInputReducer: Sendable {
         switch activationMode {
         case .hold:
             routeHoldHotkey(event)
-        case .toggle:
+        case .toggle, .pause:
             routeToggleHotkey(event)
         }
     }
@@ -485,6 +486,13 @@ public struct GlobalInputReducer: Sendable {
             }
         }
         return actions
+    }
+
+    private static func effectiveMode(
+        _ mode: HotkeyActivationMode,
+        for hotkey: HotkeyKey
+    ) -> HotkeyActivationMode {
+        hotkey.requiresToggleMode && mode == .hold ? .toggle : mode
     }
 }
 

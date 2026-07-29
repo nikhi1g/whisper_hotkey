@@ -27,11 +27,16 @@ installed Base English whisper.cpp model loads asynchronously. Releasing after
 at least 250 milliseconds transcribes once, pastes at the current focus, and
 unloads the model. A faster tap does nothing.
 
-The **Input behavior** picker offers explicit **Press and Hold** and **Toggle**
-choices. The selected mode persists across launches. Toggle changes
-the bare gesture to tap-to-start and tap-again-to-finish. Caps Lock always uses
-toggle mode because macOS exposes its lock-state changes rather than a
-momentary hold/release pair;
+The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
+**Pause Mode** choices. The selected mode persists across launches. Toggle
+changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
+uses that same gesture but treats roughly 850 milliseconds of silence following
+confirmed speech as a phrase boundary. It immediately rotates to a fresh
+private WAV, transcribes and pastes completed phrases in strict order, and keeps
+listening until the user stops the session. It reuses one loaded helper during
+the active session, but retains no model or audio worker at idle. Caps Lock
+cannot use Press and Hold because macOS exposes its lock-state changes rather
+than a momentary hold/release pair; it can use Toggle or Pause Mode.
 its normal lock state is otherwise left to macOS. Escape is a dedicated,
 consumed trigger when selected. During active dictation, Escape otherwise acts
 exactly like Stop and Insert: it finalizes, transcribes, and inserts without
@@ -78,9 +83,10 @@ use their complete duration for that warning shift. Stop and Insert has the same
 result as hotkey release. Send inserts successfully before posting an unmodified
 Return. The same unsmoothed audio callback feeds a zero-idle-cost energy gate:
 Whisper runs only after at least 100 milliseconds of contiguous speech-like
-energy above -48 dBFS. Flat silence and short mechanical transients are treated
-as no speech, so Whisper cannot invent a phrase from an empty recording. The
-panel remains
+energy above -48 dBFS. The same detector supplies Pause Mode's trailing-silence
+duration from the existing callback, without a second audio pass. Flat silence
+and short mechanical transients are treated as no speech, so Whisper cannot
+invent a phrase from an empty recording. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord
 cancellation. The badge has no outline or gradient; a restrained system shadow
 separates it from the destination.

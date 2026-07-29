@@ -451,6 +451,39 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(readiness, .idle)
     }
 
+    func testContinuousSessionReusesOneHelperForOrderedChunks() async throws {
+        let fixture = try RecognitionFixture(
+            helperScript: """
+            #!/bin/sh
+            printf A >> "${0}.attempts"
+            printf '%s\\n' '{"event":"ready"}'
+            count=0
+            while IFS= read -r command; do
+                count=$((count + 1))
+                printf '{"event":"result","text":"chunk %s"}\\n' "$count"
+            done
+            """
+        )
+        defer { fixture.delete() }
+        let recognizer = WhisperRecognizer(
+            configuration: fixture.configuration
+        )
+
+        let first = try await recognizer.transcribeChunk(
+            fixture.makeAudio()
+        )
+        let second = try await recognizer.transcribeChunk(
+            fixture.makeAudio()
+        )
+        await recognizer.finishContinuousSession()
+
+        XCTAssertEqual(first, "chunk 1")
+        XCTAssertEqual(second, "chunk 2")
+        XCTAssertEqual(try fixture.helperAttemptCount(), 1)
+        let readiness = await recognizer.readiness
+        XCTAssertEqual(readiness, .idle)
+    }
+
     func testHelperReadinessTimeoutStillFallsBackWhenNotCancelled()
         async throws {
         let fixture = try RecognitionFixture(

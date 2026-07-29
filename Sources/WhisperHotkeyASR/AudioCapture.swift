@@ -84,6 +84,12 @@ public final class WhisperAudioRecorder {
         writer?.normalizedInputLevel ?? 0
     }
 
+    /// Silence following confirmed speech in the current recording. This is
+    /// updated by the existing audio callback and adds no timer or audio pass.
+    public var trailingSilenceDuration: TimeInterval {
+        writer?.trailingSilenceDuration ?? 0
+    }
+
     deinit {
         engineBox.stop(removeInputTap: inputTapInstalled)
         writer?.finish()
@@ -267,6 +273,10 @@ final class WhisperWAVWriter: @unchecked Sendable {
         lock.withLock { speechDetector.presence }
     }
 
+    var trailingSilenceDuration: TimeInterval {
+        lock.withLock { speechDetector.trailingSilenceDuration }
+    }
+
     func consume(_ input: AVAudioPCMBuffer) {
         lock.withLock {
             guard firstError == nil, let file, let converter else { return }
@@ -385,6 +395,7 @@ struct WhisperSpeechActivityDetector: Equatable {
 
     private var currentSpeechDuration = 0.0
     private var longestSpeechDuration = 0.0
+    private(set) var trailingSilenceDuration = 0.0
     private var observedAudio = false
 
     mutating func observe(
@@ -403,8 +414,12 @@ struct WhisperSpeechActivityDetector: Equatable {
                 longestSpeechDuration,
                 currentSpeechDuration
             )
+            trailingSilenceDuration = 0
         } else {
             currentSpeechDuration = 0
+            if longestSpeechDuration >= Self.minimumSpeechDuration {
+                trailingSilenceDuration += duration
+            }
         }
     }
 

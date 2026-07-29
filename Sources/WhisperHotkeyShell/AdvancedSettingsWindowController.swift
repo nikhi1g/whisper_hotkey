@@ -57,6 +57,8 @@ enum DictationModePresentation {
             "Press and Hold"
         case .toggle:
             "Toggle"
+        case .pause:
+            "Pause Mode"
         }
     }
 }
@@ -155,8 +157,7 @@ public final class AdvancedSettingsWindowController:
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
-        modePopup.isEnabled =
-            state.configurationEnabled && !state.selectedHotkey.requiresToggleMode
+        modePopup.isEnabled = state.configurationEnabled
         modelPopup.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
 
@@ -179,7 +180,8 @@ public final class AdvancedSettingsWindowController:
             else {
                 continue
             }
-            item.isEnabled = mode != .hold || !state.selectedHotkey.requiresToggleMode
+            item.isEnabled = state.configurationEnabled
+                && (mode != .hold || !state.selectedHotkey.requiresToggleMode)
         }
 
         let loginStatus = loginItemManager.status
@@ -214,9 +216,9 @@ public final class AdvancedSettingsWindowController:
     @objc private func selectDictationMode(_ sender: NSPopUpButton) {
         let state = stateProvider()
         guard state.configurationEnabled,
-              !state.selectedHotkey.requiresToggleMode,
               let rawValue = sender.selectedItem?.representedObject as? String,
-              let mode = HotkeyActivationMode(rawValue: rawValue)
+              let mode = HotkeyActivationMode(rawValue: rawValue),
+              mode != .hold || !state.selectedHotkey.requiresToggleMode
         else {
             refresh()
             return
@@ -287,7 +289,7 @@ public final class AdvancedSettingsWindowController:
         )
         configure(
             modePopup,
-            values: [HotkeyActivationMode.hold, .toggle].map {
+            values: [HotkeyActivationMode.hold, .toggle, .pause].map {
                 (DictationModePresentation.optionTitle(for: $0), $0.rawValue)
             },
             action: #selector(selectDictationMode(_:))
@@ -367,9 +369,15 @@ public final class AdvancedSettingsWindowController:
             detailLabel.stringValue =
                 "Finish or cancel the current dictation before changing settings."
             detailLabel.textColor = .systemOrange
-        } else if state.selectedHotkey.requiresToggleMode {
+        } else if state.selectedHotkey.requiresToggleMode
+            && state.activationMode == .toggle
+        {
             detailLabel.stringValue =
-                "Caps Lock always uses Toggle because macOS exposes its lock-state changes."
+                "Caps Lock cannot use Press and Hold because macOS exposes its lock-state changes."
+            detailLabel.textColor = .secondaryLabelColor
+        } else if state.activationMode == .pause {
+            detailLabel.stringValue =
+                "Pause Mode pastes each phrase after a natural silence and keeps listening until stopped."
             detailLabel.textColor = .secondaryLabelColor
         } else {
             detailLabel.stringValue =

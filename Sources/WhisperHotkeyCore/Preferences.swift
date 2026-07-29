@@ -2,6 +2,7 @@ import Foundation
 
 public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
+    public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
 }
 

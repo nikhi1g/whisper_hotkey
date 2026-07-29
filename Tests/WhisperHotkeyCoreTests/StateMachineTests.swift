@@ -57,6 +57,20 @@ final class StateMachineTests: XCTestCase {
         XCTAssertEqual(machine.phase, .transcribing)
     }
 
+    func testChunkedSessionFinishesAfterFinalTranscription() {
+        var machine = DictationStateMachine()
+        _ = machine.handle(.hotkeyPressed(at: 1))
+        _ = machine.handle(.captureStarted)
+        _ = machine.handle(.maximumDurationReached)
+
+        XCTAssertEqual(
+            machine.handle(.chunkedSessionFinished),
+            [.showBadge(.hidden)]
+        )
+        XCTAssertEqual(machine.phase, .idle)
+        XCTAssertEqual(machine.handle(.chunkedSessionFinished), [])
+    }
+
     func testCancellationAndFailureAreBounded() {
         var machine = DictationStateMachine()
         _ = machine.handle(.hotkeyPressed(at: 1))

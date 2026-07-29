@@ -11,6 +11,7 @@ import WhisperHotkeySystem
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let errorPresentationDuration: Duration = .seconds(2)
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
+    private static let pauseBoundarySilence: TimeInterval = 0.85
     private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
         selectedHotkey: .rightCommand,
         activationMode: .hold,
@@ -53,9 +54,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedHotkey = HotkeyKey(
         rawValue: UserDefaults.standard.string(forKey: "dictationHotkey") ?? ""
     ) ?? .rightCommand
-    private var toggleDictationEnabled = UserDefaults.standard.bool(
-        forKey: "toggleDictationEnabled"
-    )
+    private var selectedDictationMode =
+        WhisperHotkeyApplicationDelegate.loadDictationMode()
     private var selectedModel = DictationModel.selected()
     private var recordingLimit = RecordingLimit.selected()
 
@@ -144,6 +144,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
     private var lastDictation: String?
+    private var pauseSessionDidInsert = false
+    private var pauseBoundaryInProgress = false
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
     private var startupBadgeVisible = false
@@ -430,11 +432,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             process(.hotkeyPressed(at: eventTime))
 
         case .released:
-            if machine.phase == .preparing || machine.phase == .listening {
-                completionBehavior = .insert
-                captureInsertionContext(suppliedContext)
+            if isPauseMode {
+                finishFromKeyboard(.insert, insertionContext: suppliedContext)
+            } else {
+                if machine.phase == .preparing || machine.phase == .listening {
+                    completionBehavior = .insert
+                    captureInsertionContext(suppliedContext)
+                }
+                process(.hotkeyReleased(at: eventTime))
             }
-            process(.hotkeyReleased(at: eventTime))
 
         case .stopAndInsert:
             finishFromKeyboard(.insert, insertionContext: suppliedContext)
@@ -502,6 +508,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
         completionBehavior = .insert
+        pauseSessionDidInsert = false
+        pauseBoundaryInProgress = false
 
         let precedingCleanup = recognizerCleanupTask
         preloadTask = Task.detached(priority: .userInitiated) { [recognizer] in
@@ -552,6 +560,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         stopRecordingPresentation()
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
+
+        if isPauseMode {
+            return finalizePauseSession()
+        }
 
         let audio: WhisperAudioFile
         do {
@@ -618,6 +630,168 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    private func finalizePauseSession() -> Bool {
+        let finalAudio: WhisperAudioFile
+        do {
+            finalAudio = try recorder.stop()
+        } catch {
+            fail(error)
+            return false
+        }
+        enqueuePauseChunkIfNeeded(finalAudio)
+
+        let generation = sessionGeneration
+        let precedingRecognition = recognitionTask
+        let sessionPreload = preloadTask
+        let shouldSubmit = completionBehavior == .insertAndSubmit
+        recognitionTask = Task { @MainActor [weak self, recognizer] in
+            if let precedingRecognition {
+                await precedingRecognition.value
+            }
+            if let sessionPreload {
+                await sessionPreload.value
+            }
+            await recognizer.finishContinuousSession()
+
+            guard let self,
+                  !Task.isCancelled,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  generation == sessionGeneration,
+                  machine.phase == .transcribing
+            else {
+                return
+            }
+            preloadTask = nil
+            recognitionTask = nil
+            completionBehavior = .insert
+
+            guard pauseSessionDidInsert else {
+                fail("No speech detected.")
+                return
+            }
+            if shouldSubmit {
+                do {
+                    try await Task.sleep(for: Self.postPasteSubmitDelay)
+                } catch {
+                    return
+                }
+                guard generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                guard delivery.pressReturn() else {
+                    fail("Could not press Return in the destination app.")
+                    return
+                }
+            }
+            process(.chunkedSessionFinished)
+        }
+        return true
+    }
+
+    private func flushPauseChunkAndContinue() {
+        guard isPauseMode,
+              !pauseBoundaryInProgress,
+              machine.phase == .listening
+        else {
+            return
+        }
+        pauseBoundaryInProgress = true
+        defer { pauseBoundaryInProgress = false }
+
+        let audio: WhisperAudioFile
+        do {
+            audio = try recorder.stop()
+            try recorder.start()
+        } catch {
+            fail(error)
+            return
+        }
+        enqueuePauseChunkIfNeeded(audio)
+    }
+
+    private func enqueuePauseChunkIfNeeded(_ audio: WhisperAudioFile) {
+        guard audio.speechPresence != .absent else {
+            audio.delete()
+            return
+        }
+
+        let generation = sessionGeneration
+        let precedingRecognition = recognitionTask
+        let sessionPreload = preloadTask
+        recognitionTask = Task { @MainActor [weak self, recognizer] in
+            defer { audio.delete() }
+            if let precedingRecognition {
+                await precedingRecognition.value
+            }
+            if let sessionPreload {
+                await sessionPreload.value
+            }
+            guard let self,
+                  !Task.isCancelled,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  generation == sessionGeneration,
+                  machine.phase == .listening
+                    || machine.phase == .transcribing
+            else {
+                return
+            }
+            do {
+                let transcript = try await recognizer.transcribeChunk(audio)
+                guard !Task.isCancelled,
+                      generation == sessionGeneration,
+                      machine.phase == .listening
+                        || machine.phase == .transcribing
+                else {
+                    return
+                }
+                deliverPauseChunk(transcript)
+            } catch is CancellationError {
+                return
+            } catch let error as WhisperASRError where error == .noSpeech {
+                return
+            } catch {
+                guard generation == sessionGeneration,
+                      machine.phase == .listening
+                        || machine.phase == .transcribing
+                else {
+                    return
+                }
+                fail(error)
+            }
+        }
+    }
+
+    private func deliverPauseChunk(_ transcript: String) {
+        let context = contextProvider.captureInsertionContext()
+        switch delivery.deliver(transcript: transcript, context: context) {
+        case .inserted:
+            let trimmed = transcript.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmed.isEmpty {
+                if pauseSessionDidInsert {
+                    lastDictation?.append(" ")
+                    lastDictation?.append(contentsOf: trimmed)
+                } else {
+                    lastDictation = trimmed
+                }
+            }
+            pauseSessionDidInsert = true
+            logger.info("Pause-mode chunk inserted")
+            updateMenuBar()
+
+        case .emptyTranscript:
+            break
+
+        case .clipboardUnavailable:
+            fail("Clipboard unavailable — try again.")
+        }
+    }
+
     private func deliver(_ transcript: String) -> Bool {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
@@ -659,6 +833,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
         completionBehavior = .insert
+        pauseSessionDidInsert = false
+        pauseBoundaryInProgress = false
         let cancelledPreload = preloadTask
         cancelledPreload?.cancel()
         preloadTask = nil
@@ -746,6 +922,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     limit: TimeInterval(limit),
                     level: displayedLevel
                 )
+                if isPauseMode,
+                   recorder.trailingSilenceDuration
+                    >= Self.pauseBoundarySilence
+                {
+                    flushPauseChunkAndContinue()
+                }
                 do {
                     try await Task.sleep(for: .milliseconds(50))
                 } catch {
@@ -931,11 +1113,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var effectiveToggleDictationEnabled: Bool {
-        selectedHotkey.requiresToggleMode || toggleDictationEnabled
+        hotkeyActivationMode != .hold
     }
 
     private var hotkeyActivationMode: HotkeyActivationMode {
-        effectiveToggleDictationEnabled ? .toggle : .hold
+        selectedHotkey.requiresToggleMode && selectedDictationMode == .hold
+            ? .toggle
+            : selectedDictationMode
+    }
+
+    private var isPauseMode: Bool {
+        hotkeyActivationMode == .pause
     }
 
     private func selectDictationMode(_ mode: HotkeyActivationMode) {
@@ -944,17 +1132,34 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         else {
             return
         }
-        let enabled = mode == .toggle
-        guard toggleDictationEnabled != enabled else {
+        guard selectedDictationMode != mode else {
             return
         }
-        toggleDictationEnabled = enabled
+        selectedDictationMode = mode
         UserDefaults.standard.set(
-            toggleDictationEnabled,
+            mode.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.dictationMode
+        )
+        // Preserve downgrade compatibility with the former two-state setting.
+        UserDefaults.standard.set(
+            mode != .hold,
             forKey: "toggleDictationEnabled"
         )
         hotkeyMonitor.setActivationMode(hotkeyActivationMode)
         updateMenuBar()
+    }
+
+    private static func loadDictationMode(
+        defaults: UserDefaults = .standard
+    ) -> HotkeyActivationMode {
+        if let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.dictationMode
+        ), let mode = HotkeyActivationMode(rawValue: rawValue) {
+            return mode
+        }
+        return defaults.bool(forKey: "toggleDictationEnabled")
+            ? .toggle
+            : .hold
     }
 
     private func selectHotkey(_ hotkey: HotkeyKey) {
@@ -1038,6 +1243,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
         completionBehavior = .insert
+        pauseSessionDidInsert = false
+        pauseBoundaryInProgress = false
         preloadTask?.cancel()
         preloadTask = nil
         recognitionTask?.cancel()

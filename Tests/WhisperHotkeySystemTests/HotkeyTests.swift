@@ -193,6 +193,52 @@ final class HotkeyTests: XCTestCase {
         )
     }
 
+    func testPauseModeUsesSuccessivePressesLikeAToggleSession() {
+        var reducer = GlobalInputReducer(activationMode: .pause)
+
+        _ = reducer.route(
+            key(
+                .flagsChanged,
+                MacVirtualKey.rightCommand,
+                command: true
+            )
+        )
+        XCTAssertEqual(
+            reducer.route(
+                key(
+                    .flagsChanged,
+                    MacVirtualKey.rightCommand,
+                    command: false
+                )
+            ),
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.pressed)]
+            )
+        )
+        reducer.synchronizeToggleSession(isActive: true)
+        _ = reducer.route(
+            key(
+                .flagsChanged,
+                MacVirtualKey.rightCommand,
+                command: true
+            )
+        )
+        XCTAssertEqual(
+            reducer.route(
+                key(
+                    .flagsChanged,
+                    MacVirtualKey.rightCommand,
+                    command: false
+                )
+            ),
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.released)]
+            )
+        )
+    }
+
     func testToggleModeCommandChordDoesNotToggleSession() {
         var reducer = GlobalInputReducer(activationMode: .toggle)
         _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))

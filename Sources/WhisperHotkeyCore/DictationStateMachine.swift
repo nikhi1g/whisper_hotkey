@@ -8,6 +8,7 @@ public enum DictationEvent: Equatable, Sendable {
     case cancel
     case transcriptReady
     case deliveryFinished
+    case chunkedSessionFinished
     case failed(String)
     case errorPresentationFinished
 }
@@ -82,6 +83,11 @@ public struct DictationStateMachine: Equatable, Sendable {
 
         case .deliveryFinished:
             guard phase == .inserting else { return [] }
+            phase = .idle
+            return [.showBadge(.hidden)]
+
+        case .chunkedSessionFinished:
+            guard phase == .transcribing else { return [] }
             phase = .idle
             return [.showBadge(.hidden)]
 
