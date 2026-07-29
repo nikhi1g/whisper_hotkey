@@ -33,7 +33,9 @@ the waveform. Its compact outer frame keeps the same position, width, and height
 while it changes from listening to transcribing or another status, so the badge
 never jumps or collapses around shorter text. Drag its waveform or timer to move
 it for the rest of the current dictation; the Stop and Send hitboxes remain
-independently clickable.
+independently clickable. When Accessibility exposes the focused field, the badge
+starts above that complete field rather than covering its text, flipping below
+only when the top display edge leaves no room.
 The same microphone levels provide a lightweight voice-activity gate: sustained
 speech proceeds to Whisper, while silence and brief key or click transients are
 discarded as no speech instead of being decoded into a hallucinated phrase.

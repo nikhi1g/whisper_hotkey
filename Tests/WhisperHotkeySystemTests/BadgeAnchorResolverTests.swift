@@ -8,16 +8,32 @@ final class BadgeAnchorResolverTests: XCTestCase {
 
         XCTAssertEqual(
             BadgeAnchorResolver.resolve(
-                caretRect: caret
+                caretRect: caret,
+                fieldRect: CGRect(x: 80, y: 180, width: 400, height: 60)
             ),
-            BadgeAnchorGeometry(caretRect: caret)
+            BadgeAnchorGeometry(
+                caretRect: caret,
+                fieldRect: CGRect(x: 80, y: 180, width: 400, height: 60)
+            )
         )
     }
 
     func testMissingCaretHasNoApproximateFallback() {
         XCTAssertEqual(
             BadgeAnchorResolver.resolve(caretRect: nil),
-            BadgeAnchorGeometry(caretRect: nil)
+            BadgeAnchorGeometry(caretRect: nil, fieldRect: nil)
+        )
+    }
+
+    func testInvalidFieldDoesNotDiscardUsableCaret() {
+        let caret = CGRect(x: 100, y: 200, width: 2, height: 18)
+
+        XCTAssertEqual(
+            BadgeAnchorResolver.resolve(
+                caretRect: caret,
+                fieldRect: .null
+            ),
+            BadgeAnchorGeometry(caretRect: caret, fieldRect: nil)
         )
     }
 }

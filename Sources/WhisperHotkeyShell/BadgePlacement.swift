@@ -44,9 +44,9 @@ public enum BadgePlacement {
         return .pointer(pointerLocation)
     }
 
-    /// Computes placement for an available anchor while keeping the badge
-    /// inside the supplied visible screen frame. Runtime status presentations
-    /// pass either exact caret geometry or a one-point pointer fallback.
+    /// Places the badge above the complete focused field when exposed, or above
+    /// the exact caret line otherwise. This keeps recognized text unobscured.
+    /// If the top display edge has no room, the badge flips below the anchor.
     public static func frame(
         caretFrame: CGRect?,
         fieldFrame: CGRect?,
@@ -65,17 +65,17 @@ public enum BadgePlacement {
             return CGRect(origin: visibleFrame.origin, size: .zero)
         }
 
-        let anchor = usable(caretFrame) ?? usable(fieldFrame)
+        let anchor = usable(fieldFrame) ?? usable(caretFrame)
         var origin: CGPoint
 
         if let anchor {
             origin = CGPoint(
-                x: anchor.maxX + gap,
-                y: anchor.midY - (size.height / 2)
+                x: anchor.minX,
+                y: anchor.maxY + gap
             )
 
-            if origin.x + size.width > visibleFrame.maxX - screenInset {
-                origin.x = anchor.minX - gap - size.width
+            if origin.y + size.height > visibleFrame.maxY - screenInset {
+                origin.y = anchor.minY - gap - size.height
             }
         } else {
             origin = CGPoint(

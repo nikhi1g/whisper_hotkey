@@ -72,8 +72,12 @@ casing. Effects are serialized through the main-actor state machine, and a
 generation number rejects stale recognition results.
 
 The badge prefers Accessibility caret geometry, including Chromium text
-markers, and otherwise anchors to the pointer. It snapshots that geometry once
-at recording start and preserves the initial panel origin across later states.
+markers, and otherwise anchors to the pointer. The same one-time query captures
+the focused element frame when available, allowing the badge to sit above the
+complete field rather than obscure its text. It flips below at the top display
+edge. No role validation or geometry polling is added. The badge snapshots that
+geometry once at recording start and preserves the initial panel origin across
+later states.
 While listening, the waveform and timer form a drag handle. Movement is clamped
 to the session screen and replaces the preserved origin without changing the
 Stop or Send hitboxes. The panel is non-activating, so those controls do not

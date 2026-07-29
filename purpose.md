@@ -76,7 +76,11 @@ Runtime UI consists of a non-activating badge beside the Accessibility caret
 and the persistent menu-bar state icon. Standard selection ranges and
 Chromium-style text markers are both used to locate the caret. Exact caret
 geometry is feasible only when the destination app exposes one of those
-Accessibility representations. If it does not, the badge snapshots the current
+Accessibility representations. When exposed, the focused element's frame is
+captured in the same one-time query and the badge sits above the complete text
+area, flipping below only at the top display edge, so it does not obscure typed
+text. No role validation or geometry polling is performed. If no Accessibility
+geometry is available, the badge snapshots the current
 pointer position once when recording begins and centers the Send/Enter button
 under that pointer, enabling key, speak, click without pointer travel. The badge
 keeps that exact initial frame—including origin, width, and height—through

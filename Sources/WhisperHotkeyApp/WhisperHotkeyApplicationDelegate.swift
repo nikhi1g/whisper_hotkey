@@ -142,6 +142,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var insertionContext: DictationInsertionContext?
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
+    private var badgeFieldRect: CGRect?
     private var lastDictation: String?
     private var pauseSessionDidInsert = false
     private var pauseBoundaryInProgress = false
@@ -427,6 +428,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             if !machine.phase.isBusy, machine.phase != .failed {
                 let anchor = contextProvider.currentBadgeAnchor()
                 badgeCaretRect = anchor.caretRect
+                badgeFieldRect = anchor.fieldRect
                 insertionContext = nil
             }
             process(.hotkeyPressed(at: eventTime))
@@ -896,11 +898,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         if presentation == .hidden {
             badge.hide()
             badgeCaretRect = nil
+            badgeFieldRect = nil
             return
         }
         badge.present(
             presentation,
-            caretFrame: badgeCaretRect
+            caretFrame: badgeCaretRect,
+            fieldFrame: badgeFieldRect
         )
         if presentation == .listening {
             badge.updateListening(

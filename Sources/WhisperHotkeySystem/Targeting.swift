@@ -33,18 +33,23 @@ public struct DictationInsertionContext: Equatable, Sendable {
 
 public struct BadgeAnchorGeometry: Equatable, Sendable {
     public let caretRect: CGRect?
+    public let fieldRect: CGRect?
 
-    public init(caretRect: CGRect?) {
+    public init(caretRect: CGRect?, fieldRect: CGRect? = nil) {
         self.caretRect = caretRect
+        self.fieldRect = fieldRect
     }
 }
 
 enum BadgeAnchorResolver {
-    static func resolve(caretRect: CGRect?) -> BadgeAnchorGeometry {
-        guard let rect = usable(caretRect) else {
-            return BadgeAnchorGeometry(caretRect: nil)
-        }
-        return BadgeAnchorGeometry(caretRect: rect)
+    static func resolve(
+        caretRect: CGRect?,
+        fieldRect: CGRect? = nil
+    ) -> BadgeAnchorGeometry {
+        BadgeAnchorGeometry(
+            caretRect: usable(caretRect),
+            fieldRect: usable(fieldRect)
+        )
     }
 
     private static func usable(_ rect: CGRect?) -> CGRect? {
@@ -76,11 +81,13 @@ public final class AccessibilityContextProvider {
             element,
             attribute: kAXSelectedTextRangeAttribute
         )
+        let fieldRect = copyElementFrame(element)
         return BadgeAnchorResolver.resolve(
             caretRect: copyCaretRect(
                 element,
                 selectionRange: selectionRange
-            ).flatMap(appKitScreenRect)
+            ).flatMap(appKitScreenRect),
+            fieldRect: fieldRect.flatMap(appKitScreenRect)
         )
     }
 
@@ -352,4 +359,38 @@ private func copyRect(from value: CFTypeRef) -> CGRect? {
     }
     var rect = CGRect.zero
     return AXValueGetValue(axValue, .cgRect, &rect) ? rect : nil
+}
+
+private func copyElementFrame(_ element: AXUIElement) -> CGRect? {
+    guard
+        let positionValue = copyAttribute(
+            element,
+            attribute: kAXPositionAttribute
+        ),
+        let sizeValue = copyAttribute(
+            element,
+            attribute: kAXSizeAttribute
+        ),
+        CFGetTypeID(positionValue) == AXValueGetTypeID(),
+        CFGetTypeID(sizeValue) == AXValueGetTypeID()
+    else {
+        return nil
+    }
+    let positionAXValue = unsafeDowncast(positionValue, to: AXValue.self)
+    let sizeAXValue = unsafeDowncast(sizeValue, to: AXValue.self)
+    guard
+        AXValueGetType(positionAXValue) == .cgPoint,
+        AXValueGetType(sizeAXValue) == .cgSize
+    else {
+        return nil
+    }
+    var origin = CGPoint.zero
+    var size = CGSize.zero
+    guard
+        AXValueGetValue(positionAXValue, .cgPoint, &origin),
+        AXValueGetValue(sizeAXValue, .cgSize, &size)
+    else {
+        return nil
+    }
+    return CGRect(origin: origin, size: size)
 }

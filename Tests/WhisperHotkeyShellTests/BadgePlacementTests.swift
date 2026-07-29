@@ -60,7 +60,7 @@ final class BadgePlacementTests: XCTestCase {
         XCTAssertEqual(index, 1)
     }
 
-    func testPlacesBadgeBesideCaret() {
+    func testPlacesBadgeAboveCaretLine() {
         let frame = BadgePlacement.frame(
             caretFrame: CGRect(x: 100, y: 200, width: 2, height: 20),
             fieldFrame: nil,
@@ -68,10 +68,10 @@ final class BadgePlacementTests: XCTestCase {
             badgeSize: CGSize(width: 100, height: 30)
         )
 
-        XCTAssertEqual(frame, CGRect(x: 110, y: 195, width: 100, height: 30))
+        XCTAssertEqual(frame, CGRect(x: 100, y: 228, width: 100, height: 30))
     }
 
-    func testFlipsBadgeToLeftAtRightScreenEdge() {
+    func testClampsHorizontalAlignmentAtRightScreenEdge() {
         let frame = BadgePlacement.frame(
             caretFrame: CGRect(x: 950, y: 200, width: 2, height: 20),
             fieldFrame: nil,
@@ -79,19 +79,35 @@ final class BadgePlacementTests: XCTestCase {
             badgeSize: CGSize(width: 100, height: 30)
         )
 
-        XCTAssertEqual(frame.origin.x, 842)
-        XCTAssertEqual(frame.origin.y, 195)
+        XCTAssertEqual(frame.origin.x, 892)
+        XCTAssertEqual(frame.origin.y, 228)
     }
 
-    func testFallsBackFromMissingCaretToField() {
+    func testPlacesAboveCompleteFieldInsteadOfObscuringItsCaret() {
         let frame = BadgePlacement.frame(
-            caretFrame: nil,
+            caretFrame: CGRect(x: 200, y: 35, width: 2, height: 20),
             fieldFrame: CGRect(x: 20, y: 30, width: 300, height: 40),
             screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
             badgeSize: CGSize(width: 100, height: 30)
         )
 
-        XCTAssertEqual(frame, CGRect(x: 328, y: 35, width: 100, height: 30))
+        XCTAssertEqual(frame, CGRect(x: 20, y: 78, width: 100, height: 30))
+        XCTAssertFalse(
+            frame.intersects(CGRect(x: 20, y: 30, width: 300, height: 40))
+        )
+    }
+
+    func testFlipsBelowFieldWhenTopEdgeHasNoRoom() {
+        let field = CGRect(x: 20, y: 750, width: 300, height: 40)
+        let frame = BadgePlacement.frame(
+            caretFrame: CGRect(x: 200, y: 755, width: 2, height: 20),
+            fieldFrame: field,
+            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            badgeSize: CGSize(width: 100, height: 30)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 20, y: 712, width: 100, height: 30))
+        XCTAssertFalse(frame.intersects(field))
     }
 
     func testFallsBackToVisibleScreenCornerAndClamps() {

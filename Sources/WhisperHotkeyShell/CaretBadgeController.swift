@@ -122,8 +122,10 @@ public final class CaretBadgeController {
             }
             switch runtimeAnchor {
             case let .accessibility(frame):
-                lastCaretFrame = frame
-                lastFieldFrame = nil
+                lastCaretFrame = caretFrame
+                lastFieldFrame = fieldFrame ?? (
+                    caretFrame == nil ? frame : nil
+                )
                 lastPointerFallback = nil
             case let .pointer(location):
                 lastCaretFrame = nil

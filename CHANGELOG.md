@@ -14,6 +14,8 @@
 - Made the listening badge draggable from its waveform or timer, preserving and
   clamping the chosen position through the rest of the dictation
 - Tightened the timer cell to compact the fixed-size listening badge
+- Positioned Accessibility-anchored badges above the complete focused field,
+  with a below-field screen-edge fallback, so dictated text remains unobscured
 - Made Escape unambiguously abort active dictation, discard its private audio,
   cancel recognition, and insert nothing
 - Reserved Escape for cancellation and migrated legacy Escape triggers to Right
