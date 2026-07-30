@@ -8,7 +8,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedModel: DictationModel
     public let selectedEngine: RecognitionEngine
     public let decodingProfile: DecodingProfile
-    public let keepModelReady: Bool
+    public let processingMode: ModelProcessingMode
     public let internalDictionaryEntries: [String]
     public let recordingLimit: RecordingLimit
     public let selectedTheme: BadgeTheme
@@ -22,7 +22,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         selectedModel: DictationModel,
         selectedEngine: RecognitionEngine = .defaultEngine,
         decodingProfile: DecodingProfile = .defaultProfile,
-        keepModelReady: Bool = false,
+        processingMode: ModelProcessingMode = .defaultMode,
         internalDictionaryEntries: [String] = [],
         recordingLimit: RecordingLimit,
         selectedTheme: BadgeTheme = .defaultTheme,
@@ -35,7 +35,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.selectedModel = selectedModel
         self.selectedEngine = selectedEngine
         self.decodingProfile = decodingProfile
-        self.keepModelReady = keepModelReady
+        self.processingMode = processingMode
         self.internalDictionaryEntries = internalDictionaryEntries
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
@@ -52,7 +52,7 @@ public struct AdvancedSettingsActions {
     public var selectModel: (DictationModel) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
     public var selectDecodingProfile: (DecodingProfile) -> Void
-    public var setKeepModelReady: (Bool) -> Void
+    public var selectProcessingMode: (ModelProcessingMode) -> Void
     public var setInternalDictionary: ([String]) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeTheme) -> Void
@@ -64,7 +64,7 @@ public struct AdvancedSettingsActions {
         selectModel: @escaping (DictationModel) -> Void,
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
-        setKeepModelReady: @escaping (Bool) -> Void = { _ in },
+        selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
         setInternalDictionary: @escaping ([String]) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
@@ -75,7 +75,7 @@ public struct AdvancedSettingsActions {
         self.selectModel = selectModel
         self.selectEngine = selectEngine
         self.selectDecodingProfile = selectDecodingProfile
-        self.setKeepModelReady = setKeepModelReady
+        self.selectProcessingMode = selectProcessingMode
         self.setInternalDictionary = setInternalDictionary
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
@@ -127,10 +127,7 @@ public final class AdvancedSettingsWindowController:
     private let modelControl = NSSegmentedControl()
     private let engineControl = NSSegmentedControl()
     private let decodingControl = NSSegmentedControl()
-    private let keepModelReadySwitch = NSSwitch()
-    private let keepModelReadyLabel = NSTextField(
-        labelWithString: "Keep model ready"
-    )
+    private let processingModeControl = NSSegmentedControl()
     private let internalDictionaryField = NSTokenField()
     private let recordingLimitPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
@@ -227,7 +224,7 @@ public final class AdvancedSettingsWindowController:
         select(model: state.selectedModel)
         select(engine: state.selectedEngine)
         select(decodingProfile: state.decodingProfile)
-        keepModelReadySwitch.state = state.keepModelReady ? .on : .off
+        select(processingMode: state.processingMode)
         if window?.firstResponder !== internalDictionaryField.currentEditor() {
             internalDictionaryField.objectValue =
                 state.internalDictionaryEntries
@@ -242,11 +239,8 @@ public final class AdvancedSettingsWindowController:
         decodingControl.isEnabled =
             state.configurationEnabled
                 && state.selectedEngine != .whisperKitCoreML
-        keepModelReadySwitch.isEnabled = state.configurationEnabled
+        processingModeControl.isEnabled = state.configurationEnabled
         internalDictionaryField.isEnabled = state.configurationEnabled
-        keepModelReadyLabel.textColor = state.configurationEnabled
-            ? .labelColor
-            : .disabledControlTextColor
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
 
@@ -403,12 +397,20 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func toggleKeepModelReady(_ sender: NSSwitch) {
-        guard stateProvider().configurationEnabled else {
+    @objc private func selectProcessingMode(
+        _ sender: NSSegmentedControl
+    ) {
+        guard stateProvider().configurationEnabled,
+              ModelProcessingMode.allCases.indices.contains(
+                sender.selectedSegment
+              )
+        else {
             refresh()
             return
         }
-        actions.setKeepModelReady(sender.state == .on)
+        actions.selectProcessingMode(
+            ModelProcessingMode.allCases[sender.selectedSegment]
+        )
         refresh()
     }
 
@@ -502,11 +504,18 @@ public final class AdvancedSettingsWindowController:
                 forSegment: index
             )
         }
-        keepModelReadySwitch.target = self
-        keepModelReadySwitch.action = #selector(toggleKeepModelReady(_:))
-        keepModelReadySwitch.toolTip =
-            "Keeps the selected Whisper model loaded for the fastest transcription."
-        keepModelReadySwitch.setAccessibilityLabel("Keep Model Ready")
+        configure(
+            processingModeControl,
+            labels: ModelProcessingMode.allCases.map(\.displayName),
+            action: #selector(selectProcessingMode(_:))
+        )
+        for (index, mode) in ModelProcessingMode.allCases.enumerated() {
+            processingModeControl.setToolTip(
+                mode.description,
+                forSegment: index
+            )
+        }
+        processingModeControl.setAccessibilityLabel("Processing")
         internalDictionaryField.delegate = self
         internalDictionaryField.target = self
         internalDictionaryField.action =
@@ -657,7 +666,7 @@ public final class AdvancedSettingsWindowController:
             "\(DictationModelPresentation.chipTitle(for: state.selectedModel)) "
             + "\(state.selectedEngine.displayName) "
             + "\(decodingSummary) "
-            + (state.keepModelReady ? "Ready" : "On Demand")
+            + state.processingMode.displayName
         limitSummary.stringValue = state.recordingLimit.displayName
         themeSummary.stringValue = state.selectedTheme.summaryName
         switch loginStatus {
@@ -686,10 +695,6 @@ public final class AdvancedSettingsWindowController:
         themedPrimaryLabels.forEach { $0.textColor = palette.primaryText }
         themedSecondaryLabels.forEach { $0.textColor = secondaryText }
         themedSectionLabels.forEach { $0.textColor = sectionText }
-        keepModelReadyLabel.textColor = stateProvider().configurationEnabled
-            ? palette.primaryText
-            : secondaryText.withAlphaComponent(0.48)
-
         loginItemToggle.contentTintColor = palette.waveform
         loginItemSettingsButton.contentTintColor = palette.waveform
         helpButton.contentTintColor = palette.waveform
@@ -744,6 +749,15 @@ public final class AdvancedSettingsWindowController:
         decodingControl.selectedSegment = index
     }
 
+    private func select(processingMode: ModelProcessingMode) {
+        guard let index = ModelProcessingMode.allCases.firstIndex(
+            of: processingMode
+        ) else {
+            return
+        }
+        processingModeControl.selectedSegment = index
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         root.wantsLayer = true
@@ -783,6 +797,11 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionTitle)
         let recognitionGrid = makeGrid()
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        addRow(
+            to: recognitionGrid,
+            title: "Processing",
+            control: processingModeControl
+        )
         addRow(to: recognitionGrid, title: "Engine", control: engineControl)
         addRow(
             to: recognitionGrid,
@@ -797,17 +816,6 @@ public final class AdvancedSettingsWindowController:
         internalDictionaryField.heightAnchor.constraint(
             greaterThanOrEqualToConstant: 52
         ).isActive = true
-        let readinessControls = NSStackView(
-            views: [keepModelReadySwitch, keepModelReadyLabel]
-        )
-        readinessControls.orientation = .horizontal
-        readinessControls.alignment = .centerY
-        readinessControls.spacing = 8
-        addRow(
-            to: recognitionGrid,
-            title: "Model readiness",
-            control: readinessControls
-        )
         addRow(
             to: recognitionGrid,
             title: "Recording limit",
@@ -974,7 +982,7 @@ public final class AdvancedSettingsWindowController:
             && modelControl.isEnabled
             && engineControl.isEnabled
             && decodingControl.isEnabled
-            && keepModelReadySwitch.isEnabled
+            && processingModeControl.isEnabled
             && internalDictionaryField.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
@@ -997,6 +1005,8 @@ public final class AdvancedSettingsWindowController:
             && engineControl.trackingMode == .selectOne
             && decodingControl.segmentStyle == .rounded
             && decodingControl.trackingMode == .selectOne
+            && processingModeControl.segmentStyle == .rounded
+            && processingModeControl.trackingMode == .selectOne
     }
 
     var controlsFitWindowForTesting: Bool {
@@ -1014,9 +1024,8 @@ public final class AdvancedSettingsWindowController:
             ("model", modelControl),
             ("engine", engineControl),
             ("decoding", decodingControl),
+            ("processing", processingModeControl),
             ("internal dictionary", internalDictionaryField),
-            ("readiness switch", keepModelReadySwitch),
-            ("readiness label", keepModelReadyLabel),
             ("limit", recordingLimitPopup),
             ("theme", themePopup),
             ("login toggle", loginItemToggle),
@@ -1055,6 +1064,7 @@ public final class AdvancedSettingsWindowController:
             modelControl.segmentCount,
             engineControl.segmentCount,
             decodingControl.segmentCount,
+            processingModeControl.segmentCount,
             recordingLimitPopup.numberOfItems,
             themePopup.numberOfItems,
         ]
@@ -1128,13 +1138,20 @@ public final class AdvancedSettingsWindowController:
         selectEngine(engineControl)
     }
 
-    func setKeepModelReadyForTesting(_ enabled: Bool) {
-        keepModelReadySwitch.state = enabled ? .on : .off
-        toggleKeepModelReady(keepModelReadySwitch)
+    func selectProcessingModeForTesting(_ mode: ModelProcessingMode) {
+        select(processingMode: mode)
+        selectProcessingMode(processingModeControl)
     }
 
-    var keepModelReadyForTesting: Bool {
-        keepModelReadySwitch.state == .on
+    var selectedProcessingModeForTesting: ModelProcessingMode? {
+        guard ModelProcessingMode.allCases.indices.contains(
+            processingModeControl.selectedSegment
+        ) else {
+            return nil
+        }
+        return ModelProcessingMode.allCases[
+            processingModeControl.selectedSegment
+        ]
     }
 
     var internalDictionaryEntriesForTesting: [String] {

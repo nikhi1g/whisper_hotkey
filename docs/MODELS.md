@@ -12,17 +12,24 @@ WhisperKit Core ML recognition. Recognition is English-only and entirely local.
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Strong accuracy/speed balance |
 
 Memory varies with whisper.cpp, Metal allocation, and recording length, so the
-menu shows download size rather than promising a fixed RAM number. By default,
-models load only for active dictation and unload afterward.
+menu shows download size rather than promising a fixed RAM number.
 
-## Keep Model Ready
+## Processing
 
-Settings includes a persistent **Keep Model Ready** switch directly below the
-model picker. It defaults off for minimal idle memory. When enabled, the app
-preloads the selected whisper.cpp helper and keeps that model loaded between
-dictations, removing repeated model startup latency. The microphone remains off,
-and there is no polling loop. Turning the switch off, changing the selected
-model, quitting, or restarting terminates the owned helper.
+Settings provides three processing chips directly below the model picker:
+
+- **After Recording** loads and decodes after capture for minimal idle memory.
+- **Model Ready** keeps one selected model loaded between dictations.
+- **Decode While Speaking** keeps that model loaded and decodes private bounded
+  chunks concurrently with capture, then inserts the assembled transcript once.
+
+Decode While Speaking uses one helper, not parallel model copies. Audio capture
+and recognition form a pipeline while whisper.cpp performs its existing
+CPU-thread and Metal parallel work. The microphone remains off at idle and no
+choice adds idle polling.
+The windowed mode can lose a small amount of context across chunk boundaries.
+The full-context modes remain available when accuracy matters more than finish
+latency.
 
 ## Decoder
 

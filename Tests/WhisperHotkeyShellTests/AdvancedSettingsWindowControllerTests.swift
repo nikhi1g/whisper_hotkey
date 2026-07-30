@@ -35,7 +35,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 mode: .toggle,
                 model: .smallEnglish,
                 decodingProfile: .adaptive,
-                keepModelReady: true,
+                processingMode: .decodeWhileSpeaking,
                 internalDictionaryEntries: ["Codex", "Claude Code"],
                 limit: .minutes5,
                 availableModels: [.baseEnglish, .smallEnglish]
@@ -51,7 +51,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.selectedDecodingProfileForTesting,
             .adaptive
         )
-        XCTAssertTrue(controller.keepModelReadyForTesting)
+        XCTAssertEqual(
+            controller.selectedProcessingModeForTesting,
+            .decodeWhileSpeaking
+        )
         XCTAssertEqual(
             controller.internalDictionaryEntriesForTesting,
             ["Codex", "Claude Code"]
@@ -67,6 +70,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             "\(DictationModel.mediumEnglish.menuTitle): Not Installed"
         )
         XCTAssertTrue(controller.usesChipSelectionForTesting)
+        XCTAssertEqual(
+            controller.optionCountsForTesting[5],
+            ModelProcessingMode.allCases.count
+        )
         XCTAssertTrue(
             controller.controlsFitWindowForTesting,
             controller.controlsOutsideWindowForTesting.joined(separator: ", ")
@@ -75,7 +82,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.summaryValuesForTesting,
             [
                 "Right Option", "Toggle",
-                "Small Metal Smart Decode Ready", "5 Minutes",
+                "Small Metal Smart Decode Decode While Speaking", "5 Minutes",
                 "Dimmed", "Login On",
             ]
         )
@@ -105,7 +112,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             hotkey: .rightOption,
             mode: .toggle,
             model: .largeV3TurboQ5,
-            keepModelReady: true,
+            processingMode: .modelReady,
             limit: .minutes5,
             availableModels: Set(DictationModel.allCases)
         )
@@ -138,13 +145,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             }
         )
         XCTAssertTrue(
-            rows.contains(
-                UserGuideRow(
-                    key: "on",
-                    title: "Keep Model Ready",
-                    detail: "On: the selected model stays loaded for the fastest response and higher idle memory use."
-                )
-            )
+            [
+                "After Recording", "Model Ready", "Decode While Speaking",
+            ].allSatisfy { title in
+                rows.contains(where: { $0.title == title })
+            }
         )
         XCTAssertTrue(
             ["Discard", "Insert and send", "Stop and insert"].allSatisfy {
@@ -213,7 +218,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedModels: [DictationModel] = []
         var selectedEngines: [RecognitionEngine] = []
         var selectedDecodingProfiles: [DecodingProfile] = []
-        var readinessSelections: [Bool] = []
+        var processingSelections: [ModelProcessingMode] = []
         var dictionarySelections: [[String]] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeTheme] = []
@@ -227,7 +232,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDecodingProfile: {
                     selectedDecodingProfiles.append($0)
                 },
-                setKeepModelReady: { readinessSelections.append($0) },
+                selectProcessingMode: { processingSelections.append($0) },
                 setInternalDictionary: { dictionarySelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) }
@@ -241,7 +246,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectModelForTesting(.largeV3TurboQ5)
         controller.selectDecodingProfileForTesting(.adaptive)
         controller.selectEngineForTesting(.whisperKitCoreML)
-        controller.setKeepModelReadyForTesting(true)
+        controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(
             [" Codex ", "Claude Code", "codex"]
         )
@@ -253,7 +258,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
         XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
         XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
-        XCTAssertEqual(readinessSelections, [true])
+        XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
         XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.nord])
@@ -263,7 +268,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             mode: .toggle,
             model: .largeV3TurboQ5,
             decodingProfile: .adaptive,
-            keepModelReady: true,
+            processingMode: .decodeWhileSpeaking,
             internalDictionaryEntries: ["Codex", "Claude Code"],
             limit: .minutes30,
             theme: .nord,
@@ -281,7 +286,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.selectedDecodingProfileForTesting,
             .adaptive
         )
-        XCTAssertTrue(controller.keepModelReadyForTesting)
+        XCTAssertEqual(
+            controller.selectedProcessingModeForTesting,
+            .decodeWhileSpeaking
+        )
         XCTAssertEqual(
             controller.internalDictionaryEntriesForTesting,
             ["Codex", "Claude Code"]
@@ -340,7 +348,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDictationMode: { _ in mutationCount += 1 },
                 selectHotkey: { _ in mutationCount += 1 },
                 selectModel: { _ in mutationCount += 1 },
-                setKeepModelReady: { _ in mutationCount += 1 },
+                selectProcessingMode: { _ in mutationCount += 1 },
                 setInternalDictionary: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },
@@ -354,7 +362,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectHotkeyForTesting(.leftControl)
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.smallEnglish)
-        controller.setKeepModelReadyForTesting(true)
+        controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(["Codex"])
         controller.selectLimitForTesting(.seconds30)
         controller.selectThemeForTesting(.dracula)
@@ -484,7 +492,7 @@ private func makeAdvancedSettingsState(
     model: DictationModel = .baseEnglish,
     engine: RecognitionEngine = .whisperCppMetal,
     decodingProfile: DecodingProfile = .precision,
-    keepModelReady: Bool = false,
+    processingMode: ModelProcessingMode = .afterRecording,
     internalDictionaryEntries: [String] = [],
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
@@ -498,7 +506,7 @@ private func makeAdvancedSettingsState(
         selectedModel: model,
         selectedEngine: engine,
         decodingProfile: decodingProfile,
-        keepModelReady: keepModelReady,
+        processingMode: processingMode,
         internalDictionaryEntries: internalDictionaryEntries,
         recordingLimit: limit,
         selectedTheme: theme,

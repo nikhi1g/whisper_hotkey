@@ -90,6 +90,17 @@ public final class WhisperAudioRecorder {
         writer?.trailingSilenceDuration ?? 0
     }
 
+    /// Duration and speech state for the current inference segment. Both are
+    /// maintained by the existing audio callback and read only while capture
+    /// is active.
+    public var currentSegmentDuration: TimeInterval {
+        writer?.segmentDuration ?? 0
+    }
+
+    public var currentSegmentSpeechPresence: WhisperSpeechPresence {
+        writer?.segmentSpeechPresence ?? .unknown
+    }
+
     /// The current cadence-aware pause boundary. It is learned only from the
     /// existing audio callback and remains bounded for predictable latency.
     public var pauseBoundarySilence: TimeInterval {
@@ -350,6 +361,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
     private let fileSettings: [String: Any]
     private var firstError: Error?
     private var latestNormalizedInputLevel: Float = 0
+    private var segmentFrameCount: Int64 = 0
     private var sessionSpeechDetector = WhisperSpeechActivityDetector()
     private var segmentSpeechDetector = WhisperSpeechActivityDetector()
 
@@ -382,6 +394,16 @@ final class WhisperWAVWriter: @unchecked Sendable {
 
     var trailingSilenceDuration: TimeInterval {
         lock.withLock { segmentSpeechDetector.trailingSilenceDuration }
+    }
+
+    var segmentDuration: TimeInterval {
+        lock.withLock {
+            TimeInterval(segmentFrameCount) / outputFormat.sampleRate
+        }
+    }
+
+    var segmentSpeechPresence: WhisperSpeechPresence {
+        lock.withLock { segmentSpeechDetector.presence }
     }
 
     var pauseBoundarySilence: TimeInterval {
@@ -444,6 +466,9 @@ final class WhisperWAVWriter: @unchecked Sendable {
                     )
                     try file.write(from: output)
                     try segmentFile?.write(from: output)
+                    if segmentFile != nil {
+                        segmentFrameCount += Int64(output.frameLength)
+                    }
                 } catch {
                     firstError = error
                 }
@@ -483,6 +508,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
             )
             segmentFile = nextFile
             segmentAudioFile = nextAudioFile
+            segmentFrameCount = 0
             segmentSpeechDetector =
                 segmentSpeechDetector.nextSegmentPreservingCadence()
             return completedAudioFile
@@ -496,6 +522,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
         lock.withLock {
             file = nil
             segmentFile = nil
+            segmentFrameCount = 0
             converter = nil
             latestNormalizedInputLevel = 0
             let finalSegment = segmentAudioFile

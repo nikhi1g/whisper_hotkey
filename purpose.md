@@ -30,10 +30,10 @@ Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Command is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
-arms capture without polling, after which the microphone starts and the
-installed Base English whisper.cpp model loads asynchronously. Releasing after
-at least 250 milliseconds transcribes once, pastes at the current focus, and
-unloads the model by default. A faster tap does nothing.
+arms capture without polling, after which the microphone starts. Releasing
+after at least 250 milliseconds transcribes once and pastes at the current
+focus. The selected Processing policy controls when the model loads and whether
+hidden background decoding occurs. A faster tap does nothing.
 
 The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
 **Pause Mode** choices. The selected mode persists across launches. The three
@@ -52,8 +52,8 @@ tail of the current session as its initial Whisper prompt so punctuation and
 casing can follow the preceding phrase instead of treating every pause as a new
 utterance. The prompt travels only over the owned helper's stdin, is never a
 process argument, and does not grow with session length. The app retains no
-audio worker at idle. With **Keep Model Ready** off, it also retains no model
-helper at idle. Full audio and inference segments are deleted on
+audio worker at idle. With **After Recording** selected, it also retains no
+model helper at idle. Full audio and inference segments are deleted on
 stop, cancellation, failure, or termination. Caps Lock
 cannot use Press and Hold because macOS exposes its lock-state changes rather
 than a momentary hold/release pair; it can use Toggle or Pause Mode.
@@ -104,13 +104,24 @@ Dictionary parsing happens only at launch or while Settings is edited; it adds
 no idle task, process, model, or network work. The prompt remains local, travels
 only through the owned helper's stdin, and is never logged or placed in process
 arguments.
-The persistent
-**Keep Model Ready** switch sits directly below the model picker and defaults
-off. When enabled, the selected helper and model preload once and remain ready
-between dictations for the shortest recognition startup time, at the cost of
-higher idle memory. It does not keep the microphone active, poll, or retain
-audio. Turning it off, changing models, quitting, restarting, or a failed helper
-cleans up the owned process before returning to on-demand behavior.
+The persistent **Processing** selector sits directly below the model picker.
+**After Recording** is the default: it loads and decodes only after capture
+finishes for the lowest idle memory. **Model Ready** keeps the selected helper
+and model loaded between dictations. **Decode While Speaking** also keeps one
+model loaded, then privately decodes bounded inference segments concurrently
+with ongoing capture. It prefers a detected pause after five seconds and rotates
+at an eight-second hard bound so release leaves only a small final segment. Segment
+recognition is serialized through one helper while whisper.cpp uses its normal
+thread and Metal parallelism; multiple competing model processes are never
+created. Partial transcripts remain hidden in memory and are inserted once
+after the final segment. One uninterrupted private recording is retained as a
+fallback if any background chunk fails. Pause Mode continues to own its existing
+insert-at-pause behavior and takes precedence when selected. None of the three
+processing choices keeps the microphone active or adds idle polling. Changing
+the choice, model, or engine, quitting, restarting, or a failed helper cleans up
+the owned process as required. Decode While Speaking explicitly trades a small
+amount of cross-chunk context accuracy for lower release latency; the other two
+choices retain full-recording context.
 **Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
 The bottom of Settings reports the current key, behavior, model, recording

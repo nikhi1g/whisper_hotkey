@@ -4,6 +4,7 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
     public static let recognitionEngine = "recognitionEngine"
     public static let decodingProfile = "decodingProfile"
+    public static let modelProcessingMode = "modelProcessingMode"
     public static let keepModelReady = "keepModelReady"
     public static let internalDictionary = "internalDictionary"
     public static let dictationMode = "dictationMode"
@@ -181,11 +182,66 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     }
 }
 
-public enum WhisperModelReadinessPreference {
-    public static func keepsModelReady(
+public enum ModelProcessingMode: String, CaseIterable, Codable, Sendable {
+    case afterRecording
+    case modelReady
+    case decodeWhileSpeaking
+
+    public static let defaultMode: Self = .afterRecording
+
+    public var displayName: String {
+        switch self {
+        case .afterRecording:
+            "After Recording"
+        case .modelReady:
+            "Model Ready"
+        case .decodeWhileSpeaking:
+            "Decode While Speaking"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .afterRecording:
+            "Loads and decodes after recording for full-context accuracy and the lowest idle memory."
+        case .modelReady:
+            "Keeps the selected model loaded for full-context decoding without model startup."
+        case .decodeWhileSpeaking:
+            "Privately decodes long chunks while you speak for the shortest finish time, with slightly less cross-chunk context."
+        }
+    }
+
+    public var keepsModelReady: Bool {
+        self != .afterRecording
+    }
+
+    public var decodesWhileSpeaking: Bool {
+        self == .decodeWhileSpeaking
+    }
+
+    public static func selected(
         defaults: UserDefaults = .standard
-    ) -> Bool {
-        defaults.bool(forKey: WhisperHotkeyPreferenceKeys.keepModelReady)
+    ) -> Self {
+        if let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.modelProcessingMode
+        ), let mode = Self(rawValue: rawValue) {
+            return mode
+        }
+        return defaults.bool(
+            forKey: WhisperHotkeyPreferenceKeys.keepModelReady
+        ) ? .modelReady : .defaultMode
+    }
+
+    public func persist(defaults: UserDefaults = .standard) {
+        defaults.set(
+            rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.modelProcessingMode
+        )
+        // Preserve downgrade compatibility with the former two-state switch.
+        defaults.set(
+            keepsModelReady,
+            forKey: WhisperHotkeyPreferenceKeys.keepModelReady
+        )
     }
 }
 

@@ -117,14 +117,14 @@ class Helper:
             )
         return json.loads(line)
 
-    def transcribe(self, audio: Path) -> dict:
+    def transcribe(self, audio: Path, prompt: str = "") -> dict:
         assert self.process.stdin is not None
         self.process.stdin.write(
             json.dumps(
                 {
                     "command": "transcribe",
                     "audioPath": str(audio),
-                    "prompt": "",
+                    "prompt": prompt,
                 },
                 separators=(",", ":"),
             )

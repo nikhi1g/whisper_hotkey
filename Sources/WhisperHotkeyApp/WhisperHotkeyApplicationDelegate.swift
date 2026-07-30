@@ -16,7 +16,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         selectedModel: .baseEnglish,
         selectedEngine: .whisperCppMetal,
         decodingProfile: .precision,
-        keepModelReady: false,
+        processingMode: .afterRecording,
         internalDictionaryEntries: [],
         recordingLimit: .minutes10,
         availableModels: [],
@@ -68,8 +68,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedModel = DictationModel.selected()
     private var selectedEngine = RecognitionEngine.selected()
     private var decodingProfile = DecodingProfile.selected()
-    private var keepModelReady =
-        WhisperModelReadinessPreference.keepsModelReady()
+    private var processingMode = ModelProcessingMode.selected()
     private var internalDictionary = InternalDictionary.selected()
     private var recordingLimit = RecordingLimit.selected()
     private var selectedTheme = BadgeTheme.selected()
@@ -165,6 +164,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var pauseSessionDidInsert = false
     private var pauseBoundaryInProgress = false
     private var pauseSessionPrompt: String?
+    private var predecodeAccumulator = PredecodedTranscriptAccumulator()
+    private var predecodeBoundaryInProgress = false
+    private var predecodeFailed = false
     private var sessionGeneration: UInt64 = 0
     private var startupError: String?
     private var startupBadgeVisible = false
@@ -540,20 +542,32 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionPrompt = nil
+        predecodeAccumulator.reset()
+        predecodeBoundaryInProgress = false
+        predecodeFailed = false
 
         let precedingCleanup = recognizerCleanupTask
-        preloadTask = Task.detached(priority: .userInitiated) { [recognizer] in
-            if let precedingCleanup {
-                await precedingCleanup.value
+        if processingMode.keepsModelReady {
+            preloadTask = Task.detached(
+                priority: .userInitiated
+            ) { [recognizer] in
+                if let precedingCleanup {
+                    await precedingCleanup.value
+                }
+                guard !Task.isCancelled else {
+                    return
+                }
+                try? await recognizer.preload()
             }
-            guard !Task.isCancelled else {
-                return
-            }
-            try? await recognizer.preload()
+        } else {
+            preloadTask = nil
         }
 
         do {
-            try recorder.start(pauseSegmentation: isPauseMode)
+            try recorder.start(
+                pauseSegmentation:
+                    isPauseMode || processingMode.decodesWhileSpeaking
+            )
             process(.captureStarted)
             startRecordingPresentation(
                 generation: generation,
@@ -593,6 +607,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         if isPauseMode {
             return finalizePauseSession()
+        }
+        if processingMode.decodesWhileSpeaking {
+            return finalizePredecodedSession()
         }
 
         let audio: WhisperAudioFile
@@ -652,6 +669,76 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                       runtimeReadyForHotkey,
                       !isTerminating,
                       generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                preloadTask = nil
+                recognitionTask = nil
+                fail(error)
+            }
+        }
+        return true
+    }
+
+    private func finalizePredecodedSession() -> Bool {
+        let recording: WhisperAudioFile
+        let finalSegment: WhisperAudioFile
+        do {
+            let result = try recorder.stopPauseSession()
+            recording = result.recording
+            finalSegment = result.finalSegment
+        } catch {
+            fail(error)
+            return false
+        }
+        enqueuePredecodeChunkIfNeeded(finalSegment)
+
+        let generation = sessionGeneration
+        let precedingRecognition = recognitionTask
+        let sessionPreload = preloadTask
+        recognitionTask = Task { @MainActor [weak self, recognizer] in
+            defer { recording.delete() }
+            if let precedingRecognition {
+                await precedingRecognition.value
+            }
+            if let sessionPreload {
+                await sessionPreload.value
+            }
+            await recognizer.finishContinuousSession()
+
+            guard let self,
+                  !Task.isCancelled,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  generation == sessionGeneration,
+                  machine.phase == .transcribing
+            else {
+                return
+            }
+
+            do {
+                let transcript: String
+                if predecodeFailed {
+                    transcript = try await recognizer.transcribe(
+                        recording,
+                        prompt: internalDictionary.prompt
+                    )
+                } else {
+                    transcript = predecodeAccumulator.transcript
+                }
+                guard generation == sessionGeneration,
+                      machine.phase == .transcribing
+                else {
+                    return
+                }
+                preloadTask = nil
+                recognitionTask = nil
+                process(.transcriptReady, transcript: transcript)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard generation == sessionGeneration,
                       machine.phase == .transcribing
                 else {
                     return
@@ -730,6 +817,86 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             process(.chunkedSessionFinished)
         }
         return true
+    }
+
+    private func flushPredecodeChunkAndContinue() {
+        guard processingMode.decodesWhileSpeaking,
+              !isPauseMode,
+              !predecodeBoundaryInProgress,
+              !predecodeFailed,
+              machine.phase == .listening
+        else {
+            return
+        }
+        predecodeBoundaryInProgress = true
+        defer { predecodeBoundaryInProgress = false }
+
+        let audio: WhisperAudioFile
+        do {
+            audio = try recorder.rotatePauseSegment()
+        } catch {
+            predecodeFailed = true
+            return
+        }
+        enqueuePredecodeChunkIfNeeded(audio)
+    }
+
+    private func enqueuePredecodeChunkIfNeeded(_ audio: WhisperAudioFile) {
+        guard audio.speechPresence != .absent else {
+            audio.delete()
+            return
+        }
+
+        let generation = sessionGeneration
+        let precedingRecognition = recognitionTask
+        let sessionPreload = preloadTask
+        recognitionTask = Task { @MainActor [weak self, recognizer] in
+            defer { audio.delete() }
+            if let precedingRecognition {
+                await precedingRecognition.value
+            }
+            if let sessionPreload {
+                await sessionPreload.value
+            }
+            guard let self,
+                  !Task.isCancelled,
+                  !predecodeFailed,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  generation == sessionGeneration,
+                  machine.phase == .listening
+                    || machine.phase == .transcribing
+            else {
+                return
+            }
+
+            do {
+                let transcript = try await recognizer.transcribeChunk(
+                    audio,
+                    prompt: internalDictionary.prompt
+                )
+                guard !Task.isCancelled,
+                      generation == sessionGeneration,
+                      machine.phase == .listening
+                        || machine.phase == .transcribing
+                else {
+                    return
+                }
+                predecodeAccumulator.append(transcript)
+            } catch is CancellationError {
+                return
+            } catch let error as WhisperASRError where error == .noSpeech {
+                return
+            } catch {
+                guard generation == sessionGeneration,
+                      machine.phase == .listening
+                        || machine.phase == .transcribing
+                else {
+                    return
+                }
+                predecodeFailed = true
+            }
+        }
     }
 
     private func flushPauseChunkAndContinue() {
@@ -889,6 +1056,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionPrompt = nil
+        predecodeAccumulator.reset()
+        predecodeBoundaryInProgress = false
+        predecodeFailed = false
         let cancelledPreload = preloadTask
         cancelledPreload?.cancel()
         preloadTask = nil
@@ -1012,6 +1182,16 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     >= recorder.pauseBoundarySilence
                 {
                     flushPauseChunkAndContinue()
+                } else if processingMode.decodesWhileSpeaking,
+                          BackgroundPredecodePolicy.shouldRotate(
+                            segmentDuration: recorder.currentSegmentDuration,
+                            containsSpeech:
+                                recorder.currentSegmentSpeechPresence
+                                    == .present,
+                            trailingSilence: recorder.trailingSilenceDuration
+                          )
+                {
+                    flushPredecodeChunkAndContinue()
                 }
                 do {
                     try await Task.sleep(for: .milliseconds(50))
@@ -1179,7 +1359,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectedModel: selectedModel,
             selectedEngine: selectedEngine,
             decodingProfile: decodingProfile,
-            keepModelReady: keepModelReady,
+            processingMode: processingMode,
             internalDictionaryEntries: internalDictionary.entries,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
@@ -1215,8 +1395,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     selectDecodingProfile: { [weak self] profile in
                         self?.selectDecodingProfile(profile)
                     },
-                    setKeepModelReady: { [weak self] enabled in
-                        self?.setKeepModelReady(enabled)
+                    selectProcessingMode: { [weak self] mode in
+                        self?.selectProcessingMode(mode)
                     },
                     setInternalDictionary: { [weak self] entries in
                         self?.setInternalDictionary(entries)
@@ -1348,15 +1528,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         advancedSettingsWindowController?.refreshIfVisible()
     }
 
-    private func setKeepModelReady(_ enabled: Bool) {
-        guard !machine.phase.isBusy, keepModelReady != enabled else {
+    private func selectProcessingMode(_ mode: ModelProcessingMode) {
+        guard !machine.phase.isBusy, processingMode != mode else {
             return
         }
-        keepModelReady = enabled
-        UserDefaults.standard.set(
-            enabled,
-            forKey: WhisperHotkeyPreferenceKeys.keepModelReady
-        )
+        processingMode = mode
+        mode.persist()
         configureModelReadiness()
         updateMenuBar()
     }
@@ -1378,7 +1555,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         reloadSelectedModel: Bool = false
     ) {
         let precedingConfiguration = modelConfigurationTask
-        let shouldKeepReady = keepModelReady
+        let shouldKeepReady = processingMode.keepsModelReady
         let recognizer = recognizer
         let logger = logger
         modelConfigurationTask = Task.detached(priority: .utility) {
@@ -1477,6 +1654,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionPrompt = nil
+        predecodeAccumulator.reset()
+        predecodeBoundaryInProgress = false
+        predecodeFailed = false
         preloadTask?.cancel()
         preloadTask = nil
         recognitionTask?.cancel()

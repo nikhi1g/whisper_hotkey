@@ -22,10 +22,9 @@ flowchart LR
 
 At idle, only the event tap, menu item, local control socket, and app process
 remain by default. There is no audio engine, loaded model, helper, polling
-worker, or transcript history. If Keep Model Ready is enabled, the selected
-helper and model also remain resident, but the audio engine stays stopped and
-no polling task is added. During on-demand dictation, capture and model preload
-begin together.
+worker, or transcript history. Model Ready and Decode While Speaking keep the
+selected helper resident, but the audio engine stays stopped and no polling
+task is added. After Recording loads the model only when capture finishes.
 Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
 helper, and deletes the private audio directory. Pause Mode retains one
 uninterrupted full-session WAV and writes a parallel current inference segment
@@ -35,6 +34,13 @@ A boundary rotates only the inference segment, serially transcribes and pastes
 the phrase, and reuses the loaded helper until the active session ends.
 The next decode is conditioned on at most 240 trailing characters from the
 current session, sent through the helper's private JSON-line stdin channel.
+Decode While Speaking reuses the same dual-file recorder without Pause Mode's
+incremental paste. Its 20 Hz recording task rotates speech-bearing inference
+segments at a detected pause after five seconds or at an eight-second bound. Capture
+continues while a strict serial recognition chain consumes completed segments
+through one helper. Partial text stays in a bounded in-memory accumulator and is
+inserted once after the final segment. The complete session WAV remains
+available for one ordinary fallback decode if a background chunk fails.
 
 The status menu contains only immediate actions. A lazy native Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login
@@ -131,8 +137,9 @@ duration-progress track; no additional timer or polling loop is used.
 ## Privacy and ownership
 
 - Temporary audio uses a mode-0700 directory and mode-0600 WAV.
-- Pause Mode retains complete session audio only until that active session ends;
-  the full WAV and every inference segment share the same cleanup guarantees.
+- Pause Mode and Decode While Speaking retain complete session audio only until
+  that active session ends; the full WAV and every inference segment share the
+  same cleanup guarantees.
 - Audio and transcripts never enter logs or network requests.
 - The app has no model downloader or cloud speech client.
 - `run.sh` explicitly downloads selected models and verifies pinned checksums.

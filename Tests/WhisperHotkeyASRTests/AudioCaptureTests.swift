@@ -116,6 +116,8 @@ final class AudioCaptureTests: XCTestCase {
             writer.consume(input)
         }
         XCTAssertEqual(writer.speechPresence, .present)
+        XCTAssertGreaterThan(writer.segmentDuration, 0.9)
+        XCTAssertEqual(writer.segmentSpeechPresence, .present)
         let nextSegmentDirectory = directory.appendingPathComponent(
             "next-segment",
             isDirectory: true
@@ -144,10 +146,12 @@ final class AudioCaptureTests: XCTestCase {
         )
         XCTAssertEqual(completedSegment.speechPresence, .present)
         XCTAssertEqual(writer.trailingSilenceDuration, 0)
+        XCTAssertEqual(writer.segmentDuration, 0)
 
         for _ in 0..<5 {
             writer.consume(input)
         }
+        XCTAssertGreaterThan(writer.segmentDuration, 0.4)
         let finishResult = writer.finishRetainingSegment()
         XCTAssertNil(finishResult.error)
         XCTAssertEqual(finishResult.segment?.speechPresence, .present)

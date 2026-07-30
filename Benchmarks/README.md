@@ -14,10 +14,15 @@ python3 Benchmarks/Scripts/benchmark_librispeech.py \
   --helper .build/arm64-apple-macosx/debug/WhisperModelHelper \
   --model ~/.cache/whisper/ggml-large-v3-turbo-q5_0.bin \
   --wav-root Benchmarks/Data/WAV
+python3 Benchmarks/Scripts/benchmark_predecode.py \
+  --helper .build/arm64-apple-macosx/debug/WhisperModelHelper \
+  --model ~/.cache/whisper/ggml-large-v3-turbo-q5_0.bin \
+  --wav-root Benchmarks/Data/WAV
 ```
 
 The downloader pins the checksums published by OpenSLR. Results contain
 aggregate and per-utterance timing, word-error counts, and numeric confidence
 measurements, but never audio or transcript text. `--wav-root` must mirror the
 split and utterance IDs from LibriSpeech and contain private-mode, 16 kHz, mono
-PCM16 WAV files.
+PCM16 WAV files. The predecode benchmark simulates real-time chunk availability
+to compare release-to-result latency while still executing recognition locally.

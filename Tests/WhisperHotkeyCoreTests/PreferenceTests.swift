@@ -54,20 +54,40 @@ final class PreferenceTests: XCTestCase {
         XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .githubDarkDimmed)
     }
 
-    func testKeepModelReadyDefaultsOffAndPersists() {
+    func testProcessingModeDefaultsMigratesAndPersists() {
         let suite = "whisper-hotkey-readiness-\(UUID().uuidString)"
         let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        XCTAssertFalse(
-            WhisperModelReadinessPreference.keepsModelReady(defaults: defaults)
+        XCTAssertEqual(
+            ModelProcessingMode.selected(defaults: defaults),
+            .afterRecording
         )
         defaults.set(
             true,
             forKey: WhisperHotkeyPreferenceKeys.keepModelReady
         )
+        XCTAssertEqual(
+            ModelProcessingMode.selected(defaults: defaults),
+            .modelReady
+        )
+
+        ModelProcessingMode.decodeWhileSpeaking.persist(defaults: defaults)
+        XCTAssertEqual(
+            ModelProcessingMode.selected(defaults: defaults),
+            .decodeWhileSpeaking
+        )
         XCTAssertTrue(
-            WhisperModelReadinessPreference.keepsModelReady(defaults: defaults)
+            defaults.bool(forKey: WhisperHotkeyPreferenceKeys.keepModelReady)
+        )
+        XCTAssertTrue(ModelProcessingMode.modelReady.keepsModelReady)
+        XCTAssertTrue(
+            ModelProcessingMode.decodeWhileSpeaking.decodesWhileSpeaking
+        )
+        XCTAssertFalse(ModelProcessingMode.afterRecording.keepsModelReady)
+        XCTAssertEqual(
+            ModelProcessingMode.allCases.map(\.displayName),
+            ["After Recording", "Model Ready", "Decode While Speaking"]
         )
     }
 

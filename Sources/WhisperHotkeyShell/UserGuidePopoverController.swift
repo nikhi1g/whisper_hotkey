@@ -144,11 +144,26 @@ enum UserGuideContent {
                         detail: state.decodingProfile.description
                     ),
                     UserGuideRow(
-                        key: state.keepModelReady ? "on" : "off",
-                        title: "Keep Model Ready",
-                        detail: state.keepModelReady
-                            ? "On: the selected model stays loaded for the fastest response and higher idle memory use."
-                            : "Off: the model loads during each dictation and unloads afterward to minimize idle memory."
+                        key: "after recording",
+                        title: ModelProcessingMode.afterRecording.displayName,
+                        detail: ModelProcessingMode.afterRecording.description
+                    ),
+                    UserGuideRow(
+                        key: "model ready",
+                        title: ModelProcessingMode.modelReady.displayName,
+                        detail: ModelProcessingMode.modelReady.description
+                    ),
+                    UserGuideRow(
+                        key: "decode while speaking",
+                        title:
+                            ModelProcessingMode.decodeWhileSpeaking.displayName,
+                        detail:
+                            ModelProcessingMode.decodeWhileSpeaking.description
+                    ),
+                    UserGuideRow(
+                        key: state.processingMode.rawValue,
+                        title: "Selected processing",
+                        detail: state.processingMode.description
                     ),
                     UserGuideRow(
                         key: "terms",
