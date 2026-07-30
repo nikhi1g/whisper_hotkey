@@ -79,6 +79,12 @@ final class StateMachineTests: XCTestCase {
             [.cancelSession, .showBadge(.hidden)]
         )
         XCTAssertEqual(machine.phase, .cancelled)
+        XCTAssertEqual(
+            machine.handle(.cancellationPresentationFinished),
+            [.showBadge(.hidden)]
+        )
+        XCTAssertEqual(machine.phase, .idle)
+        XCTAssertEqual(machine.handle(.cancellationPresentationFinished), [])
 
         machine = DictationStateMachine()
         _ = machine.handle(.hotkeyPressed(at: 1))

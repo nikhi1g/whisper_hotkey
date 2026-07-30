@@ -8,4 +8,11 @@ final class BadgePresentationDurationTests: XCTestCase {
             BadgePresentationDuration.standardError
         )
     }
+
+    func testCancelledMenuStateIsBrief() {
+        XCTAssertLessThan(
+            BadgePresentationDuration.cancelledMenuState,
+            BadgePresentationDuration.noSpeech
+        )
+    }
 }

@@ -151,6 +151,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var recognitionTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
     private var recordingPresentationTask: Task<Void, Never>?
+    private var cancellationPresentationTask: Task<Void, Never>?
     private var errorPresentationTask: Task<Void, Never>?
     private var submitAfterPasteTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
@@ -492,6 +493,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             isActive: machine.phase == .preparing || machine.phase == .listening
         )
         updateMenuBar()
+        if event == .cancel, machine.phase == .cancelled {
+            scheduleCancellationPresentationFinished()
+        }
     }
 
     private func apply(
@@ -525,6 +529,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func beginSession() -> Bool {
         sessionGeneration &+= 1
         let generation = sessionGeneration
+        cancellationPresentationTask?.cancel()
+        cancellationPresentationTask = nil
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
         maximumDurationTask?.cancel()
@@ -905,6 +911,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             if let cancelledRecognition {
                 await cancelledRecognition.value
             }
+        }
+    }
+
+    private func scheduleCancellationPresentationFinished() {
+        cancellationPresentationTask?.cancel()
+        cancellationPresentationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(
+                    for: BadgePresentationDuration.cancelledMenuState
+                )
+            } catch {
+                return
+            }
+            guard let self, machine.phase == .cancelled else {
+                return
+            }
+            cancellationPresentationTask = nil
+            process(.cancellationPresentationFinished)
         }
     }
 
@@ -1443,6 +1467,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
         stopRecordingPresentation()
+        cancellationPresentationTask?.cancel()
+        cancellationPresentationTask = nil
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
         submitAfterPasteTask?.cancel()
