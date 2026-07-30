@@ -14,6 +14,8 @@ Theme Studio release.
 - Corrected the Send arrow to point upward in flipped AppKit button coordinates
 - Applied the selected theme to Transcribing, Busy, and No Speech Detected while
   retaining red treatment for actionable failures
+- Reorganized the User Guide into a dynamic current-path table followed by only
+  the configuration alternatives the user has not selected
 
 ## 3.0.1: 2026-07-30
 

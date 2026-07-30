@@ -14,283 +14,341 @@ struct UserGuideSection: Equatable {
 }
 
 enum UserGuideContent {
-    static func sections(for state: AdvancedSettingsState) -> [UserGuideSection] {
+    static func sections(
+        for state: AdvancedSettingsState,
+        loginItemEnabled: Bool = false
+    ) -> [UserGuideSection] {
         [
             UserGuideSection(
-                title: "DICTATION",
-                rows: dictationRows(for: state)
+                title: "YOUR CURRENT PATH",
+                rows: currentRows(
+                    for: state,
+                    loginItemEnabled: loginItemEnabled
+                )
             ),
             UserGuideSection(
-                title: "WHILE LISTENING",
-                rows: [
-                    UserGuideRow(
-                        key: "esc",
-                        title: "Discard",
-                        detail: "Stops dictation and inserts nothing."
-                    ),
-                    UserGuideRow(
-                        key: "return",
-                        title: "Insert and send",
-                        detail: "Return or keypad Enter transcribes, inserts, then sends once."
-                    ),
-                    UserGuideRow(
-                        key: "■",
-                        title: "Stop and insert",
-                        detail: "The dark HUD button inserts without sending."
-                    ),
-                    UserGuideRow(
-                        key: "↑",
-                        title: "Insert and send",
-                        detail: "The light HUD button inserts and presses Return."
-                    ),
-                    UserGuideRow(
-                        key: "drag",
-                        title: "Move the HUD",
-                        detail: "Drag its waveform or timer to lock it for this session."
-                    ),
-                    UserGuideRow(
-                        key: "focus",
-                        title: "Choose the destination",
-                        detail: "Text inserts at the current focus and replaces its selection."
-                    ),
-                ]
-            ),
-            UserGuideSection(
-                title: "BEHAVIOR OPTIONS",
-                rows: [
-                    UserGuideRow(
-                        key: "hold",
-                        title: "Press and Hold",
-                        detail: "Hold the dictation key to listen. Release to insert."
-                    ),
-                    UserGuideRow(
-                        key: "toggle",
-                        title: "Toggle",
-                        detail: "Tap once to start and once more to finish and insert."
-                    ),
-                    UserGuideRow(
-                        key: "pause",
-                        title: "Pause Mode",
-                        detail: "Natural pauses insert phrases while recording continues."
-                    ),
-                    UserGuideRow(
-                        key: "caps",
-                        title: "Caps Lock behavior",
-                        detail: "Caps Lock supports Toggle and Pause Mode, not Press and Hold."
-                    ),
-                ]
-            ),
-            UserGuideSection(
-                title: "MODEL OPTIONS",
-                rows: [
-                    UserGuideRow(
-                        key: "base",
-                        title: "Base",
-                        detail: "Fastest and smallest: 141 MB."
-                    ),
-                    UserGuideRow(
-                        key: "small",
-                        title: "Small",
-                        detail: "More accurate with moderate cost: 465 MB."
-                    ),
-                    UserGuideRow(
-                        key: "medium",
-                        title: "Medium",
-                        detail: "High accuracy with the largest memory cost: 1.5 GB."
-                    ),
-                    UserGuideRow(
-                        key: "turbo",
-                        title: "Turbo",
-                        detail: "Best speed and accuracy balance: 547 MB."
-                    ),
-                    UserGuideRow(
-                        key: "muted",
-                        title: "Unavailable models",
-                        detail: "A muted chip means its local model file is not installed."
-                    ),
-                    UserGuideRow(
-                        key: "metal",
-                        title: "whisper.cpp Metal",
-                        detail: "Default path: fast GPU decoding with the smallest app overhead."
-                    ),
-                    UserGuideRow(
-                        key: "core ml",
-                        title: "whisper.cpp Core ML Encoder",
-                        detail: "Runs the audio encoder on Core ML while whisper.cpp decodes the text."
-                    ),
-                    UserGuideRow(
-                        key: "ane",
-                        title: "WhisperKit",
-                        detail: "Native Core ML path optimized for Apple GPU and Neural Engine execution."
-                    ),
-                    UserGuideRow(
-                        key: state.selectedEngine.displayName.lowercased(),
-                        title: "Selected engine",
-                        detail: state.selectedEngine.menuTitle
-                    ),
-                    UserGuideRow(
-                        key: "precision",
-                        title: "Precision decoding",
-                        detail: DecodingProfile.precision.description
-                    ),
-                    UserGuideRow(
-                        key: "smart",
-                        title: "Smart Decode",
-                        detail: DecodingProfile.adaptive.description
-                    ),
-                    UserGuideRow(
-                        key: state.decodingProfile.displayName.lowercased(),
-                        title: "Selected decoding",
-                        detail: state.decodingProfile.description
-                    ),
-                    UserGuideRow(
-                        key: "after recording",
-                        title: ModelProcessingMode.afterRecording.displayName,
-                        detail: ModelProcessingMode.afterRecording.description
-                    ),
-                    UserGuideRow(
-                        key: "model ready",
-                        title: ModelProcessingMode.modelReady.displayName,
-                        detail: ModelProcessingMode.modelReady.description
-                    ),
-                    UserGuideRow(
-                        key: "decode while speaking",
-                        title:
-                            ModelProcessingMode.decodeWhileSpeaking.displayName,
-                        detail:
-                            ModelProcessingMode.decodeWhileSpeaking.description
-                    ),
-                    UserGuideRow(
-                        key: state.processingMode.rawValue,
-                        title: "Selected processing",
-                        detail: state.processingMode.description
-                    ),
-                    UserGuideRow(
-                        key: "terms",
-                        title: "Internal dictionary",
-                        detail: "Add names and technical phrases to bias recognition toward their exact spelling. Use commas or Return to create tokens."
-                    ),
-                ]
-            ),
-            UserGuideSection(
-                title: "OTHER SETTINGS",
-                rows: [
-                    UserGuideRow(
-                        key: "key",
-                        title: "Dictation key",
-                        detail: "Chooses the left or right modifier that controls dictation."
-                    ),
-                    UserGuideRow(
-                        key: "limit",
-                        title: "Recording limit",
-                        detail: "Automatically finishes when the selected duration is reached."
-                    ),
-                    UserGuideRow(
-                        key: "theme",
-                        title: "Theme",
-                        detail: "Chooses from grouped dark and light color presets for the floating HUD."
-                    ),
-                    UserGuideRow(
-                        key: "login",
-                        title: "Open at Login",
-                        detail: "Keeps dictation ready after signing in to this Mac."
-                    ),
-                ]
-            ),
-            UserGuideSection(
-                title: "MENU ACTIONS",
-                rows: [
-                    UserGuideRow(
-                        key: "copy",
-                        title: "Copy Last Dictation",
-                        detail: "Copies the latest successful transcript normally."
-                    ),
-                    UserGuideRow(
-                        key: "setup",
-                        title: "Open Setup",
-                        detail: "Checks permissions, model files, helper, and login readiness."
-                    ),
-                    UserGuideRow(
-                        key: "settings",
-                        title: "Settings",
-                        detail: "Opens the preferences and this User Guide."
-                    ),
-                    UserGuideRow(
-                        key: "cancel",
-                        title: "Cancel and Discard",
-                        detail: "Aborts the active recording without inserting."
-                    ),
-                    UserGuideRow(
-                        key: "restart",
-                        title: "Restart",
-                        detail: "Cleanly quits and reopens whisper_hotkey."
-                    ),
-                    UserGuideRow(
-                        key: "quit",
-                        title: "Quit",
-                        detail: "Stops the agent and releases all active resources."
-                    ),
-                ]
-            ),
-            UserGuideSection(
-                title: "PRIVACY",
-                rows: [
-                    UserGuideRow(
-                        key: "local",
-                        title: "On-device only",
-                        detail: "Audio stays local and is deleted after each dictation."
-                    ),
-                ]
+                title: "OTHER OPTIONS",
+                rows: alternativeRows(
+                    for: state,
+                    loginItemEnabled: loginItemEnabled
+                )
             ),
         ]
     }
 
-    private static func dictationRows(
-        for state: AdvancedSettingsState
+    private static func currentRows(
+        for state: AdvancedSettingsState,
+        loginItemEnabled: Bool
     ) -> [UserGuideRow] {
-        let key = state.selectedHotkey.displayName
-        let interaction: UserGuideRow
-        switch state.activationMode {
-        case .hold:
-            interaction = UserGuideRow(
-                key: key,
-                title: "Hold to dictate",
-                detail: "Hold to listen. Release to transcribe and insert."
-            )
-        case .toggle:
-            interaction = UserGuideRow(
-                key: key,
-                title: "Tap to start or stop",
-                detail: "Tap once to listen and again to transcribe and insert."
-            )
-        case .pause:
-            interaction = UserGuideRow(
-                key: key,
-                title: "Pause Mode",
-                detail: "Tap to listen. Natural pauses insert phrases while it stays active."
-            )
-        }
-        return [
-            interaction,
+        let hotkey = state.selectedHotkey.displayName
+        let behavior = DictationModePresentation.optionTitle(
+            for: state.activationMode
+        )
+        let model = DictationModelPresentation.chipTitle(
+            for: state.selectedModel
+        )
+        var rows = [
             UserGuideRow(
-                key: "shortcut",
-                title: "Modifier shortcuts pass through",
-                detail: "\(key) still works normally when combined with another key or click."
+                key: "active",
+                title: "\(hotkey): \(behavior): \(model)",
+                detail: activePathDetail(for: state)
+            ),
+            UserGuideRow(
+                key: "key",
+                title: hotkey,
+                detail:
+                    "\(hotkey) controls dictation alone and still passes through in ordinary shortcuts."
+            ),
+            UserGuideRow(
+                key: "behavior",
+                title: behavior,
+                detail: activationDescription(state.activationMode)
+            ),
+            UserGuideRow(
+                key: "model",
+                title: model,
+                detail: modelDescription(state.selectedModel)
+            ),
+            UserGuideRow(
+                key: "engine",
+                title: state.selectedEngine.displayName,
+                detail: state.selectedEngine.menuTitle
+            ),
+            UserGuideRow(
+                key: "decoding",
+                title: state.decodingProfile.displayName,
+                detail: state.decodingProfile.description
+            ),
+            UserGuideRow(
+                key: "processing",
+                title: state.processingMode.displayName,
+                detail: state.processingMode.description
+            ),
+            UserGuideRow(
+                key: "limit",
+                title: state.recordingLimit.displayName,
+                detail: "Dictation finishes automatically at this duration."
+            ),
+            UserGuideRow(
+                key: "theme",
+                title: state.selectedTheme.displayName,
+                detail: "This palette controls the HUD, Settings, and User Guide."
+            ),
+            UserGuideRow(
+                key: "startup",
+                title: loginItemEnabled ? "Open at Login" : "Manual Start",
+                detail: loginItemEnabled
+                    ? "whisper_hotkey starts automatically after sign-in."
+                    : "whisper_hotkey starts only when you launch it."
+            ),
+            UserGuideRow(
+                key: "dictionary",
+                title: dictionaryTitle(state.internalDictionaryEntries),
+                detail: dictionaryDetail(state.internalDictionaryEntries)
+            ),
+            UserGuideRow(
+                key: "esc",
+                title: "Discard",
+                detail: "Stops dictation and inserts nothing."
+            ),
+            UserGuideRow(
+                key: "return",
+                title: "Insert and send",
+                detail:
+                    "Return or keypad Enter transcribes, inserts, then sends once."
+            ),
+            UserGuideRow(
+                key: "■",
+                title: "Stop and insert",
+                detail: "The Stop HUD button inserts without sending."
+            ),
+            UserGuideRow(
+                key: "↑",
+                title: "Insert and send",
+                detail: "The Send HUD button inserts and presses Return."
+            ),
+            UserGuideRow(
+                key: "drag",
+                title: "Move the HUD",
+                detail:
+                    "Drag its waveform or timer to lock it for this session."
+            ),
+            UserGuideRow(
+                key: "focus",
+                title: "Choose the destination",
+                detail:
+                    "Text inserts at the current focus and replaces its selection."
+            ),
+            UserGuideRow(
+                key: "local",
+                title: "On-device only",
+                detail: "Audio stays local and is deleted after each dictation."
             ),
         ]
+        if state.selectedHotkey == .capsLock {
+            rows.insert(
+                UserGuideRow(
+                    key: "caps",
+                    title: "Caps Lock restriction",
+                    detail:
+                        "Caps Lock supports Toggle and Pause Mode, not Press and Hold."
+                ),
+                at: 3
+            )
+        }
+        return rows
+    }
+
+    private static func alternativeRows(
+        for state: AdvancedSettingsState,
+        loginItemEnabled: Bool
+    ) -> [UserGuideRow] {
+        let otherKeys = HotkeyKey.allCases
+            .filter { $0 != state.selectedHotkey }
+            .map(\.displayName)
+            .joined(separator: ", ")
+        let otherLimits = RecordingLimit.allCases
+            .filter { $0 != state.recordingLimit }
+            .map(\.displayName)
+            .joined(separator: ", ")
+        let selectedThemeID = state.selectedTheme.identifier
+        let otherThemes =
+            BadgeTheme.allCases.map {
+                (identifier: BadgeThemeSelection.builtIn($0).identifier,
+                 name: $0.displayName)
+            }
+            + state.customThemes.map {
+                (identifier: BadgeThemeSelection.custom($0).identifier,
+                 name: $0.name)
+            }
+        var rows = [
+            UserGuideRow(
+                key: "keys",
+                title: "Other dictation keys",
+                detail: otherKeys
+            ),
+        ]
+        rows.append(
+            contentsOf: [
+                HotkeyActivationMode.hold,
+                .toggle,
+                .pause,
+            ]
+            .filter { $0 != state.activationMode }
+            .map {
+                UserGuideRow(
+                    key: "behavior",
+                    title: DictationModePresentation.optionTitle(for: $0),
+                    detail: activationDescription($0)
+                )
+            }
+        )
+        rows.append(
+            contentsOf: DictationModel.allCases
+                .filter { $0 != state.selectedModel }
+                .map {
+                    UserGuideRow(
+                        key: "model",
+                        title: DictationModelPresentation.chipTitle(for: $0),
+                        detail: modelDescription($0)
+                    )
+                }
+        )
+        rows.append(
+            contentsOf: RecognitionEngine.allCases
+                .filter { $0 != state.selectedEngine }
+                .map {
+                    let availability = state.availableEngines.contains($0)
+                        ? ""
+                        : " Required local files are not installed."
+                    return UserGuideRow(
+                        key: "engine",
+                        title: $0.displayName,
+                        detail: $0.menuTitle + availability
+                    )
+                }
+        )
+        rows.append(
+            contentsOf: DecodingProfile.allCases
+                .filter { $0 != state.decodingProfile }
+                .map {
+                    UserGuideRow(
+                        key: "decoding",
+                        title: $0.displayName,
+                        detail: $0.description
+                    )
+                }
+        )
+        rows.append(
+            contentsOf: ModelProcessingMode.allCases
+                .filter { $0 != state.processingMode }
+                .map {
+                    UserGuideRow(
+                        key: "processing",
+                        title: $0.displayName,
+                        detail: $0.description
+                    )
+                }
+        )
+        rows.append(
+            UserGuideRow(
+                key: "limits",
+                title: "Other recording limits",
+                detail: otherLimits
+            )
+        )
+        rows.append(
+            UserGuideRow(
+                key: "themes",
+                title: "Other themes",
+                detail: otherThemes
+                    .filter { $0.identifier != selectedThemeID }
+                    .map { $0.name }
+                    .joined(separator: ", ")
+            )
+        )
+        rows.append(
+            UserGuideRow(
+                key: "startup",
+                title: loginItemEnabled ? "Manual Start" : "Open at Login",
+                detail: loginItemEnabled
+                    ? "Disable automatic launch and start the app yourself."
+                    : "Start whisper_hotkey automatically after sign-in."
+            )
+        )
+        return rows
+    }
+
+    private static func activePathDetail(
+        for state: AdvancedSettingsState
+    ) -> String {
+        switch state.activationMode {
+        case .hold:
+            return "Hold \(state.selectedHotkey.displayName) to listen, then release to transcribe and insert with \(DictationModelPresentation.chipTitle(for: state.selectedModel))."
+        case .toggle:
+            return "Tap \(state.selectedHotkey.displayName) to listen, then tap again to transcribe and insert with \(DictationModelPresentation.chipTitle(for: state.selectedModel))."
+        case .pause:
+            return "Tap \(state.selectedHotkey.displayName) to listen. Natural pauses insert \(DictationModelPresentation.chipTitle(for: state.selectedModel)) phrases while recording continues."
+        }
+    }
+
+    private static func activationDescription(
+        _ mode: HotkeyActivationMode
+    ) -> String {
+        switch mode {
+        case .hold:
+            "Hold the dictation key to listen. Release to insert."
+        case .toggle:
+            "Tap once to start and once more to finish and insert."
+        case .pause:
+            "Natural pauses insert phrases while recording continues."
+        }
+    }
+
+    private static func modelDescription(_ model: DictationModel) -> String {
+        switch model {
+        case .baseEnglish:
+            "Fastest and smallest: 141 MB."
+        case .smallEnglish:
+            "More accurate with moderate cost: 465 MB."
+        case .mediumEnglish:
+            "High accuracy with the largest memory cost: 1.5 GB."
+        case .largeV3TurboQ5:
+            "Best speed and accuracy balance: 547 MB."
+        }
+    }
+
+    private static func dictionaryTitle(_ entries: [String]) -> String {
+        entries.isEmpty
+            ? "No custom terms"
+            : "\(entries.count) custom \(entries.count == 1 ? "term" : "terms")"
+    }
+
+    private static func dictionaryDetail(_ entries: [String]) -> String {
+        entries.isEmpty
+            ? "Add names and technical phrases in Settings to bias spelling."
+            : entries.joined(separator: ", ")
     }
 }
 
 @MainActor
 final class UserGuidePopoverController {
     typealias StateProvider = () -> AdvancedSettingsState
+    typealias LoginItemEnabledProvider = () -> Bool
 
     private let stateProvider: StateProvider
+    private let loginItemEnabledProvider: LoginItemEnabledProvider
     private let popover = NSPopover()
     private var selectedTheme = BadgeThemeSelection.defaultSelection
 
-    init(stateProvider: @escaping StateProvider) {
+    init(
+        stateProvider: @escaping StateProvider,
+        loginItemEnabledProvider: @escaping LoginItemEnabledProvider = {
+            false
+        }
+    ) {
         self.stateProvider = stateProvider
+        self.loginItemEnabledProvider = loginItemEnabledProvider
         popover.behavior = .transient
         popover.animates = true
         popover.contentSize = NSSize(width: 440, height: 540)
@@ -302,7 +360,10 @@ final class UserGuidePopoverController {
             return
         }
         let contentController = UserGuideViewController(
-            sections: UserGuideContent.sections(for: stateProvider()),
+            sections: UserGuideContent.sections(
+                for: stateProvider(),
+                loginItemEnabled: loginItemEnabledProvider()
+            ),
             theme: selectedTheme
         )
         contentController.preferredContentSize = NSSize(width: 440, height: 540)
@@ -369,7 +430,7 @@ final class UserGuideViewController: NSViewController {
         header.addArrangedSubview(title)
 
         let subtitle = NSTextField(
-            labelWithString: "Everything you can do while dictating."
+            labelWithString: "Your active workflow first, then every alternative."
         )
         subtitle.textColor = .secondaryLabelColor
         subtitleLabel = subtitle

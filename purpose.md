@@ -16,11 +16,13 @@ stopped, inspected, or disabled from the terminal. A one-time Setup window
 handles Microphone, Accessibility, and Input Monitoring permissions. A separate
 lazy Settings window owns persistent behavior and launch preferences;
 it is not constructed until opened and has no polling task. Its lower-right
-help button opens a transient, scrollable user guide that explains every
-dictation gesture, completion and cancellation key, HUD control, menu action,
-behavior mode, model choice, recording limit, login preference, and local
-privacy guarantee. The guide reflects the currently selected dictation key and
-mode and adds no idle task.
+help button opens a transient, scrollable user guide. Its first table reports
+the user's complete active path, explains the meaning of every selected
+configuration value, and includes the actions available during that workflow.
+Its second and final table contains only unselected keys, behaviors, models,
+engines, decoding and processing choices, limits, themes, and startup behavior.
+The tables rebuild from current state whenever the guide opens and add no idle
+task.
 Settings and its User Guide use the selected visual theme on an opaque
 background. Theme changes update the HUD, Settings, and an open guide
 immediately without adding an idle task.

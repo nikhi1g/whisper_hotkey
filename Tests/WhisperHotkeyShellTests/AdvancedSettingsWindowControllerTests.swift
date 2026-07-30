@@ -130,7 +130,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testUserGuideExplainsEveryModeModelAndActiveShortcut() {
+    func testUserGuideShowsCurrentPathBeforeUnselectedAlternatives() {
         let state = makeAdvancedSettingsState(
             hotkey: .rightOption,
             mode: .toggle,
@@ -139,53 +139,61 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             limit: .minutes5,
             availableModels: Set(DictationModel.allCases)
         )
-        let sections = UserGuideContent.sections(for: state)
-        let rows = sections.flatMap(\.rows)
+        let sections = UserGuideContent.sections(
+            for: state,
+            loginItemEnabled: true
+        )
+        let currentRows = sections[0].rows
+        let alternativeRows = sections[1].rows
 
-        XCTAssertEqual(sections.first?.title, "DICTATION")
-        XCTAssertTrue(
-            rows.contains(
-                UserGuideRow(
-                    key: "Right Option",
-                    title: "Tap to start or stop",
-                    detail: "Tap once to listen and again to transcribe and insert."
-                )
-            )
+        XCTAssertEqual(sections.map(\.title), [
+            "YOUR CURRENT PATH",
+            "OTHER OPTIONS",
+        ])
+        XCTAssertEqual(currentRows.first?.key, "active")
+        XCTAssertEqual(
+            currentRows.first?.title,
+            "Right Option: Toggle: Turbo"
         )
         XCTAssertTrue(
-            ["Press and Hold", "Toggle", "Pause Mode"].allSatisfy { title in
-                rows.contains(where: { $0.title == title })
-            }
-        )
-        XCTAssertTrue(
-            ["Base", "Small", "Medium", "Turbo"].allSatisfy { title in
-                rows.contains(where: { $0.title == title })
-            }
-        )
-        XCTAssertTrue(
-            ["Precision decoding", "Smart Decode"].allSatisfy { title in
-                rows.contains(where: { $0.title == title })
-            }
+            currentRows.first?.detail.contains("Tap Right Option") == true
         )
         XCTAssertTrue(
             [
-                "After Recording", "Model Ready", "Decode While Speaking",
+                "Right Option", "Toggle", "Turbo", "Metal",
+                "Precision", "Model Ready", "5 Minutes",
+                "GitHub Dark Dimmed", "Open at Login",
             ].allSatisfy { title in
-                rows.contains(where: { $0.title == title })
+                currentRows.contains(where: { $0.title == title })
             }
         )
         XCTAssertTrue(
             ["Discard", "Insert and send", "Stop and insert"].allSatisfy {
-                title in rows.contains(where: { $0.title == title })
+                title in currentRows.contains(where: { $0.title == title })
             }
         )
         XCTAssertTrue(
             [
-                "Dictation key", "Internal dictionary", "Recording limit",
-                "Theme", "Open at Login",
-            ].allSatisfy {
-                title in rows.contains(where: { $0.title == title })
+                "Press and Hold", "Pause Mode", "Base", "Small", "Medium",
+                "After Recording", "Decode While Speaking",
+            ].allSatisfy { title in
+                alternativeRows.contains(where: { $0.title == title })
             }
+        )
+        XCTAssertFalse(
+            ["Toggle", "Turbo", "Model Ready"].contains { selected in
+                alternativeRows.contains(where: { $0.title == selected })
+            }
+        )
+        XCTAssertTrue(
+            alternativeRows.first(where: {
+                $0.title == "Other dictation keys"
+            })?.detail.contains("Right Command") == true
+        )
+        XCTAssertFalse(
+            alternativeRows.first(where: {
+                $0.title == "Other dictation keys"
+            })?.detail.contains("Right Option,") == true
         )
 
         let viewController = UserGuideViewController(
@@ -196,9 +204,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         let renderedText = viewController.renderedTextForTesting
         XCTAssertFalse(renderedText.isEmpty)
         XCTAssertTrue(viewController.renderedTextHasVisibleFrameForTesting)
-        XCTAssertTrue(renderedText.contains("RIGHT OPTION"))
+        XCTAssertTrue(renderedText.contains("Right Option"))
         XCTAssertTrue(renderedText.contains("Press and Hold"))
         XCTAssertTrue(renderedText.contains("Turbo"))
+        XCTAssertTrue(renderedText.contains("YOUR CURRENT PATH"))
+        XCTAssertTrue(renderedText.contains("OTHER OPTIONS"))
         XCTAssertTrue(renderedText.contains("Return or keypad Enter"))
         XCTAssertEqual(
             viewController.appliedThemeForTesting,

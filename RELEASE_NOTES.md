@@ -16,6 +16,8 @@ Recommended for all users of version 3.0.
 - Ensure the Send arrow points upward in both Settings and the runtime HUD.
 - Apply the selected theme to Transcribing, Busy, and No Speech Detected while
   keeping actionable failures red.
+- Put the user's complete active workflow and its meaning first in the User
+  Guide, followed by a table containing only unselected alternatives.
 - Retain the complete v3.0 local recognition and privacy behavior.
 
 Quick Start:

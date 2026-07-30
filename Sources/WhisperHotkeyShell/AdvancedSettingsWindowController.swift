@@ -158,7 +158,10 @@ public final class AdvancedSettingsWindowController:
     private let themeSummary = SettingsSummaryChip()
     private let loginSummary = SettingsSummaryChip()
     private lazy var userGuidePopover = UserGuidePopoverController(
-        stateProvider: stateProvider
+        stateProvider: stateProvider,
+        loginItemEnabledProvider: { [weak self] in
+            self?.loginItemManager.status.isEnabled ?? false
+        }
     )
     private weak var settingsRootView: NSView?
     private var customThemeEditor: CustomThemeEditorWindowController?
