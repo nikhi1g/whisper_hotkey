@@ -1,5 +1,3 @@
-# whisper_hotkey 3.0.1: Interface Polish
-
 Version 3.0.1 keeps every Settings summary chip visible and makes empty
 recording feedback disappear promptly.
 
