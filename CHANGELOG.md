@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Expanded the HUD theme picker from 11 to 24 persistent presets
+- Grouped the theme dropdown into disabled Dark and Light section headings
+- Applied light appearance behavior consistently across all ten light presets
+
 ## 3.0.1: 2026-07-30
 
 Interface Polish release.

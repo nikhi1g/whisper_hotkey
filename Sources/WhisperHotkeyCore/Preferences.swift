@@ -245,6 +245,18 @@ public enum ModelProcessingMode: String, CaseIterable, Codable, Sendable {
     }
 }
 
+public enum BadgeThemeMode: String, CaseIterable, Codable, Sendable {
+    case dark
+    case light
+
+    public var displayName: String {
+        switch self {
+        case .dark: "Dark"
+        case .light: "Light"
+        }
+    }
+}
+
 public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
     case githubDarkDimmed
     case midnightIndigo
@@ -255,10 +267,38 @@ public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
     case forest
     case ocean
     case rosePine
-    case lightFrost
     case highContrast
+    case tokyoNight
+    case catppuccinMocha
+    case gruvboxDark
+    case monokai
+    case lightFrost
+    case githubLight
+    case solarizedLight
+    case nordSnow
+    case rosePineDawn
+    case paper
+    case mint
+    case sky
+    case lavender
+    case highContrastLight
 
     public static let defaultTheme: Self = .githubDarkDimmed
+
+    public var mode: BadgeThemeMode {
+        switch self {
+        case .lightFrost, .githubLight, .solarizedLight, .nordSnow,
+             .rosePineDawn, .paper, .mint, .sky, .lavender,
+             .highContrastLight:
+            .light
+        default:
+            .dark
+        }
+    }
+
+    public var isLight: Bool {
+        mode == .light
+    }
 
     public var displayName: String {
         switch self {
@@ -271,8 +311,21 @@ public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
         case .forest: "Forest"
         case .ocean: "Ocean"
         case .rosePine: "Rosé Pine"
-        case .lightFrost: "Light Frost"
         case .highContrast: "High Contrast"
+        case .tokyoNight: "Tokyo Night"
+        case .catppuccinMocha: "Catppuccin Mocha"
+        case .gruvboxDark: "Gruvbox Dark"
+        case .monokai: "Monokai"
+        case .lightFrost: "Light Frost"
+        case .githubLight: "GitHub Light"
+        case .solarizedLight: "Solarized Light"
+        case .nordSnow: "Nord Snow"
+        case .rosePineDawn: "Rosé Pine Dawn"
+        case .paper: "Paper"
+        case .mint: "Mint"
+        case .sky: "Sky"
+        case .lavender: "Lavender"
+        case .highContrastLight: "High Contrast Light"
         }
     }
 
@@ -287,8 +340,21 @@ public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
         case .forest: "Forest"
         case .ocean: "Ocean"
         case .rosePine: "Rosé Pine"
-        case .lightFrost: "Frost"
         case .highContrast: "Contrast"
+        case .tokyoNight: "Tokyo"
+        case .catppuccinMocha: "Mocha"
+        case .gruvboxDark: "Gruvbox"
+        case .monokai: "Monokai"
+        case .lightFrost: "Frost"
+        case .githubLight: "GitHub Light"
+        case .solarizedLight: "Solarized Light"
+        case .nordSnow: "Nord Snow"
+        case .rosePineDawn: "Rosé Dawn"
+        case .paper: "Paper"
+        case .mint: "Mint"
+        case .sky: "Sky"
+        case .lavender: "Lavender"
+        case .highContrastLight: "Light Contrast"
         }
     }
 

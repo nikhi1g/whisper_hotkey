@@ -539,13 +539,29 @@ public final class AdvancedSettingsWindowController:
             },
             action: #selector(selectRecordingLimit(_:))
         )
-        configure(
-            themePopup,
-            values: BadgeTheme.allCases.map {
-                ($0.displayName, $0.rawValue)
-            },
-            action: #selector(selectTheme(_:))
-        )
+        configureThemePopup()
+    }
+
+    private func configureThemePopup() {
+        themePopup.target = self
+        themePopup.action = #selector(selectTheme(_:))
+        themePopup.controlSize = .regular
+        for (modeIndex, mode) in BadgeThemeMode.allCases.enumerated() {
+            if modeIndex > 0 {
+                themePopup.menu?.addItem(.separator())
+            }
+            let heading = NSMenuItem(
+                title: mode.displayName,
+                action: nil,
+                keyEquivalent: ""
+            )
+            heading.isEnabled = false
+            themePopup.menu?.addItem(heading)
+            for theme in BadgeTheme.allCases where theme.mode == mode {
+                themePopup.addItem(withTitle: theme.displayName)
+                themePopup.lastItem?.representedObject = theme.rawValue
+            }
+        }
     }
 
     private func configure(
@@ -687,7 +703,7 @@ public final class AdvancedSettingsWindowController:
         let secondaryText = palette.primaryText.withAlphaComponent(0.72)
         let sectionText = palette.waveform.withAlphaComponent(0.78)
         let appearanceName: NSAppearance.Name =
-            theme == .lightFrost ? .aqua : .darkAqua
+            theme.isLight ? .aqua : .darkAqua
 
         window?.appearance = NSAppearance(named: appearanceName)
         window?.backgroundColor = background
@@ -986,6 +1002,23 @@ public final class AdvancedSettingsWindowController:
 
     var selectedThemeForTesting: BadgeTheme? {
         selectedValue(in: themePopup)
+    }
+
+    var selectableThemeCountForTesting: Int {
+        themePopup.itemArray.filter {
+            $0.representedObject is String
+        }.count
+    }
+
+    var themeSectionTitlesForTesting: [String] {
+        themePopup.itemArray.compactMap { item in
+            guard !item.isSeparatorItem,
+                  item.representedObject == nil
+            else {
+                return nil
+            }
+            return item.title
+        }
     }
 
     var windowBackgroundForTesting: NSColor? {

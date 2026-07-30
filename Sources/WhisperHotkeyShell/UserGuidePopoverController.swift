@@ -188,7 +188,7 @@ enum UserGuideContent {
                     UserGuideRow(
                         key: "theme",
                         title: "Theme",
-                        detail: "Chooses one of eleven color presets for the floating HUD."
+                        detail: "Chooses from grouped dark and light color presets for the floating HUD."
                     ),
                     UserGuideRow(
                         key: "login",

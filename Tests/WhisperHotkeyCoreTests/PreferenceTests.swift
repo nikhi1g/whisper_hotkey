@@ -162,9 +162,17 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
-    func testThemePickerProvidesElevenNamedPresets() {
-        XCTAssertEqual(BadgeTheme.allCases.count, 11)
+    func testThemePickerProvidesGroupedNamedPresets() {
+        XCTAssertEqual(BadgeTheme.allCases.count, 24)
         XCTAssertEqual(BadgeTheme.allCases.first, .githubDarkDimmed)
+        XCTAssertEqual(
+            BadgeTheme.allCases.filter { $0.mode == .dark }.count,
+            14
+        )
+        XCTAssertEqual(
+            BadgeTheme.allCases.filter { $0.mode == .light }.count,
+            10
+        )
         XCTAssertEqual(
             Set(BadgeTheme.allCases.map(\.displayName)).count,
             BadgeTheme.allCases.count

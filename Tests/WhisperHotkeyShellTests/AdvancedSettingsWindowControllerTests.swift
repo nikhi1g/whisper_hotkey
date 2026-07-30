@@ -61,6 +61,14 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes5)
         XCTAssertEqual(controller.selectedThemeForTesting, .githubDarkDimmed)
+        XCTAssertEqual(
+            controller.selectableThemeCountForTesting,
+            BadgeTheme.allCases.count
+        )
+        XCTAssertEqual(
+            controller.themeSectionTitlesForTesting,
+            ["Dark", "Light"]
+        )
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
         XCTAssertTrue(controller.modeControlEnabledForTesting)
         XCTAssertEqual(controller.modelIsEnabledForTesting(.smallEnglish), true)

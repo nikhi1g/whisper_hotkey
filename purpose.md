@@ -129,10 +129,14 @@ limit, theme, and login state as compact read-only summary chips split across
 two stable rows so every complete chip remains inside the window.
 The **Theme** dropdown changes the floating HUD, Settings window, and User Guide
 and persists immediately.
-GitHub Dark Dimmed remains the default. Ten additional restrained presets are
-Midnight Indigo, Graphite, Nord, Dracula, Solarized Dark, Forest, Ocean, Rosé
-Pine, Light Frost, and High Contrast. Theme application is event-driven and
-adds no idle work.
+GitHub Dark Dimmed remains the default. The dropdown groups 24 restrained
+presets under Dark and Light headings. The dark group contains GitHub Dark
+Dimmed, Midnight Indigo, Graphite, Nord, Dracula, Solarized Dark, Forest,
+Ocean, Rosé Pine, High Contrast, Tokyo Night, Catppuccin Mocha, Gruvbox Dark,
+and Monokai. The light group contains Light Frost, GitHub Light, Solarized
+Light, Nord Snow, Rosé Pine Dawn, Paper, Mint, Sky, Lavender, and High Contrast
+Light. Existing saved identifiers remain valid. Theme application is
+event-driven and adds no idle work.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a
