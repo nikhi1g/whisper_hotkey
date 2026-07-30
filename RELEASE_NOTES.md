@@ -1,22 +1,23 @@
-# whisper_hotkey 2.11.0: Perimeter Flow
+# whisper_hotkey 3.0.0: Parallel Recognition
 
-Version 2.11 replaces textual transcribing feedback with a compact perimeter
-activity treatment and adds local vocabulary personalization.
+Version 3.0 adds confidence-adaptive decoding and an optional processing
+pipeline that begins recognition while speech capture continues.
 
 ## Highlights
 
-- Replace the Transcribing label with a thin activity trail that starts at the
-  capsule's top center and loops clockwise around its complete perimeter.
-- Keep one fixed HUD size and position through listening, transcribing, and
-  insertion.
-- Drive the seven-segment fading trail through Core Animation with no polling
-  task, gradient, or idle work.
-- Add an Internal dictionary for names and technical phrases, applied locally
-  across every dictation mode.
-- Tighten the HUD to a flat 203 by 42-point capsule with equal circular actions,
-  no panel shadow, and no static outline.
-- Retain Metal, Core ML Encoder, WhisperKit, model readiness, Pause Mode,
-  terminal control, and private ephemeral audio.
+- Choose After Recording, Model Ready, or Decode While Speaking from the
+  Processing control in Settings.
+- Decode bounded speech chunks in the background through one serial model
+  runtime while microphone capture continues.
+- Keep partial results private and insert once when dictation finishes.
+- Preserve the complete recording for automatic full-context fallback if any
+  background chunk fails.
+- Use Smart Decode to accept confident fast passes and retry uncertain audio
+  with five-beam Precision decoding.
+- Retain the compact fixed HUD, internal dictionary, Pause Mode, Apple
+  acceleration options, terminal control, and ephemeral local audio.
+- Include a reproducible 100-recording LibriSpeech benchmark covering release
+  latency and word error rate.
 
 Quick Start:
 

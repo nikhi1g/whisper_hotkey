@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0.0: 2026-07-30
+
+Parallel Recognition release.
+
+- Added Smart Decode, which accepts a confident greedy pass and retries
+  uncertain speech with the existing five-beam Precision path
+- Added three explicit processing policies: After Recording, Model Ready, and
+  Decode While Speaking
+- Added serial background pre-decoding of bounded speech chunks while capture
+  continues, retaining one model runtime and one final paste
+- Preserved the uninterrupted private recording for safe full-context fallback
+  when any background chunk fails
+- Added deterministic LibriSpeech benchmarking for accuracy and release latency
+- Measured a 15 percent mean post-release latency reduction across 100 clips and
+  a 32 percent reduction for clips at least eight seconds long
+- Fixed the temporary cancelled menu state so it clears without waiting for the
+  next dictation
+
 ## 2.11.0: 2026-07-29
 
 Perimeter Flow release.
