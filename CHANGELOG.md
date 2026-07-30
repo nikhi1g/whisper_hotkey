@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.11.0: 2026-07-29
+
+Perimeter Flow release.
 
 - Tightened the fixed HUD from 218 by 44 points to a true 203 by 42-point
   capsule with smaller margins and waveform cell
@@ -8,6 +10,15 @@
   longest countdown without clipping
 - Removed the borderless panel's system shadow so the opaque theme background
   is the complete HUD silhouette
+- Replaced the transcribing label with a deterministic Core Animation activity
+  trail that starts at top center and loops around the complete capsule
+- Used seven progressively fading segments without a gradient, polling timer,
+  geometry change, or idle work
+- Added a persistent Internal dictionary token editor for exact names and
+  technical phrases
+- Applied the bounded local dictionary prompt to every recognition mode over
+  private helper stdin
+- Reduced the top-level README to the exact clone-and-run Quick Start
 
 ## 2.9.0: 2026-07-29
 

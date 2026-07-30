@@ -1,39 +1,31 @@
-# whisper_hotkey 2.9.0: Apple Acceleration
+# whisper_hotkey 2.11.0: Perimeter Flow
 
-Version 2.9 adds two optional Apple-optimized recognition paths while retaining
-the established Metal engine and local dictation workflow.
+Version 2.11 replaces textual transcribing feedback with a compact perimeter
+activity treatment and adds local vocabulary personalization.
 
 ## Highlights
 
-- Select Metal, whisper.cpp Core ML Encoder, or native WhisperKit directly
-  beneath Model in Settings.
-- Keep Metal as the compatible default with no change to existing preferences.
-- Provision accelerated artifacts only through the explicit bootstrap with
-  pinned revisions and SHA-256 verification.
-- Prevent incomplete engines from being selected and never silently fall back
-  to another engine.
-- Optionally keep the selected model ready for shorter startup latency.
-- Apply the selected theme to the HUD, Settings, and User Guide.
-- Retain Press and Hold, Toggle, Pause Mode, caret-aware HUD placement,
-  recording limits, terminal control, and local-only ephemeral audio.
+- Replace the Transcribing label with a thin activity trail that starts at the
+  capsule's top center and loops clockwise around its complete perimeter.
+- Keep one fixed HUD size and position through listening, transcribing, and
+  insertion.
+- Drive the seven-segment fading trail through Core Animation with no polling
+  task, gradient, or idle work.
+- Add an Internal dictionary for names and technical phrases, applied locally
+  across every dictation mode.
+- Tighten the HUD to a flat 203 by 42-point capsule with equal circular actions,
+  no panel shadow, and no static outline.
+- Retain Metal, Core ML Encoder, WhisperKit, model readiness, Pause Mode,
+  terminal control, and private ephemeral audio.
 
-Clone the repository and run:
+Quick Start:
 
 ```sh
+git clone https://github.com/nikhi1g/whisper_hotkey.git
+cd whisper_hotkey
 ./run.sh
 ```
 
-The bootstrap installs/checks Homebrew whisper.cpp, downloads the verified Base
-English model, builds and signs the app locally, installs it in `/Applications`,
-launches it, and opens the macOS permission setup.
-
-Optional accelerated Turbo installations:
-
-```sh
-./run.sh --model turbo --engine coreml
-./run.sh --model turbo --engine whisperkit
-```
-
-The release includes a source archive and a signed arm64 app bundle. The app is
-not notarized and model weights are not included. The source bootstrap remains
+The release includes source and a signed arm64 app bundle. The app is not
+notarized and model weights are not included. The verified source bootstrap is
 the recommended installation path for a new Mac.

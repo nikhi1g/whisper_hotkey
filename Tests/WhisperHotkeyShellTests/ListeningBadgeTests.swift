@@ -181,6 +181,95 @@ final class ListeningBadgeTests: XCTestCase {
     }
 
     @MainActor
+    func testTranscribingUsesDeterministicFadingCapsuleTraversalWithoutText() {
+        let controller = CaretBadgeController()
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        controller.present(
+            .listening,
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: screen
+        )
+        let listeningFrame = controller.panelFrameForTesting
+        XCTAssertFalse(
+            controller.transcribingIndicatorSnapshotForTesting.isVisible
+        )
+
+        controller.present(.transcribing, screenFrame: screen)
+        let snapshot = controller.transcribingIndicatorSnapshotForTesting
+
+        XCTAssertEqual(controller.panelFrameForTesting, listeningFrame)
+        XCTAssertEqual(controller.statusTextForTesting, "")
+        XCTAssertEqual(
+            controller.badgeAccessibilityLabelForTesting,
+            "Transcribing"
+        )
+        XCTAssertTrue(snapshot.isVisible)
+        XCTAssertEqual(
+            snapshot.segmentCount,
+            CapsuleActivityIndicatorStyle.segmentCount
+        )
+        XCTAssertEqual(
+            snapshot.animatedSegmentCount,
+            CapsuleActivityIndicatorStyle.segmentCount
+        )
+        XCTAssertEqual(
+            snapshot.animationDuration,
+            CapsuleActivityIndicatorStyle.animationDuration
+        )
+        XCTAssertEqual(
+            snapshot.geometry.startPoint,
+            CGPoint(
+                x: RuntimeBadgeLayout.size.width / 2,
+                y: RuntimeBadgeLayout.size.height
+                    - CapsuleActivityIndicatorStyle.inset
+            )
+        )
+        XCTAssertTrue(
+            zip(snapshot.opacities, snapshot.opacities.dropFirst())
+                .allSatisfy(>)
+        )
+        XCTAssertFalse(controller.visualStyleForTesting.hasGradientLayer)
+
+        controller.present(.busy, screenFrame: screen)
+        XCTAssertFalse(
+            controller.transcribingIndicatorSnapshotForTesting.isVisible
+        )
+        XCTAssertEqual(
+            controller.transcribingIndicatorSnapshotForTesting
+                .animatedSegmentCount,
+            0
+        )
+        XCTAssertEqual(controller.statusTextForTesting, "Busy")
+        controller.hide()
+    }
+
+    func testCapsuleTraversalGeometryIsClosedAndStartsAtTopCenter() {
+        let bounds = CGRect(
+            origin: .zero,
+            size: RuntimeBadgeLayout.size
+        )
+        let geometry = CapsuleActivityIndicatorStyle.geometry(in: bounds)
+
+        XCTAssertEqual(geometry.startPoint.x, bounds.midX)
+        XCTAssertEqual(
+            geometry.startPoint.y,
+            bounds.maxY - CapsuleActivityIndicatorStyle.inset
+        )
+        XCTAssertEqual(
+            geometry.leftCenter.y,
+            geometry.rightCenter.y
+        )
+        XCTAssertEqual(
+            geometry.radius,
+            (
+                bounds.height
+                    - CapsuleActivityIndicatorStyle.inset * 2
+            ) / 2
+        )
+        XCTAssertGreaterThan(geometry.perimeter, bounds.width * 2)
+    }
+
+    @MainActor
     func testNewListeningSessionMayCaptureANewOrigin() {
         let controller = CaretBadgeController()
         let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)

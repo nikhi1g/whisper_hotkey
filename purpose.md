@@ -158,14 +158,21 @@ duration from the existing callback, without a second audio pass. Flat silence
 and short mechanical transients are treated as no speech, so Whisper cannot
 invent a phrase from an empty recording. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord
-cancellation. The badge has no outline, gradient, or panel shadow; its opaque
-theme background alone separates it from the destination.
+cancellation. The badge has no static outline, gradient, or panel shadow; its
+opaque theme background alone separates it from the destination. During
+transcribing, all listening controls and status text disappear while a thin
+activity trail starts at the capsule's top center and traverses its complete
+perimeter clockwise. Seven short segments fade progressively behind the leading
+segment and repeat on one deterministic 0.92-second Core Animation cycle.
+Leaving the transcribing state removes every animation immediately. This
+presentation uses no polling task, changes no panel geometry, and retains a
+Transcribing accessibility label.
 The update task exists only while recording. The panel joins every application,
 Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
 Space or Stage Manager set. One panel is reused for the process lifetime so
 repeated dictations cannot accumulate hidden WindowServer windows. Other badge
-states show Transcribing, Busy, or an
+states show the perimeter activity trail, Busy, or an
 actionable error. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. There is no live text preview or success
@@ -183,7 +190,7 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 2.9.0. Beyond the single in-memory last
+The app is English-only for version 2.11.0. Beyond the single in-memory last
 dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented

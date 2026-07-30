@@ -381,6 +381,20 @@ public final class CaretBadgeController {
         badgeView.listeningTimerColorForTesting
     }
 
+    var statusTextForTesting: String {
+        badgeView.statusTextForTesting
+    }
+
+    var transcribingIndicatorSnapshotForTesting:
+        CapsuleActivityIndicatorSnapshot
+    {
+        badgeView.transcribingIndicatorSnapshotForTesting
+    }
+
+    var badgeAccessibilityLabelForTesting: String? {
+        badgeView.accessibilityLabel()
+    }
+
     var appliedThemeForTesting: BadgeTheme {
         badgeView.themeForTesting
     }
@@ -460,6 +474,8 @@ private final class BadgeView: NSView {
     private let sendButton = BadgeActionButton()
     private let limitTrackLayer = CALayer()
     private let limitProgressLayer = CALayer()
+    private let transcribingIndicatorLayer =
+        CapsuleActivityIndicatorLayer()
     private var listeningProgress: CGFloat = 0
     private var dragStart: (pointer: CGPoint, windowOrigin: CGPoint)?
     var dragHandler: (@MainActor (CGPoint) -> Void)?
@@ -496,6 +512,9 @@ private final class BadgeView: NSView {
         limitProgressLayer.backgroundColor = waveformColor.cgColor
         limitProgressLayer.cornerRadius = 0.75
         limitTrackLayer.addSublayer(limitProgressLayer)
+
+        transcribingIndicatorLayer.color = palette.waveform
+        layer?.addSublayer(transcribingIndicatorLayer)
 
         statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         statusLabel.textColor = palette.primaryText
@@ -554,6 +573,7 @@ private final class BadgeView: NSView {
         waveformView.color = palette.waveform
         limitTrackLayer.backgroundColor = palette.limitTrack.cgColor
         limitProgressLayer.backgroundColor = palette.waveform.cgColor
+        transcribingIndicatorLayer.color = palette.waveform
         applyActionButtonStyle(
             stopButton,
             background: palette.stopBackground,
@@ -649,6 +669,8 @@ private final class BadgeView: NSView {
                 * listeningProgress,
             height: listeningLayout.limitTrackFrame.height
         )
+        transcribingIndicatorLayer.frame = bounds
+        transcribingIndicatorLayer.updatePath()
     }
 
     func updateListening(
@@ -704,12 +726,18 @@ private final class BadgeView: NSView {
     }
 
     private func updatePresentation() {
-        statusLabel.isHidden = presentation == .listening
+        statusLabel.isHidden =
+            presentation == .listening || presentation == .transcribing
         waveformView.isHidden = presentation != .listening
         timeLabel.isHidden = presentation != .listening
         stopButton.isHidden = presentation != .listening
         sendButton.isHidden = presentation != .listening
         limitTrackLayer.isHidden = presentation != .listening
+        if presentation == .transcribing {
+            transcribingIndicatorLayer.startAnimating()
+        } else {
+            transcribingIndicatorLayer.stopAnimating()
+        }
         layer?.backgroundColor = normalBackground.cgColor
         statusLabel.textColor = palette.primaryText
 
@@ -720,7 +748,8 @@ private final class BadgeView: NSView {
             waveformView.reset()
             updateListening(elapsed: 0, limit: 600, level: 0)
         case .transcribing:
-            statusLabel.stringValue = "Transcribing…"
+            statusLabel.stringValue = ""
+            setAccessibilityLabel("Transcribing")
         case .busy:
             statusLabel.stringValue = "Busy"
         case let .error(message):
@@ -798,6 +827,212 @@ private final class BadgeView: NSView {
 
     var backgroundColorForTesting: NSColor {
         palette.background
+    }
+
+    var statusTextForTesting: String {
+        statusLabel.stringValue
+    }
+
+    var transcribingIndicatorSnapshotForTesting:
+        CapsuleActivityIndicatorSnapshot
+    {
+        transcribingIndicatorLayer.snapshot
+    }
+}
+
+struct CapsuleActivityIndicatorStyle {
+    static let inset: CGFloat = 1.25
+    static let lineWidth: CGFloat = 1.5
+    static let segmentCount = 7
+    static let segmentLength: CGFloat = 7
+    static let segmentSpacing: CGFloat = 1.5
+    static let animationDuration: CFTimeInterval = 0.92
+
+    static func geometry(in bounds: CGRect) -> CapsuleActivityIndicatorGeometry {
+        let insetBounds = bounds.insetBy(dx: inset, dy: inset)
+        let radius = insetBounds.height / 2
+        return CapsuleActivityIndicatorGeometry(
+            startPoint: CGPoint(x: insetBounds.midX, y: insetBounds.maxY),
+            leftCenter: CGPoint(
+                x: insetBounds.minX + radius,
+                y: insetBounds.midY
+            ),
+            rightCenter: CGPoint(
+                x: insetBounds.maxX - radius,
+                y: insetBounds.midY
+            ),
+            radius: radius,
+            perimeter: 2 * (insetBounds.width - 2 * radius)
+                + 2 * .pi * radius
+        )
+    }
+
+    static func path(in bounds: CGRect) -> CGPath {
+        let geometry = geometry(in: bounds)
+        let path = CGMutablePath()
+        path.move(to: geometry.startPoint)
+        path.addLine(
+            to: CGPoint(
+                x: geometry.rightCenter.x,
+                y: geometry.startPoint.y
+            )
+        )
+        path.addArc(
+            center: geometry.rightCenter,
+            radius: geometry.radius,
+            startAngle: .pi / 2,
+            endAngle: -.pi / 2,
+            clockwise: true
+        )
+        path.addLine(
+            to: CGPoint(
+                x: geometry.leftCenter.x,
+                y: geometry.leftCenter.y - geometry.radius
+            )
+        )
+        path.addArc(
+            center: geometry.leftCenter,
+            radius: geometry.radius,
+            startAngle: -.pi / 2,
+            endAngle: -.pi * 1.5,
+            clockwise: true
+        )
+        path.addLine(to: geometry.startPoint)
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct CapsuleActivityIndicatorGeometry: Equatable {
+    let startPoint: CGPoint
+    let leftCenter: CGPoint
+    let rightCenter: CGPoint
+    let radius: CGFloat
+    let perimeter: CGFloat
+}
+
+struct CapsuleActivityIndicatorSnapshot: Equatable {
+    let isVisible: Bool
+    let segmentCount: Int
+    let animatedSegmentCount: Int
+    let opacities: [Float]
+    let geometry: CapsuleActivityIndicatorGeometry
+    let animationDuration: CFTimeInterval
+}
+
+private final class CapsuleActivityIndicatorLayer: CALayer {
+    private static let animationKey = "capsuleTraversal"
+    private let segmentLayers: [CAShapeLayer]
+
+    var color = NSColor.controlAccentColor {
+        didSet {
+            segmentLayers.forEach { $0.strokeColor = color.cgColor }
+        }
+    }
+
+    override init() {
+        segmentLayers = (0..<CapsuleActivityIndicatorStyle.segmentCount).map {
+            index in
+            let layer = CAShapeLayer()
+            layer.fillColor = NSColor.clear.cgColor
+            layer.lineCap = .round
+            layer.lineJoin = .round
+            layer.lineWidth = CapsuleActivityIndicatorStyle.lineWidth
+            layer.opacity = pow(0.62, Float(index))
+            return layer
+        }
+        super.init()
+        isHidden = true
+        masksToBounds = false
+        segmentLayers.forEach(addSublayer)
+    }
+
+    override init(layer: Any) {
+        segmentLayers = (0..<CapsuleActivityIndicatorStyle.segmentCount).map {
+            index in
+            let layer = CAShapeLayer()
+            layer.fillColor = NSColor.clear.cgColor
+            layer.lineCap = .round
+            layer.lineJoin = .round
+            layer.lineWidth = CapsuleActivityIndicatorStyle.lineWidth
+            layer.opacity = pow(0.62, Float(index))
+            return layer
+        }
+        super.init(layer: layer)
+        segmentLayers.forEach(addSublayer)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func updatePath() {
+        let geometry = CapsuleActivityIndicatorStyle.geometry(in: bounds)
+        let path = CapsuleActivityIndicatorStyle.path(in: bounds)
+        let gap = max(
+            1,
+            geometry.perimeter - CapsuleActivityIndicatorStyle.segmentLength
+        )
+        for segment in segmentLayers {
+            segment.frame = bounds
+            segment.path = path
+            segment.lineDashPattern = [
+                NSNumber(value: CapsuleActivityIndicatorStyle.segmentLength),
+                NSNumber(value: gap),
+            ]
+        }
+    }
+
+    func startAnimating() {
+        isHidden = false
+        updatePath()
+        guard segmentLayers.first?.animation(
+            forKey: Self.animationKey
+        ) == nil else {
+            return
+        }
+        let perimeter = CapsuleActivityIndicatorStyle.geometry(
+            in: bounds
+        ).perimeter
+        for (index, segment) in segmentLayers.enumerated() {
+            let initialPhase = CGFloat(index)
+                * (
+                    CapsuleActivityIndicatorStyle.segmentLength
+                        + CapsuleActivityIndicatorStyle.segmentSpacing
+                )
+            segment.lineDashPhase = initialPhase
+            let animation = CABasicAnimation(keyPath: "lineDashPhase")
+            animation.fromValue = initialPhase
+            animation.toValue = initialPhase - perimeter
+            animation.duration =
+                CapsuleActivityIndicatorStyle.animationDuration
+            animation.repeatCount = .infinity
+            animation.timingFunction = CAMediaTimingFunction(
+                name: .linear
+            )
+            animation.isRemovedOnCompletion = false
+            segment.add(animation, forKey: Self.animationKey)
+        }
+    }
+
+    func stopAnimating() {
+        segmentLayers.forEach {
+            $0.removeAnimation(forKey: Self.animationKey)
+        }
+        isHidden = true
+    }
+
+    var snapshot: CapsuleActivityIndicatorSnapshot {
+        CapsuleActivityIndicatorSnapshot(
+            isVisible: !isHidden,
+            segmentCount: segmentLayers.count,
+            animatedSegmentCount: segmentLayers.filter {
+                $0.animation(forKey: Self.animationKey) != nil
+            }.count,
+            opacities: segmentLayers.map(\.opacity),
+            geometry: CapsuleActivityIndicatorStyle.geometry(in: bounds),
+            animationDuration: CapsuleActivityIndicatorStyle.animationDuration
+        )
     }
 }
 
