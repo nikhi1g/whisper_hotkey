@@ -207,8 +207,10 @@ Space, and full-screen set;
 the update task restores it if AppKit orders it out or leaves it on an inactive
 Space or Stage Manager set. One panel is reused for the process lifetime so
 repeated dictations cannot accumulate hidden WindowServer windows. Other badge
-states show the perimeter activity trail, Busy, or an
-actionable error. The menu icon
+states show the perimeter activity trail, Busy, or an actionable error.
+Transcribing, Busy, and No Speech Detected use the selected theme's background,
+text, and accent colors. Actionable failures retain a red background so setup
+or runtime problems remain distinct. The menu icon
 distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. Cancellation shows its distinct menu icon for
 500 milliseconds, then returns to Ready without waiting for another dictation.
@@ -226,7 +228,7 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 3.0.1. Beyond the single in-memory last
+The app is English-only for version 3.0.2. Beyond the single in-memory last
 dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented

@@ -693,6 +693,94 @@ final class ListeningBadgeTests: XCTestCase {
         XCTAssertEqual(geometry.arrowLeft.y, geometry.arrowRight.y)
     }
 
+    func testSendArrowPointsVisuallyUpInBothCoordinateSystems() {
+        let bounds = CGRect(x: 0, y: 0, width: 32, height: 32)
+        let standard = BadgeActionSymbolGeometry(in: bounds)
+        let flipped = BadgeActionSymbolGeometry(
+            in: bounds,
+            isFlipped: true
+        )
+
+        XCTAssertGreaterThan(standard.arrowTip.y, standard.center.y)
+        XCTAssertLessThan(flipped.arrowTip.y, flipped.center.y)
+        XCTAssertEqual(standard.arrowTip.x, standard.center.x)
+        XCTAssertEqual(flipped.arrowTip.x, flipped.center.x)
+    }
+
+    @MainActor
+    func testNeutralRuntimeStatesFollowSelectedTheme() {
+        let controller = CaretBadgeController()
+        let theme = BadgeTheme.tokyoNight
+        let palette = BadgeThemePalette.palette(for: theme)
+        let screen = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        let caret = CGRect(x: 200, y: 200, width: 1, height: 18)
+        controller.applyTheme(theme)
+
+        controller.present(
+            .transcribing,
+            caretFrame: caret,
+            screenFrame: screen
+        )
+        XCTAssertEqual(
+            controller.renderedBadgeBackgroundColorForTesting,
+            palette.background
+        )
+        XCTAssertEqual(
+            controller.transcribingColorForTesting,
+            palette.waveform
+        )
+
+        controller.present(.busy, caretFrame: caret, screenFrame: screen)
+        XCTAssertEqual(
+            controller.renderedBadgeBackgroundColorForTesting,
+            palette.background
+        )
+        XCTAssertEqual(controller.statusTextColorForTesting, palette.primaryText)
+
+        controller.present(
+            .error("No speech detected."),
+            caretFrame: caret,
+            screenFrame: screen
+        )
+        XCTAssertEqual(
+            controller.renderedBadgeBackgroundColorForTesting,
+            palette.background
+        )
+        XCTAssertEqual(controller.statusTextColorForTesting, palette.primaryText)
+    }
+
+    @MainActor
+    func testActionableFailureRetainsRedErrorTreatment() {
+        let controller = CaretBadgeController()
+        controller.applyTheme(.tokyoNight)
+        controller.present(
+            .error("Microphone failed: run setup."),
+            caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        XCTAssertNotEqual(
+            controller.renderedBadgeBackgroundColorForTesting,
+            BadgeThemePalette.palette(for: .tokyoNight).background
+        )
+        XCTAssertEqual(controller.statusTextColorForTesting, .white)
+    }
+
+    @MainActor
+    func testNativeButtonUsesFlippedUpwardArrowGeometry() {
+        let button = NSButton(
+            frame: CGRect(x: 0, y: 0, width: 32, height: 32)
+        )
+        XCTAssertTrue(button.isFlipped)
+
+        let geometry = BadgeActionSymbolGeometry(
+            in: button.bounds,
+            isFlipped: button.isFlipped
+        )
+        XCTAssertLessThan(geometry.arrowTip.y, geometry.center.y)
+        XCTAssertGreaterThan(geometry.arrowBottom.y, geometry.center.y)
+    }
+
     @MainActor
     func testBadgeUsesBorderlessFlatVisualStyleEvenDuringWarning() {
         let controller = CaretBadgeController()

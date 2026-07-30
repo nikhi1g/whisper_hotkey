@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.0.2: 2026-07-30
+
+Theme Studio release.
 
 - Expanded the HUD theme picker from 11 to 24 persistent presets
 - Grouped the theme dropdown into disabled Dark and Light section headings
@@ -8,6 +10,10 @@
 - Added a native three-color custom-theme editor with synchronized color wells,
   hex fields, Dark or Light classification, preset naming, and live HUD preview
 - Persisted up to 32 named custom presets and grouped them under Custom
+- Centered the Stop and Send glyphs with shared deterministic vector geometry
+- Corrected the Send arrow to point upward in flipped AppKit button coordinates
+- Applied the selected theme to Transcribing, Busy, and No Speech Detected while
+  retaining red treatment for actionable failures
 
 ## 3.0.1: 2026-07-30
 

@@ -407,6 +407,18 @@ public final class CaretBadgeController {
         badgeView.backgroundColorForTesting
     }
 
+    var renderedBadgeBackgroundColorForTesting: NSColor {
+        badgeView.renderedBackgroundColorForTesting
+    }
+
+    var statusTextColorForTesting: NSColor {
+        badgeView.statusTextColorForTesting
+    }
+
+    var transcribingColorForTesting: NSColor {
+        badgeView.transcribingColorForTesting
+    }
+
     private static func hasGradientLayer(_ layer: CALayer?) -> Bool {
         guard let layer else {
             return false
@@ -759,8 +771,11 @@ private final class BadgeView: NSView {
         case let .error(message):
             let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
             statusLabel.stringValue = trimmed.isEmpty ? "Dictation error" : trimmed
-            statusLabel.textColor = .white
-            layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.94).cgColor
+            if !BadgeMessageStyle.usesTheme(message: trimmed) {
+                statusLabel.textColor = .white
+                layer?.backgroundColor =
+                    NSColor.systemRed.withAlphaComponent(0.94).cgColor
+            }
         case .hidden:
             statusLabel.stringValue = ""
             layer?.backgroundColor = NSColor.clear.cgColor
@@ -826,6 +841,21 @@ private final class BadgeView: NSView {
         palette.background
     }
 
+    var renderedBackgroundColorForTesting: NSColor {
+        guard let color = layer?.backgroundColor else {
+            return .clear
+        }
+        return NSColor(cgColor: color) ?? .clear
+    }
+
+    var statusTextColorForTesting: NSColor {
+        statusLabel.textColor ?? .clear
+    }
+
+    var transcribingColorForTesting: NSColor {
+        transcribingIndicatorLayer.color
+    }
+
     var statusTextForTesting: String {
         statusLabel.stringValue
     }
@@ -834,6 +864,15 @@ private final class BadgeView: NSView {
         CapsuleActivityIndicatorSnapshot
     {
         transcribingIndicatorLayer.snapshot
+    }
+}
+
+enum BadgeMessageStyle {
+    static func usesTheme(message: String) -> Bool {
+        message
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .caseInsensitiveCompare("No speech detected") == .orderedSame
     }
 }
 
@@ -1203,7 +1242,7 @@ struct BadgeActionSymbolGeometry: Equatable {
     let arrowRight: CGPoint
     let arrowLineWidth: CGFloat
 
-    init(in bounds: CGRect) {
+    init(in bounds: CGRect, isFlipped: Bool = false) {
         let diameter = min(bounds.width, bounds.height)
         center = CGPoint(x: bounds.midX, y: bounds.midY)
         let stopSize = diameter * 0.25
@@ -1215,21 +1254,22 @@ struct BadgeActionSymbolGeometry: Equatable {
         )
         let arrowHalfHeight = diameter * 0.25
         let arrowHalfWidth = diameter * 0.21
+        let upward: CGFloat = isFlipped ? -1 : 1
         arrowBottom = CGPoint(
             x: center.x,
-            y: center.y - arrowHalfHeight
+            y: center.y - upward * arrowHalfHeight
         )
         arrowTip = CGPoint(
             x: center.x,
-            y: center.y + arrowHalfHeight
+            y: center.y + upward * arrowHalfHeight
         )
         arrowLeft = CGPoint(
             x: center.x - arrowHalfWidth,
-            y: center.y + diameter * 0.06
+            y: center.y + upward * diameter * 0.06
         )
         arrowRight = CGPoint(
             x: center.x + arrowHalfWidth,
-            y: center.y + diameter * 0.06
+            y: center.y + upward * diameter * 0.06
         )
         arrowLineWidth = max(1.5, diameter / 16)
     }
@@ -1257,7 +1297,10 @@ private final class BadgeActionButton: NSButton {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let geometry = BadgeActionSymbolGeometry(in: bounds)
+        let geometry = BadgeActionSymbolGeometry(
+            in: bounds,
+            isFlipped: isFlipped
+        )
         symbolColor.withAlphaComponent(
             cell?.isHighlighted == true ? 0.72 : 1
         ).set()
