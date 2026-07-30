@@ -10,6 +10,7 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
+    public static let customBadgeThemes = "customBadgeThemes"
 }
 
 public enum DecodingProfile: String, CaseIterable, Codable, Sendable {
@@ -367,6 +368,167 @@ public enum BadgeTheme: String, CaseIterable, Codable, Sendable {
             return .defaultTheme
         }
         return Self(rawValue: rawValue) ?? .defaultTheme
+    }
+}
+
+public struct CustomBadgeTheme: Codable, Equatable, Identifiable, Sendable {
+    public static let maximumCount = 32
+    public static let maximumNameLength = 40
+
+    public let id: UUID
+    public let name: String
+    public let mode: BadgeThemeMode
+    public let backgroundHex: String
+    public let textHex: String
+    public let accentHex: String
+
+    public init?(
+        id: UUID = UUID(),
+        name: String,
+        mode: BadgeThemeMode,
+        backgroundHex: String,
+        textHex: String,
+        accentHex: String
+    ) {
+        let normalizedName = String(
+            name.trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(Self.maximumNameLength)
+        )
+        guard !normalizedName.isEmpty,
+              let background = Self.normalizeHex(backgroundHex),
+              let text = Self.normalizeHex(textHex),
+              let accent = Self.normalizeHex(accentHex)
+        else {
+            return nil
+        }
+        self.id = id
+        self.name = normalizedName
+        self.mode = mode
+        self.backgroundHex = background
+        self.textHex = text
+        self.accentHex = accent
+    }
+
+    public static func normalizeHex(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let digits = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+        guard digits.count == 6,
+              digits.allSatisfy(\.isHexDigit)
+        else {
+            return nil
+        }
+        return "#\(digits.uppercased())"
+    }
+
+    public static func load(
+        defaults: UserDefaults = .standard
+    ) -> [Self] {
+        guard let data = defaults.data(
+            forKey: WhisperHotkeyPreferenceKeys.customBadgeThemes
+        ), let decoded = try? JSONDecoder().decode([Self].self, from: data)
+        else {
+            return []
+        }
+        var seen = Set<UUID>()
+        return decoded.prefix(maximumCount).compactMap { theme in
+            guard seen.insert(theme.id).inserted else {
+                return nil
+            }
+            return Self(
+                id: theme.id,
+                name: theme.name,
+                mode: theme.mode,
+                backgroundHex: theme.backgroundHex,
+                textHex: theme.textHex,
+                accentHex: theme.accentHex
+            )
+        }
+    }
+
+    public static func persist(
+        _ themes: [Self],
+        defaults: UserDefaults = .standard
+    ) {
+        let bounded = Array(themes.prefix(maximumCount))
+        guard let data = try? JSONEncoder().encode(bounded) else {
+            return
+        }
+        defaults.set(
+            data,
+            forKey: WhisperHotkeyPreferenceKeys.customBadgeThemes
+        )
+    }
+}
+
+public enum BadgeThemeSelection: Equatable, Sendable {
+    case builtIn(BadgeTheme)
+    case custom(CustomBadgeTheme)
+
+    public static let defaultSelection: Self = .builtIn(.defaultTheme)
+
+    public var identifier: String {
+        switch self {
+        case .builtIn(let theme):
+            theme.rawValue
+        case .custom(let theme):
+            "custom:\(theme.id.uuidString.lowercased())"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .builtIn(let theme): theme.displayName
+        case .custom(let theme): theme.name
+        }
+    }
+
+    public var summaryName: String {
+        switch self {
+        case .builtIn(let theme): theme.summaryName
+        case .custom(let theme): theme.name
+        }
+    }
+
+    public var mode: BadgeThemeMode {
+        switch self {
+        case .builtIn(let theme): theme.mode
+        case .custom(let theme): theme.mode
+        }
+    }
+
+    public var customTheme: CustomBadgeTheme? {
+        guard case .custom(let theme) = self else {
+            return nil
+        }
+        return theme
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard,
+        customThemes: [CustomBadgeTheme]? = nil
+    ) -> Self {
+        let value = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
+        )
+        if let value, let builtIn = BadgeTheme(rawValue: value) {
+            return .builtIn(builtIn)
+        }
+        let themes = customThemes ?? CustomBadgeTheme.load(defaults: defaults)
+        if let value,
+           value.hasPrefix("custom:"),
+           let id = UUID(uuidString: String(value.dropFirst("custom:".count))),
+           let custom = themes.first(where: { $0.id == id })
+        {
+            return .custom(custom)
+        }
+        return .defaultSelection
+    }
+
+    public func persist(defaults: UserDefaults = .standard) {
+        defaults.set(
+            identifier,
+            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
+        )
     }
 }
 

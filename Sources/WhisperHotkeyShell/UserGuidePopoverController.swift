@@ -287,7 +287,7 @@ final class UserGuidePopoverController {
 
     private let stateProvider: StateProvider
     private let popover = NSPopover()
-    private var selectedTheme = BadgeTheme.defaultTheme
+    private var selectedTheme = BadgeThemeSelection.defaultSelection
 
     init(stateProvider: @escaping StateProvider) {
         self.stateProvider = stateProvider
@@ -319,10 +319,10 @@ final class UserGuidePopoverController {
         popover.performClose(nil)
     }
 
-    func applyTheme(_ theme: BadgeTheme) {
+    func applyTheme(_ theme: BadgeThemeSelection) {
         selectedTheme = theme
         let appearanceName: NSAppearance.Name =
-            theme == .lightFrost ? .aqua : .darkAqua
+            theme.mode == .light ? .aqua : .darkAqua
         popover.appearance = NSAppearance(named: appearanceName)
         (popover.contentViewController as? UserGuideViewController)?
             .applyTheme(theme)
@@ -336,14 +336,14 @@ final class UserGuidePopoverController {
 @MainActor
 final class UserGuideViewController: NSViewController {
     private let sections: [UserGuideSection]
-    private var theme: BadgeTheme
+    private var theme: BadgeThemeSelection
     private var textView: NSTextView!
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
 
     init(
         sections: [UserGuideSection],
-        theme: BadgeTheme = .defaultTheme
+        theme: BadgeThemeSelection = .defaultSelection
     ) {
         self.sections = sections
         self.theme = theme
@@ -490,7 +490,7 @@ final class UserGuideViewController: NSViewController {
         return result
     }
 
-    func applyTheme(_ theme: BadgeTheme) {
+    func applyTheme(_ theme: BadgeThemeSelection) {
         self.theme = theme
         loadViewIfNeeded()
         let palette = BadgeThemePalette.palette(for: theme)
@@ -502,7 +502,7 @@ final class UserGuideViewController: NSViewController {
         textView.textStorage?.setAttributedString(makeGuideText())
     }
 
-    var appliedThemeForTesting: BadgeTheme {
+    var appliedThemeForTesting: BadgeThemeSelection {
         theme
     }
 

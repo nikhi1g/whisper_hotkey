@@ -5,6 +5,9 @@
 - Expanded the HUD theme picker from 11 to 24 persistent presets
 - Grouped the theme dropdown into disabled Dark and Light section headings
 - Applied light appearance behavior consistently across all ten light presets
+- Added a native three-color custom-theme editor with synchronized color wells,
+  hex fields, Dark or Light classification, preset naming, and live HUD preview
+- Persisted up to 32 named custom presets and grouped them under Custom
 
 ## 3.0.1: 2026-07-30
 

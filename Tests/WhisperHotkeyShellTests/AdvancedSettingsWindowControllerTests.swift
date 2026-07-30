@@ -60,7 +60,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             ["Codex", "Claude Code"]
         )
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes5)
-        XCTAssertEqual(controller.selectedThemeForTesting, .githubDarkDimmed)
+        XCTAssertEqual(
+            controller.selectedThemeForTesting,
+            .builtIn(.githubDarkDimmed)
+        )
         XCTAssertEqual(
             controller.selectableThemeCountForTesting,
             BadgeTheme.allCases.count
@@ -187,7 +190,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         let viewController = UserGuideViewController(
             sections: sections,
-            theme: .nord
+            theme: .builtIn(.nord)
         )
         viewController.preferredContentSize = NSSize(width: 440, height: 540)
         let renderedText = viewController.renderedTextForTesting
@@ -197,7 +200,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(renderedText.contains("Press and Hold"))
         XCTAssertTrue(renderedText.contains("Turbo"))
         XCTAssertTrue(renderedText.contains("Return or keypad Enter"))
-        XCTAssertEqual(viewController.appliedThemeForTesting, .nord)
+        XCTAssertEqual(
+            viewController.appliedThemeForTesting,
+            .builtIn(.nord)
+        )
         XCTAssertTrue(viewController.backgroundIsOpaqueForTesting)
     }
 
@@ -226,6 +232,46 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testCustomThemeAppearsInCustomSectionAndCanBeSelected() {
+        let custom = CustomBadgeTheme(
+            name: "Terminal Lime",
+            mode: .dark,
+            backgroundHex: "#101216",
+            textHex: "#F7F7F7",
+            accentHex: "#AAFF00"
+        )!
+        let selection = BadgeThemeSelection.custom(custom)
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                themeSelection: selection,
+                customThemes: [custom]
+            )
+        )
+        var selected: [BadgeThemeSelection] = []
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: { box.value },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                selectTheme: { selected.append($0) }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        XCTAssertEqual(controller.selectedThemeForTesting, selection)
+        XCTAssertEqual(
+            controller.selectableThemeCountForTesting,
+            BadgeTheme.allCases.count + 1
+        )
+        XCTAssertEqual(
+            controller.themeSectionTitlesForTesting,
+            ["Dark", "Light", "Custom"]
+        )
+    }
+
+    @MainActor
     func testEachPreferenceControlRoutesExactlyOnceAndRefreshDoesNotDuplicateOptions() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
@@ -241,7 +287,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var processingSelections: [ModelProcessingMode] = []
         var dictionarySelections: [[String]] = []
         var selectedLimits: [RecordingLimit] = []
-        var selectedThemes: [BadgeTheme] = []
+        var selectedThemes: [BadgeThemeSelection] = []
         let controller = AdvancedSettingsWindowController(
             stateProvider: { box.value },
             actions: AdvancedSettingsActions(
@@ -281,7 +327,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
         XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
         XCTAssertEqual(selectedLimits, [.minutes30])
-        XCTAssertEqual(selectedThemes, [.nord])
+        XCTAssertEqual(selectedThemes, [.builtIn(.nord)])
 
         box.value = makeAdvancedSettingsState(
             hotkey: .leftShift,
@@ -315,7 +361,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             ["Codex", "Claude Code"]
         )
         XCTAssertEqual(controller.selectedLimitForTesting, .minutes30)
-        XCTAssertEqual(controller.selectedThemeForTesting, .nord)
+        XCTAssertEqual(
+            controller.selectedThemeForTesting,
+            .builtIn(.nord)
+        )
         XCTAssertEqual(controller.optionCountsForTesting, initialCounts)
         XCTAssertEqual(
             controller.windowBackgroundForTesting,
@@ -516,6 +565,8 @@ private func makeAdvancedSettingsState(
     internalDictionaryEntries: [String] = [],
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
+    themeSelection: BadgeThemeSelection? = nil,
+    customThemes: [CustomBadgeTheme] = [],
     availableModels: Set<DictationModel> = [.baseEnglish],
     availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
     configurationEnabled: Bool = true
@@ -529,7 +580,8 @@ private func makeAdvancedSettingsState(
         processingMode: processingMode,
         internalDictionaryEntries: internalDictionaryEntries,
         recordingLimit: limit,
-        selectedTheme: theme,
+        selectedTheme: themeSelection ?? .builtIn(theme),
+        customThemes: customThemes,
         availableModels: availableModels,
         availableEngines: availableEngines,
         configurationEnabled: configurationEnabled

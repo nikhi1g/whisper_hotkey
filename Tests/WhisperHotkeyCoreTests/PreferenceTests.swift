@@ -178,4 +178,43 @@ final class PreferenceTests: XCTestCase {
             BadgeTheme.allCases.count
         )
     }
+
+    func testCustomThemesValidatePersistAndRestoreSelection() {
+        let suite = "whisper_hotkey-custom-theme-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertNil(
+            CustomBadgeTheme(
+                name: "Broken",
+                mode: .dark,
+                backgroundHex: "#12345",
+                textHex: "#FFFFFF",
+                accentHex: "#00AAFF"
+            )
+        )
+        let theme = try! XCTUnwrap(
+            CustomBadgeTheme(
+                name: "  Terminal Lime  ",
+                mode: .dark,
+                backgroundHex: "101216",
+                textHex: "#f7f7f7",
+                accentHex: "#aaff00"
+            )
+        )
+        XCTAssertEqual(theme.name, "Terminal Lime")
+        XCTAssertEqual(theme.backgroundHex, "#101216")
+        XCTAssertEqual(theme.textHex, "#F7F7F7")
+        XCTAssertEqual(theme.accentHex, "#AAFF00")
+
+        CustomBadgeTheme.persist([theme], defaults: defaults)
+        XCTAssertEqual(CustomBadgeTheme.load(defaults: defaults), [theme])
+
+        let selection = BadgeThemeSelection.custom(theme)
+        selection.persist(defaults: defaults)
+        XCTAssertEqual(
+            BadgeThemeSelection.selected(defaults: defaults),
+            selection
+        )
+    }
 }

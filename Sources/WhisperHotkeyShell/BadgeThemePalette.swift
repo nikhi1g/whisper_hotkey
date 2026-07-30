@@ -11,6 +11,15 @@ struct BadgeThemePalette {
     let sendForeground: NSColor
     let limitTrack: NSColor
 
+    static func palette(for selection: BadgeThemeSelection) -> Self {
+        switch selection {
+        case .builtIn(let theme):
+            palette(for: theme)
+        case .custom(let theme):
+            custom(theme)
+        }
+    }
+
     static func palette(for theme: BadgeTheme) -> Self {
         switch theme {
         case .githubDarkDimmed:
@@ -107,6 +116,22 @@ struct BadgeThemePalette {
         )
     }
 
+    private static func custom(_ theme: CustomBadgeTheme) -> Self {
+        let background = color(theme.backgroundHex)
+        let text = color(theme.textHex)
+        let accent = color(theme.accentHex)
+        return Self(
+            background: background.withAlphaComponent(0.98),
+            primaryText: text,
+            waveform: accent,
+            stopBackground: text.withAlphaComponent(0.08),
+            stopForeground: text.withAlphaComponent(0.84),
+            sendBackground: text,
+            sendForeground: background,
+            limitTrack: text.withAlphaComponent(0.10)
+        )
+    }
+
     private static func color(_ hex: Int, alpha: CGFloat = 1) -> NSColor {
         NSColor(
             calibratedRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -114,5 +139,13 @@ struct BadgeThemePalette {
             blue: CGFloat(hex & 0xFF) / 255,
             alpha: alpha
         )
+    }
+
+    private static func color(_ hex: String) -> NSColor {
+        let digits = hex.trimmingCharacters(
+            in: CharacterSet(charactersIn: "#")
+        )
+        let value = Int(digits, radix: 16) ?? 0
+        return color(value)
     }
 }

@@ -137,6 +137,15 @@ and Monokai. The light group contains Light Frost, GitHub Light, Solarized
 Light, Nord Snow, Rosé Pine Dawn, Paper, Mint, Sky, Lavender, and High Contrast
 Light. Existing saved identifiers remain valid. Theme application is
 event-driven and adds no idle work.
+The Theme row also opens a native custom-theme editor. A named preset chooses
+Dark or Light classification plus Background, Text, and Accent colors through
+standard macOS color wells or synchronized six-digit hex fields. A miniature
+listening capsule updates immediately inside the editor. Saving validates and
+normalizes the values, derives all secondary HUD colors, persists up to 32
+named presets locally, selects the saved preset, and applies it to the HUD,
+Settings, and User Guide. Custom themes appear under a separate Custom heading.
+Editing and theme loading happen only through Settings and add no idle worker,
+file watcher, or network request.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription. It copies that latest transcript to the system clipboard as a

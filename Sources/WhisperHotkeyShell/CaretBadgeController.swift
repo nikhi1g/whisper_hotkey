@@ -42,7 +42,7 @@ public final class CaretBadgeController {
 
     public init(
         actions: CaretBadgeActions = .none,
-        theme: BadgeTheme = .defaultTheme
+        theme: BadgeThemeSelection = .defaultSelection
     ) {
         badgeView = BadgeView(
             frame: CGRect(origin: .zero, size: BadgePlacement.defaultSize),
@@ -83,8 +83,12 @@ public final class CaretBadgeController {
         panel.isVisible
     }
 
-    public func applyTheme(_ theme: BadgeTheme) {
+    public func applyTheme(_ theme: BadgeThemeSelection) {
         badgeView.applyTheme(theme)
+    }
+
+    public func applyTheme(_ theme: BadgeTheme) {
+        applyTheme(.builtIn(theme))
     }
 
     /// Presents a non-activating badge without changing the active application
@@ -395,7 +399,7 @@ public final class CaretBadgeController {
         badgeView.accessibilityLabel()
     }
 
-    var appliedThemeForTesting: BadgeTheme {
+    var appliedThemeForTesting: BadgeThemeSelection {
         badgeView.themeForTesting
     }
 
@@ -465,7 +469,7 @@ private final class NonactivatingBadgePanel: NSPanel {
 @MainActor
 private final class BadgeView: NSView {
     private let actions: CaretBadgeActions
-    private var theme: BadgeTheme
+    private var theme: BadgeThemeSelection
     private var palette: BadgeThemePalette
     private let statusLabel = NSTextField(labelWithString: "")
     private let timeLabel = NSTextField(labelWithString: "0:00")
@@ -493,7 +497,7 @@ private final class BadgeView: NSView {
     init(
         frame frameRect: NSRect,
         actions: CaretBadgeActions,
-        theme: BadgeTheme
+        theme: BadgeThemeSelection
     ) {
         self.actions = actions
         self.theme = theme
@@ -562,7 +566,7 @@ private final class BadgeView: NSView {
         updatePresentation()
     }
 
-    func applyTheme(_ theme: BadgeTheme) {
+    func applyTheme(_ theme: BadgeThemeSelection) {
         guard self.theme != theme else {
             return
         }
@@ -821,7 +825,7 @@ private final class BadgeView: NSView {
         timeLabel.textColor ?? .clear
     }
 
-    var themeForTesting: BadgeTheme {
+    var themeForTesting: BadgeThemeSelection {
         theme
     }
 

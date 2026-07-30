@@ -11,7 +11,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let processingMode: ModelProcessingMode
     public let internalDictionaryEntries: [String]
     public let recordingLimit: RecordingLimit
-    public let selectedTheme: BadgeTheme
+    public let selectedTheme: BadgeThemeSelection
+    public let customThemes: [CustomBadgeTheme]
     public let availableModels: Set<DictationModel>
     public let availableEngines: Set<RecognitionEngine>
     public let configurationEnabled: Bool
@@ -25,7 +26,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         processingMode: ModelProcessingMode = .defaultMode,
         internalDictionaryEntries: [String] = [],
         recordingLimit: RecordingLimit,
-        selectedTheme: BadgeTheme = .defaultTheme,
+        selectedTheme: BadgeThemeSelection = .defaultSelection,
+        customThemes: [CustomBadgeTheme] = [],
         availableModels: Set<DictationModel>,
         availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
         configurationEnabled: Bool
@@ -39,6 +41,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.internalDictionaryEntries = internalDictionaryEntries
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
+        self.customThemes = customThemes
         self.availableModels = availableModels
         self.availableEngines = availableEngines
         self.configurationEnabled = configurationEnabled
@@ -55,7 +58,8 @@ public struct AdvancedSettingsActions {
     public var selectProcessingMode: (ModelProcessingMode) -> Void
     public var setInternalDictionary: ([String]) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
-    public var selectTheme: (BadgeTheme) -> Void
+    public var selectTheme: (BadgeThemeSelection) -> Void
+    public var saveCustomTheme: (CustomBadgeTheme) -> Void
     public var loginItemChanged: () -> Void
 
     public init(
@@ -67,7 +71,8 @@ public struct AdvancedSettingsActions {
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
         setInternalDictionary: @escaping ([String]) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
-        selectTheme: @escaping (BadgeTheme) -> Void = { _ in },
+        selectTheme: @escaping (BadgeThemeSelection) -> Void = { _ in },
+        saveCustomTheme: @escaping (CustomBadgeTheme) -> Void = { _ in },
         loginItemChanged: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
@@ -79,6 +84,7 @@ public struct AdvancedSettingsActions {
         self.setInternalDictionary = setInternalDictionary
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
+        self.saveCustomTheme = saveCustomTheme
         self.loginItemChanged = loginItemChanged
     }
 }
@@ -131,6 +137,8 @@ public final class AdvancedSettingsWindowController:
     private let internalDictionaryField = NSTokenField()
     private let recordingLimitPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
+    private let newThemeButton = NSButton(title: "New", target: nil, action: nil)
+    private let editThemeButton = NSButton(title: "Edit", target: nil, action: nil)
     private let loginItemToggle = NSButton(
         checkboxWithTitle: "Open automatically",
         target: nil,
@@ -153,6 +161,7 @@ public final class AdvancedSettingsWindowController:
         stateProvider: stateProvider
     )
     private weak var settingsRootView: NSView?
+    private var customThemeEditor: CustomThemeEditorWindowController?
     private var themedPrimaryLabels: [NSTextField] = []
     private var themedSecondaryLabels: [NSTextField] = []
     private var themedSectionLabels: [NSTextField] = []
@@ -230,7 +239,8 @@ public final class AdvancedSettingsWindowController:
                 state.internalDictionaryEntries
         }
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
-        select(rawValue: state.selectedTheme.rawValue, in: themePopup)
+        rebuildThemePopup(using: state)
+        select(rawValue: state.selectedTheme.identifier, in: themePopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
@@ -243,6 +253,10 @@ public final class AdvancedSettingsWindowController:
         internalDictionaryField.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
+        newThemeButton.isEnabled = state.configurationEnabled
+        editThemeButton.isEnabled =
+            state.configurationEnabled
+                && state.selectedTheme.customTheme != nil
 
         for (index, model) in DictationModel.allCases.enumerated() {
             let installed = state.availableModels.contains(model)
@@ -428,14 +442,67 @@ public final class AdvancedSettingsWindowController:
 
     @objc private func selectTheme(_ sender: NSPopUpButton) {
         guard stateProvider().configurationEnabled,
-              let rawValue = sender.selectedItem?.representedObject as? String,
-              let theme = BadgeTheme(rawValue: rawValue)
+              let identifier =
+                sender.selectedItem?.representedObject as? String,
+              let theme = themeSelection(
+                identifier: identifier,
+                state: stateProvider()
+              )
         else {
             refresh()
             return
         }
         actions.selectTheme(theme)
         refresh()
+    }
+
+    @objc private func createCustomTheme() {
+        showCustomThemeEditor(theme: nil)
+    }
+
+    @objc private func editCustomTheme() {
+        showCustomThemeEditor(theme: stateProvider().selectedTheme.customTheme)
+    }
+
+    private func showCustomThemeEditor(theme: CustomBadgeTheme?) {
+        guard stateProvider().configurationEnabled,
+              let parentWindow = window
+        else {
+            return
+        }
+        let editor = CustomThemeEditorWindowController(theme: theme) {
+            [weak self] savedTheme in
+            guard let self else {
+                return
+            }
+            actions.saveCustomTheme(savedTheme)
+            customThemeEditor = nil
+            refresh()
+        }
+        customThemeEditor = editor
+        guard let editorWindow = editor.window else {
+            customThemeEditor = nil
+            return
+        }
+        parentWindow.beginSheet(editorWindow)
+    }
+
+    private func themeSelection(
+        identifier: String,
+        state: AdvancedSettingsState
+    ) -> BadgeThemeSelection? {
+        if let builtIn = BadgeTheme(rawValue: identifier) {
+            return .builtIn(builtIn)
+        }
+        guard identifier.hasPrefix("custom:"),
+              let id = UUID(
+                uuidString: String(identifier.dropFirst("custom:".count))
+              ),
+              let custom = state.customThemes.first(where: { $0.id == id })
+        else {
+            return nil
+        }
+        return .custom(custom)
     }
 
     @objc private func toggleLoginItem(_ sender: NSButton) {
@@ -546,6 +613,16 @@ public final class AdvancedSettingsWindowController:
         themePopup.target = self
         themePopup.action = #selector(selectTheme(_:))
         themePopup.controlSize = .regular
+        newThemeButton.target = self
+        newThemeButton.action = #selector(createCustomTheme)
+        newThemeButton.controlSize = .small
+        editThemeButton.target = self
+        editThemeButton.action = #selector(editCustomTheme)
+        editThemeButton.controlSize = .small
+    }
+
+    private func rebuildThemePopup(using state: AdvancedSettingsState) {
+        themePopup.removeAllItems()
         for (modeIndex, mode) in BadgeThemeMode.allCases.enumerated() {
             if modeIndex > 0 {
                 themePopup.menu?.addItem(.separator())
@@ -561,6 +638,25 @@ public final class AdvancedSettingsWindowController:
                 themePopup.addItem(withTitle: theme.displayName)
                 themePopup.lastItem?.representedObject = theme.rawValue
             }
+        }
+        guard !state.customThemes.isEmpty else {
+            return
+        }
+        themePopup.menu?.addItem(.separator())
+        let heading = NSMenuItem(
+            title: "Custom",
+            action: nil,
+            keyEquivalent: ""
+        )
+        heading.isEnabled = false
+        themePopup.menu?.addItem(heading)
+        for theme in state.customThemes.sorted(by: {
+            $0.name.localizedCaseInsensitiveCompare($1.name)
+                == .orderedAscending
+        }) {
+            themePopup.addItem(withTitle: theme.name)
+            themePopup.lastItem?.representedObject =
+                BadgeThemeSelection.custom(theme).identifier
         }
     }
 
@@ -697,13 +793,13 @@ public final class AdvancedSettingsWindowController:
         }
     }
 
-    private func applyTheme(_ theme: BadgeTheme) {
+    private func applyTheme(_ theme: BadgeThemeSelection) {
         let palette = BadgeThemePalette.palette(for: theme)
         let background = palette.background.withAlphaComponent(1)
         let secondaryText = palette.primaryText.withAlphaComponent(0.72)
         let sectionText = palette.waveform.withAlphaComponent(0.78)
         let appearanceName: NSAppearance.Name =
-            theme.isLight ? .aqua : .darkAqua
+            theme.mode == .light ? .aqua : .darkAqua
 
         window?.appearance = NSAppearance(named: appearanceName)
         window?.backgroundColor = background
@@ -844,7 +940,14 @@ public final class AdvancedSettingsWindowController:
         let appearanceTitle = makeSectionTitle("APPEARANCE")
         stack.addArrangedSubview(appearanceTitle)
         let appearanceGrid = makeGrid()
-        addRow(to: appearanceGrid, title: "Theme", control: themePopup)
+        let themeControls = NSStackView(
+            views: [themePopup, newThemeButton, editThemeButton]
+        )
+        themeControls.orientation = .horizontal
+        themeControls.alignment = .centerY
+        themeControls.spacing = 6
+        themePopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        addRow(to: appearanceGrid, title: "Theme", control: themeControls)
         sizeColumns(in: appearanceGrid)
         stack.addArrangedSubview(appearanceGrid)
         stack.setCustomSpacing(20, after: appearanceGrid)
@@ -1000,8 +1103,16 @@ public final class AdvancedSettingsWindowController:
         selectedValue(in: recordingLimitPopup)
     }
 
-    var selectedThemeForTesting: BadgeTheme? {
-        selectedValue(in: themePopup)
+    var selectedThemeForTesting: BadgeThemeSelection? {
+        guard let identifier =
+                themePopup.selectedItem?.representedObject as? String
+        else {
+            return nil
+        }
+        return themeSelection(
+            identifier: identifier,
+            state: stateProvider()
+        )
     }
 
     var selectableThemeCountForTesting: Int {
@@ -1034,6 +1145,7 @@ public final class AdvancedSettingsWindowController:
             && internalDictionaryField.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
+            && newThemeButton.isEnabled
     }
 
     var modeControlEnabledForTesting: Bool {
@@ -1076,6 +1188,8 @@ public final class AdvancedSettingsWindowController:
             ("internal dictionary", internalDictionaryField),
             ("limit", recordingLimitPopup),
             ("theme", themePopup),
+            ("new theme", newThemeButton),
+            ("edit theme", editThemeButton),
             ("login toggle", loginItemToggle),
             ("hotkey summary", hotkeySummary),
             ("mode summary", modeSummary),

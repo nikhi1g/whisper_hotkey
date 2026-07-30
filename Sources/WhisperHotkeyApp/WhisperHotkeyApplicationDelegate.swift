@@ -71,7 +71,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var processingMode = ModelProcessingMode.selected()
     private var internalDictionary = InternalDictionary.selected()
     private var recordingLimit = RecordingLimit.selected()
-    private var selectedTheme = BadgeTheme.selected()
+    private var customThemes = CustomBadgeTheme.load()
+    private var selectedTheme = BadgeThemeSelection.selected()
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -1363,6 +1364,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             internalDictionaryEntries: internalDictionary.entries,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
+            customThemes: customThemes,
             availableModels: availableModels,
             availableEngines: availableEngines,
             configurationEnabled: !machine.phase.isBusy
@@ -1406,6 +1408,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectTheme: { [weak self] theme in
                         self?.selectTheme(theme)
+                    },
+                    saveCustomTheme: { [weak self] theme in
+                        self?.saveCustomTheme(theme)
                     },
                     loginItemChanged: { [weak self] in
                         self?.setupWindowController.refresh()
@@ -1593,16 +1598,32 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         updateMenuBar()
     }
 
-    private func selectTheme(_ theme: BadgeTheme) {
+    private func selectTheme(_ theme: BadgeThemeSelection) {
         guard !machine.phase.isBusy, selectedTheme != theme else {
             return
         }
         selectedTheme = theme
-        UserDefaults.standard.set(
-            theme.rawValue,
-            forKey: WhisperHotkeyPreferenceKeys.badgeTheme
-        )
+        theme.persist()
         badge.applyTheme(theme)
+        advancedSettingsWindowController?.refreshIfVisible()
+    }
+
+    private func saveCustomTheme(_ theme: CustomBadgeTheme) {
+        guard !machine.phase.isBusy else {
+            return
+        }
+        if let index = customThemes.firstIndex(where: { $0.id == theme.id }) {
+            customThemes[index] = theme
+        } else {
+            guard customThemes.count < CustomBadgeTheme.maximumCount else {
+                return
+            }
+            customThemes.append(theme)
+        }
+        CustomBadgeTheme.persist(customThemes)
+        selectedTheme = .custom(theme)
+        selectedTheme.persist()
+        badge.applyTheme(selectedTheme)
         advancedSettingsWindowController?.refreshIfVisible()
     }
 

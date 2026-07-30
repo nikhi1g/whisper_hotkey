@@ -706,7 +706,10 @@ final class ListeningBadgeTests: XCTestCase {
 
         for theme in BadgeTheme.allCases {
             controller.applyTheme(theme)
-            XCTAssertEqual(controller.appliedThemeForTesting, theme)
+            XCTAssertEqual(
+                controller.appliedThemeForTesting,
+                .builtIn(theme)
+            )
             let color = try! XCTUnwrap(
                 controller.badgeBackgroundColorForTesting.usingColorSpace(.sRGB)
             )
