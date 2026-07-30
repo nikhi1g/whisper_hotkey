@@ -458,13 +458,15 @@ private final class CustomThemePreviewView: NSView {
             )
         ).fill()
         palette.stopForeground.setFill()
+        let stopBounds = NSRect(
+            x: capsule.maxX - 92,
+            y: capsule.midY - 20,
+            width: 40,
+            height: 40
+        )
+        let stopGeometry = BadgeActionSymbolGeometry(in: stopBounds)
         NSBezierPath(
-            roundedRect: NSRect(
-                x: capsule.maxX - 76,
-                y: capsule.midY - 6,
-                width: 12,
-                height: 12
-            ),
+            roundedRect: stopGeometry.stopRect,
             xRadius: 2,
             yRadius: 2
         ).fill()
@@ -479,13 +481,22 @@ private final class CustomThemePreviewView: NSView {
             )
         ).fill()
         palette.sendForeground.setStroke()
+        let sendBounds = NSRect(
+            x: capsule.maxX - 46,
+            y: capsule.midY - 20,
+            width: 40,
+            height: 40
+        )
+        let sendGeometry = BadgeActionSymbolGeometry(in: sendBounds)
         let arrow = NSBezierPath()
-        arrow.lineWidth = 2.2
-        arrow.move(to: CGPoint(x: capsule.maxX - 26, y: capsule.midY - 9))
-        arrow.line(to: CGPoint(x: capsule.maxX - 26, y: capsule.midY + 10))
-        arrow.move(to: CGPoint(x: capsule.maxX - 34, y: capsule.midY + 3))
-        arrow.line(to: CGPoint(x: capsule.maxX - 26, y: capsule.midY + 11))
-        arrow.line(to: CGPoint(x: capsule.maxX - 18, y: capsule.midY + 3))
+        arrow.lineWidth = sendGeometry.arrowLineWidth
+        arrow.lineCapStyle = .round
+        arrow.lineJoinStyle = .round
+        arrow.move(to: sendGeometry.arrowBottom)
+        arrow.line(to: sendGeometry.arrowTip)
+        arrow.move(to: sendGeometry.arrowLeft)
+        arrow.line(to: sendGeometry.arrowTip)
+        arrow.line(to: sendGeometry.arrowRight)
         arrow.stroke()
     }
 }

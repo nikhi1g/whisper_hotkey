@@ -778,7 +778,7 @@ private final class BadgeView: NSView {
     }
 
     private func configureActionButton(
-        _ button: NSButton,
+        _ button: BadgeActionButton,
         symbol: String,
         accessibilityLabel: String,
         background: NSColor,
@@ -786,16 +786,9 @@ private final class BadgeView: NSView {
         size: CGFloat
     ) {
         button.isBordered = false
-        button.imagePosition = .imageOnly
-        button.image = NSImage(
-            systemSymbolName: symbol,
-            accessibilityDescription: accessibilityLabel
-        )
-        button.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: symbol == "arrow.up" ? 17 : 10,
-            weight: symbol == "arrow.up" ? .medium : .semibold
-        )
-        button.contentTintColor = foreground
+        button.image = nil
+        button.badgeSymbol = symbol == "arrow.up" ? .send : .stop
+        button.symbolColor = foreground
         button.toolTip = accessibilityLabel
         button.setAccessibilityLabel(accessibilityLabel)
         button.wantsLayer = true
@@ -805,11 +798,11 @@ private final class BadgeView: NSView {
     }
 
     private func applyActionButtonStyle(
-        _ button: NSButton,
+        _ button: BadgeActionButton,
         background: NSColor,
         foreground: NSColor
     ) {
-        button.contentTintColor = foreground
+        button.symbolColor = foreground
         button.layer?.backgroundColor = background.cgColor
     }
 
@@ -1196,13 +1189,97 @@ struct AudioWaveformHistory: Equatable {
     }
 }
 
+enum BadgeActionSymbol {
+    case stop
+    case send
+}
+
+struct BadgeActionSymbolGeometry: Equatable {
+    let center: CGPoint
+    let stopRect: CGRect
+    let arrowBottom: CGPoint
+    let arrowTip: CGPoint
+    let arrowLeft: CGPoint
+    let arrowRight: CGPoint
+    let arrowLineWidth: CGFloat
+
+    init(in bounds: CGRect) {
+        let diameter = min(bounds.width, bounds.height)
+        center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let stopSize = diameter * 0.25
+        stopRect = CGRect(
+            x: center.x - stopSize / 2,
+            y: center.y - stopSize / 2,
+            width: stopSize,
+            height: stopSize
+        )
+        let arrowHalfHeight = diameter * 0.25
+        let arrowHalfWidth = diameter * 0.21
+        arrowBottom = CGPoint(
+            x: center.x,
+            y: center.y - arrowHalfHeight
+        )
+        arrowTip = CGPoint(
+            x: center.x,
+            y: center.y + arrowHalfHeight
+        )
+        arrowLeft = CGPoint(
+            x: center.x - arrowHalfWidth,
+            y: center.y + diameter * 0.06
+        )
+        arrowRight = CGPoint(
+            x: center.x + arrowHalfWidth,
+            y: center.y + diameter * 0.06
+        )
+        arrowLineWidth = max(1.5, diameter / 16)
+    }
+}
+
 private final class BadgeActionButton: NSButton {
     override var acceptsFirstResponder: Bool { false }
+
+    var badgeSymbol: BadgeActionSymbol = .stop {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var symbolColor: NSColor = .labelColor {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
     override func layout() {
         super.layout()
         layer?.cornerRadius = min(bounds.width, bounds.height) / 2
         layer?.masksToBounds = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let geometry = BadgeActionSymbolGeometry(in: bounds)
+        symbolColor.withAlphaComponent(
+            cell?.isHighlighted == true ? 0.72 : 1
+        ).set()
+        switch badgeSymbol {
+        case .stop:
+            NSBezierPath(
+                roundedRect: geometry.stopRect,
+                xRadius: geometry.stopRect.width * 0.16,
+                yRadius: geometry.stopRect.height * 0.16
+            ).fill()
+        case .send:
+            let arrow = NSBezierPath()
+            arrow.lineWidth = geometry.arrowLineWidth
+            arrow.lineCapStyle = .round
+            arrow.lineJoinStyle = .round
+            arrow.move(to: geometry.arrowBottom)
+            arrow.line(to: geometry.arrowTip)
+            arrow.move(to: geometry.arrowLeft)
+            arrow.line(to: geometry.arrowTip)
+            arrow.line(to: geometry.arrowRight)
+            arrow.stroke()
+        }
     }
 }
 

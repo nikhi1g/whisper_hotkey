@@ -673,6 +673,26 @@ final class ListeningBadgeTests: XCTestCase {
         XCTAssertEqual(RuntimeBadgeLayout.size, layout.size)
     }
 
+    func testActionGlyphGeometryIsCenteredInsideEachCircle() {
+        let bounds = CGRect(x: 12, y: 7, width: 32, height: 32)
+        let geometry = BadgeActionSymbolGeometry(in: bounds)
+
+        XCTAssertEqual(geometry.center, CGPoint(x: 28, y: 23))
+        XCTAssertEqual(geometry.stopRect.midX, bounds.midX)
+        XCTAssertEqual(geometry.stopRect.midY, bounds.midY)
+        XCTAssertEqual(geometry.arrowBottom.x, bounds.midX)
+        XCTAssertEqual(geometry.arrowTip.x, bounds.midX)
+        XCTAssertEqual(
+            geometry.arrowBottom.y + geometry.arrowTip.y,
+            bounds.midY * 2
+        )
+        XCTAssertEqual(
+            geometry.arrowLeft.x + geometry.arrowRight.x,
+            bounds.midX * 2
+        )
+        XCTAssertEqual(geometry.arrowLeft.y, geometry.arrowRight.y)
+    }
+
     @MainActor
     func testBadgeUsesBorderlessFlatVisualStyleEvenDuringWarning() {
         let controller = CaretBadgeController()
