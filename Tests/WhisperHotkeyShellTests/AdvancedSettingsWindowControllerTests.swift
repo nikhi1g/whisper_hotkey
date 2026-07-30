@@ -86,6 +86,18 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 "Dimmed", "Login On",
             ]
         )
+        let summaryFrames = controller.summaryFramesForTesting
+        XCTAssertEqual(summaryFrames.count, 6)
+        XCTAssertEqual(
+            Set(summaryFrames.prefix(3).map(\.midY)).count,
+            1
+        )
+        XCTAssertEqual(
+            Set(summaryFrames.suffix(3).map(\.midY)).count,
+            1
+        )
+        XCTAssertNotEqual(summaryFrames[0].midY, summaryFrames[3].midY)
+        XCTAssertLessThan(summaryFrames[3].midY, summaryFrames[0].midY)
         XCTAssertEqual(
             controller.helpAccessibilityLabelForTesting,
             "Open User Guide"
@@ -98,7 +110,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 672)
+            CGSize(width: 620, height: 700)
         )
         XCTAssertEqual(
             controller.window?.title,

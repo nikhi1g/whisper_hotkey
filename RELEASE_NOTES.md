@@ -1,23 +1,21 @@
-# whisper_hotkey 3.0.0: Parallel Recognition
+# whisper_hotkey 3.0.1: Interface Polish
 
-Version 3.0 adds confidence-adaptive decoding and an optional processing
-pipeline that begins recognition while speech capture continues.
+Version 3.0.1 keeps every Settings summary chip visible and makes empty
+recording feedback disappear promptly.
 
 ## Highlights
 
-- Choose After Recording, Model Ready, or Decode While Speaking from the
-  Processing control in Settings.
-- Decode bounded speech chunks in the background through one serial model
-  runtime while microphone capture continues.
-- Keep partial results private and insert once when dictation finishes.
-- Preserve the complete recording for automatic full-context fallback if any
-  background chunk fails.
-- Use Smart Decode to accept confident fast passes and retry uncertain audio
-  with five-beam Precision decoding.
-- Retain the compact fixed HUD, internal dictionary, Pause Mode, Apple
-  acceleration options, terminal control, and ephemeral local audio.
-- Include a reproducible 100-recording LibriSpeech benchmark covering release
-  latency and word error rate.
+- Split the Settings summary into two stable rows.
+- Keep long combinations such as Turbo, Metal, Smart Decode, and Decode While
+  Speaking fully inside the window.
+- Preserve each complete summary chip instead of compressing it into an empty
+  capsule or allowing it to cross the window edge.
+- Increase the Settings content height slightly so both rows retain normal
+  spacing.
+- Reduce the red No Speech Detected feedback from one second to 200
+  milliseconds.
+- Leave cancellation and other error durations unchanged.
+- Retain all v3.0 Parallel Recognition functionality.
 
 Quick Start:
 

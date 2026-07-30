@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 3.0.1: 2026-07-30
+
+Interface Polish release.
 
 - Reduced the red No Speech Detected feedback to 200 milliseconds without
   changing other error or cancellation durations
+- Wrapped the Settings summary chips across two stable rows so longer
+  recognition choices remain inside the window
 
 ## 3.0.0: 2026-07-30
 

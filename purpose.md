@@ -125,7 +125,8 @@ choices retain full-recording context.
 **Open at login** uses
 the existing signed one-shot login service and respects explicit opt-out.
 The bottom of Settings reports the current key, behavior, model, recording
-limit, theme, and login state as compact read-only summary chips.
+limit, theme, and login state as compact read-only summary chips split across
+two stable rows so every complete chip remains inside the window.
 The **Theme** dropdown changes the floating HUD, Settings window, and User Guide
 and persists immediately.
 GitHub Dark Dimmed remains the default. Ten additional restrained presets are
@@ -212,7 +213,7 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 3.0.0. Beyond the single in-memory last
+The app is English-only for version 3.0.1. Beyond the single in-memory last
 dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented

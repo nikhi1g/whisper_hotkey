@@ -172,7 +172,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 672),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 700),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -851,18 +851,33 @@ public final class AdvancedSettingsWindowController:
         sizeColumns(in: startupGrid)
         stack.addArrangedSubview(startupGrid)
 
-        let summary = NSStackView(
+        let primarySummaryRow = NSStackView(
             views: [
                 hotkeySummary,
                 modeSummary,
                 modelSummary,
+            ]
+        )
+        primarySummaryRow.orientation = .horizontal
+        primarySummaryRow.alignment = .centerY
+        primarySummaryRow.spacing = 4
+
+        let secondarySummaryRow = NSStackView(
+            views: [
                 limitSummary,
                 themeSummary,
                 loginSummary,
             ]
         )
-        summary.orientation = .horizontal
-        summary.alignment = .centerY
+        secondarySummaryRow.orientation = .horizontal
+        secondarySummaryRow.alignment = .centerY
+        secondarySummaryRow.spacing = 4
+
+        let summary = NSStackView(
+            views: [primarySummaryRow, secondarySummaryRow]
+        )
+        summary.orientation = .vertical
+        summary.alignment = .leading
         summary.spacing = 4
 
         let footerSpacer = NSView()
@@ -1030,6 +1045,9 @@ public final class AdvancedSettingsWindowController:
             ("theme", themePopup),
             ("login toggle", loginItemToggle),
             ("hotkey summary", hotkeySummary),
+            ("mode summary", modeSummary),
+            ("model summary", modelSummary),
+            ("limit summary", limitSummary),
             ("theme summary", themeSummary),
             ("login summary", loginSummary),
             ("help", helpButton),
@@ -1103,6 +1121,21 @@ public final class AdvancedSettingsWindowController:
             themeSummary.stringValue,
             loginSummary.stringValue,
         ]
+    }
+
+    var summaryFramesForTesting: [CGRect] {
+        guard let contentView = window?.contentView else {
+            return []
+        }
+        contentView.layoutSubtreeIfNeeded()
+        return [
+            hotkeySummary,
+            modeSummary,
+            modelSummary,
+            limitSummary,
+            themeSummary,
+            loginSummary,
+        ].map { $0.convert($0.bounds, to: contentView) }
     }
 
     func toggleUserGuideForTesting() {
