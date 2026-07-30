@@ -34,6 +34,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 hotkey: .rightOption,
                 mode: .toggle,
                 model: .smallEnglish,
+                decodingProfile: .adaptive,
                 keepModelReady: true,
                 internalDictionaryEntries: ["Codex", "Claude Code"],
                 limit: .minutes5,
@@ -46,6 +47,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedHotkeyForTesting, .rightOption)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .smallEnglish)
+        XCTAssertEqual(
+            controller.selectedDecodingProfileForTesting,
+            .adaptive
+        )
         XCTAssertTrue(controller.keepModelReadyForTesting)
         XCTAssertEqual(
             controller.internalDictionaryEntriesForTesting,
@@ -69,7 +74,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.summaryValuesForTesting,
             [
-                "Right Option", "Toggle", "Small Metal Ready", "5 Minutes",
+                "Right Option", "Toggle",
+                "Small Metal Smart Decode Ready", "5 Minutes",
                 "Dimmed", "Login On",
             ]
         )
@@ -85,7 +91,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 630)
+            CGSize(width: 620, height: 672)
         )
         XCTAssertEqual(
             controller.window?.title,
@@ -123,6 +129,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertTrue(
             ["Base", "Small", "Medium", "Turbo"].allSatisfy { title in
+                rows.contains(where: { $0.title == title })
+            }
+        )
+        XCTAssertTrue(
+            ["Precision decoding", "Smart Decode"].allSatisfy { title in
                 rows.contains(where: { $0.title == title })
             }
         )
@@ -166,6 +177,30 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testWhisperKitUsesNativeDecodingAndDisablesProfileChoice() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                engine: .whisperKitCoreML,
+                decodingProfile: .adaptive,
+                availableEngines: Set(RecognitionEngine.allCases)
+            )
+        )
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+
+        XCTAssertFalse(controller.decodingControlEnabledForTesting)
+        XCTAssertEqual(
+            controller.selectedDecodingProfileForTesting,
+            .adaptive
+        )
+        XCTAssertTrue(
+            controller.summaryValuesForTesting[2].contains("Native")
+        )
+    }
+
+    @MainActor
     func testEachPreferenceControlRoutesExactlyOnceAndRefreshDoesNotDuplicateOptions() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
@@ -177,6 +212,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedModes: [HotkeyActivationMode] = []
         var selectedModels: [DictationModel] = []
         var selectedEngines: [RecognitionEngine] = []
+        var selectedDecodingProfiles: [DecodingProfile] = []
         var readinessSelections: [Bool] = []
         var dictionarySelections: [[String]] = []
         var selectedLimits: [RecordingLimit] = []
@@ -188,6 +224,9 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectHotkey: { selectedHotkeys.append($0) },
                 selectModel: { selectedModels.append($0) },
                 selectEngine: { selectedEngines.append($0) },
+                selectDecodingProfile: {
+                    selectedDecodingProfiles.append($0)
+                },
                 setKeepModelReady: { readinessSelections.append($0) },
                 setInternalDictionary: { dictionarySelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
@@ -200,6 +239,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectHotkeyForTesting(.leftShift)
         controller.selectModeForTesting(.toggle)
         controller.selectModelForTesting(.largeV3TurboQ5)
+        controller.selectDecodingProfileForTesting(.adaptive)
         controller.selectEngineForTesting(.whisperKitCoreML)
         controller.setKeepModelReadyForTesting(true)
         controller.setInternalDictionaryForTesting(
@@ -212,6 +252,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedModes, [.toggle])
         XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
         XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
+        XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
         XCTAssertEqual(readinessSelections, [true])
         XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
         XCTAssertEqual(selectedLimits, [.minutes30])
@@ -221,6 +262,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             hotkey: .leftShift,
             mode: .toggle,
             model: .largeV3TurboQ5,
+            decodingProfile: .adaptive,
             keepModelReady: true,
             internalDictionaryEntries: ["Codex", "Claude Code"],
             limit: .minutes30,
@@ -235,6 +277,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
         XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
         XCTAssertEqual(controller.selectedEngineForTesting, .whisperCppMetal)
+        XCTAssertEqual(
+            controller.selectedDecodingProfileForTesting,
+            .adaptive
+        )
         XCTAssertTrue(controller.keepModelReadyForTesting)
         XCTAssertEqual(
             controller.internalDictionaryEntriesForTesting,
@@ -436,6 +482,8 @@ private func makeAdvancedSettingsState(
     hotkey: HotkeyKey = .rightCommand,
     mode: HotkeyActivationMode = .hold,
     model: DictationModel = .baseEnglish,
+    engine: RecognitionEngine = .whisperCppMetal,
+    decodingProfile: DecodingProfile = .precision,
     keepModelReady: Bool = false,
     internalDictionaryEntries: [String] = [],
     limit: RecordingLimit = .minutes10,
@@ -448,6 +496,8 @@ private func makeAdvancedSettingsState(
         selectedHotkey: hotkey,
         activationMode: mode,
         selectedModel: model,
+        selectedEngine: engine,
+        decodingProfile: decodingProfile,
         keepModelReady: keepModelReady,
         internalDictionaryEntries: internalDictionaryEntries,
         recordingLimit: limit,

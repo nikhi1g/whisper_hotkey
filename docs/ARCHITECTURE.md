@@ -77,6 +77,12 @@ pinned Swift package using Core ML GPU and Neural Engine compute units. Only
 one path can be active, all consume the same private WAV contract, and no path
 may download at runtime or silently fall back to another selected engine.
 
+The C++ helper also owns both decoding profiles. Precision runs five-beam
+search once. Smart Decode runs a deterministic one-candidate greedy pass,
+checks token confidence and repetition in memory, and runs the same Precision
+beam only when the first pass is uncertain. Confidence metadata is consumed
+only for the active inference and is never logged or persisted.
+
 ## State and delivery
 
 ```text

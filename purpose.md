@@ -81,9 +81,19 @@ perform no runtime download and fall back only by an explicit user selection,
 never silently. Missing local model files remain visible
 as muted model chips but cannot be selected; the app never downloads them. The
 full model description is available from each chip's native help text. The
-accuracy-first decoder
-keeps a beam width of five on whisper.cpp, uses Metal and flash attention, and gives whisper.cpp
-half of the Mac's logical CPUs up to an eight-thread cap. The
+adjacent **Decoding** selector persists **Precision** or **Smart Decode**.
+Precision is the default and always uses a beam width of five. Smart Decode is
+available on the whisper.cpp engines. It first runs deterministic greedy
+decoding with one candidate and no temperature fallback. It accepts that result
+only when average token log probability, the fraction of weak tokens, maximum
+no-speech probability, and repeated phrase detection all pass fixed,
+benchmark-calibrated thresholds. An uncertain result is discarded and the same
+audio is decoded once with the Precision beam. Confidence measurements are
+ephemeral protocol metadata and are never logged or persisted. The command-line
+failure path retains Precision decoding because it cannot run the adaptive
+decision. WhisperKit retains its native decoding behavior and disables this
+selector. Both whisper.cpp profiles use Metal and flash attention and give
+whisper.cpp half of the Mac's logical CPUs up to an eight-thread cap. The
 **Internal dictionary** stores up to 64 user-defined words or phrases as native
 preference strings. Settings presents them as editable tokens: commas and Return
 commit an entry and Backspace removes one. Entries are trimmed, capped, and
@@ -195,3 +205,10 @@ dictation, it stores no history, performs no network requests, never downloads
 models, and removes audio state after use. Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented
 models, but installs them only after pinned SHA-256 verification.
+
+Developer benchmarks are separate from the shipping application. The ignored
+`Benchmarks/Data` tree can hold the checksum-verified LibriSpeech `test-clean`
+and `test-other` splits used by OpenAI's Whisper evaluation. Benchmark results
+contain aggregate timing and word-error measurements plus utterance identifiers
+and numeric confidence measurements, never audio or transcript text. Benchmark
+downloads and conversion tools are never invoked by the running app.

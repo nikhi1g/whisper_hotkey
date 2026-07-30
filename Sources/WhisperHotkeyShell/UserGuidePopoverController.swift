@@ -129,6 +129,21 @@ enum UserGuideContent {
                         detail: state.selectedEngine.menuTitle
                     ),
                     UserGuideRow(
+                        key: "precision",
+                        title: "Precision decoding",
+                        detail: DecodingProfile.precision.description
+                    ),
+                    UserGuideRow(
+                        key: "smart",
+                        title: "Smart Decode",
+                        detail: DecodingProfile.adaptive.description
+                    ),
+                    UserGuideRow(
+                        key: state.decodingProfile.displayName.lowercased(),
+                        title: "Selected decoding",
+                        detail: state.decodingProfile.description
+                    ),
+                    UserGuideRow(
                         key: state.keepModelReady ? "on" : "off",
                         title: "Keep Model Ready",
                         detail: state.keepModelReady

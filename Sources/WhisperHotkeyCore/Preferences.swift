@@ -3,11 +3,48 @@ import Foundation
 public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
     public static let recognitionEngine = "recognitionEngine"
+    public static let decodingProfile = "decodingProfile"
     public static let keepModelReady = "keepModelReady"
     public static let internalDictionary = "internalDictionary"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
+}
+
+public enum DecodingProfile: String, CaseIterable, Codable, Sendable {
+    case precision
+    case adaptive
+
+    public static let defaultProfile: Self = .precision
+
+    public var displayName: String {
+        switch self {
+        case .precision:
+            "Precision"
+        case .adaptive:
+            "Smart Decode"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .precision:
+            "Always uses five-beam decoding for consistent accuracy."
+        case .adaptive:
+            "Accepts a confident fast pass and retries uncertain speech with five-beam decoding."
+        }
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        guard let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.decodingProfile
+        ) else {
+            return .defaultProfile
+        }
+        return Self(rawValue: rawValue) ?? .defaultProfile
+    }
 }
 
 /// User-supplied words and phrases that bias local Whisper decoding.

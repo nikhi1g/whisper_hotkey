@@ -7,6 +7,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let activationMode: HotkeyActivationMode
     public let selectedModel: DictationModel
     public let selectedEngine: RecognitionEngine
+    public let decodingProfile: DecodingProfile
     public let keepModelReady: Bool
     public let internalDictionaryEntries: [String]
     public let recordingLimit: RecordingLimit
@@ -20,6 +21,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         activationMode: HotkeyActivationMode,
         selectedModel: DictationModel,
         selectedEngine: RecognitionEngine = .defaultEngine,
+        decodingProfile: DecodingProfile = .defaultProfile,
         keepModelReady: Bool = false,
         internalDictionaryEntries: [String] = [],
         recordingLimit: RecordingLimit,
@@ -32,6 +34,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.activationMode = activationMode
         self.selectedModel = selectedModel
         self.selectedEngine = selectedEngine
+        self.decodingProfile = decodingProfile
         self.keepModelReady = keepModelReady
         self.internalDictionaryEntries = internalDictionaryEntries
         self.recordingLimit = recordingLimit
@@ -48,6 +51,7 @@ public struct AdvancedSettingsActions {
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
+    public var selectDecodingProfile: (DecodingProfile) -> Void
     public var setKeepModelReady: (Bool) -> Void
     public var setInternalDictionary: ([String]) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
@@ -59,6 +63,7 @@ public struct AdvancedSettingsActions {
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
+        selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         setKeepModelReady: @escaping (Bool) -> Void = { _ in },
         setInternalDictionary: @escaping ([String]) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
@@ -69,6 +74,7 @@ public struct AdvancedSettingsActions {
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectEngine = selectEngine
+        self.selectDecodingProfile = selectDecodingProfile
         self.setKeepModelReady = setKeepModelReady
         self.setInternalDictionary = setInternalDictionary
         self.selectRecordingLimit = selectRecordingLimit
@@ -120,6 +126,7 @@ public final class AdvancedSettingsWindowController:
     private let modeControl = NSSegmentedControl()
     private let modelControl = NSSegmentedControl()
     private let engineControl = NSSegmentedControl()
+    private let decodingControl = NSSegmentedControl()
     private let keepModelReadySwitch = NSSwitch()
     private let keepModelReadyLabel = NSTextField(
         labelWithString: "Keep model ready"
@@ -168,7 +175,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 630),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 672),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -219,6 +226,7 @@ public final class AdvancedSettingsWindowController:
         select(mode: state.activationMode)
         select(model: state.selectedModel)
         select(engine: state.selectedEngine)
+        select(decodingProfile: state.decodingProfile)
         keepModelReadySwitch.state = state.keepModelReady ? .on : .off
         if window?.firstResponder !== internalDictionaryField.currentEditor() {
             internalDictionaryField.objectValue =
@@ -231,6 +239,9 @@ public final class AdvancedSettingsWindowController:
         modeControl.isEnabled = state.configurationEnabled
         modelControl.isEnabled = state.configurationEnabled
         engineControl.isEnabled = state.configurationEnabled
+        decodingControl.isEnabled =
+            state.configurationEnabled
+                && state.selectedEngine != .whisperKitCoreML
         keepModelReadySwitch.isEnabled = state.configurationEnabled
         internalDictionaryField.isEnabled = state.configurationEnabled
         keepModelReadyLabel.textColor = state.configurationEnabled
@@ -361,6 +372,25 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
+    @objc private func selectDecodingProfile(
+        _ sender: NSSegmentedControl
+    ) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              state.selectedEngine != .whisperKitCoreML,
+              DecodingProfile.allCases.indices.contains(
+                sender.selectedSegment
+              )
+        else {
+            refresh()
+            return
+        }
+        actions.selectDecodingProfile(
+            DecodingProfile.allCases[sender.selectedSegment]
+        )
+        refresh()
+    }
+
     @objc private func selectRecordingLimit(_ sender: NSPopUpButton) {
         guard stateProvider().configurationEnabled,
               let rawValue = sender.selectedItem?.representedObject as? String,
@@ -461,6 +491,17 @@ public final class AdvancedSettingsWindowController:
             labels: RecognitionEngine.allCases.map(\.displayName),
             action: #selector(selectEngine(_:))
         )
+        configure(
+            decodingControl,
+            labels: DecodingProfile.allCases.map(\.displayName),
+            action: #selector(selectDecodingProfile(_:))
+        )
+        for (index, profile) in DecodingProfile.allCases.enumerated() {
+            decodingControl.setToolTip(
+                profile.description,
+                forSegment: index
+            )
+        }
         keepModelReadySwitch.target = self
         keepModelReadySwitch.action = #selector(toggleKeepModelReady(_:))
         keepModelReadySwitch.toolTip =
@@ -609,9 +650,13 @@ public final class AdvancedSettingsWindowController:
         modeSummary.stringValue = DictationModePresentation.optionTitle(
             for: state.activationMode
         )
+        let decodingSummary = state.selectedEngine == .whisperKitCoreML
+            ? "Native"
+            : state.decodingProfile.displayName
         modelSummary.stringValue =
             "\(DictationModelPresentation.chipTitle(for: state.selectedModel)) "
             + "\(state.selectedEngine.displayName) "
+            + "\(decodingSummary) "
             + (state.keepModelReady ? "Ready" : "On Demand")
         limitSummary.stringValue = state.recordingLimit.displayName
         themeSummary.stringValue = state.selectedTheme.summaryName
@@ -690,6 +735,15 @@ public final class AdvancedSettingsWindowController:
         engineControl.selectedSegment = index
     }
 
+    private func select(decodingProfile: DecodingProfile) {
+        guard let index = DecodingProfile.allCases.firstIndex(
+            of: decodingProfile
+        ) else {
+            return
+        }
+        decodingControl.selectedSegment = index
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         root.wantsLayer = true
@@ -730,6 +784,11 @@ public final class AdvancedSettingsWindowController:
         let recognitionGrid = makeGrid()
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
         addRow(to: recognitionGrid, title: "Engine", control: engineControl)
+        addRow(
+            to: recognitionGrid,
+            title: "Decoding",
+            control: decodingControl
+        )
         addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
@@ -889,6 +948,15 @@ public final class AdvancedSettingsWindowController:
         return RecognitionEngine.allCases[engineControl.selectedSegment]
     }
 
+    var selectedDecodingProfileForTesting: DecodingProfile? {
+        guard DecodingProfile.allCases.indices.contains(
+            decodingControl.selectedSegment
+        ) else {
+            return nil
+        }
+        return DecodingProfile.allCases[decodingControl.selectedSegment]
+    }
+
     var selectedLimitForTesting: RecordingLimit? {
         selectedValue(in: recordingLimitPopup)
     }
@@ -905,6 +973,7 @@ public final class AdvancedSettingsWindowController:
         hotkeyPopup.isEnabled
             && modelControl.isEnabled
             && engineControl.isEnabled
+            && decodingControl.isEnabled
             && keepModelReadySwitch.isEnabled
             && internalDictionaryField.isEnabled
             && recordingLimitPopup.isEnabled
@@ -915,6 +984,10 @@ public final class AdvancedSettingsWindowController:
         modeControl.isEnabled
     }
 
+    var decodingControlEnabledForTesting: Bool {
+        decodingControl.isEnabled
+    }
+
     var usesChipSelectionForTesting: Bool {
         modeControl.segmentStyle == .rounded
             && modeControl.trackingMode == .selectOne
@@ -922,6 +995,8 @@ public final class AdvancedSettingsWindowController:
             && modelControl.trackingMode == .selectOne
             && engineControl.segmentStyle == .rounded
             && engineControl.trackingMode == .selectOne
+            && decodingControl.segmentStyle == .rounded
+            && decodingControl.trackingMode == .selectOne
     }
 
     var controlsFitWindowForTesting: Bool {
@@ -938,6 +1013,7 @@ public final class AdvancedSettingsWindowController:
             ("mode", modeControl),
             ("model", modelControl),
             ("engine", engineControl),
+            ("decoding", decodingControl),
             ("internal dictionary", internalDictionaryField),
             ("readiness switch", keepModelReadySwitch),
             ("readiness label", keepModelReadyLabel),
@@ -978,6 +1054,7 @@ public final class AdvancedSettingsWindowController:
             modeControl.segmentCount,
             modelControl.segmentCount,
             engineControl.segmentCount,
+            decodingControl.segmentCount,
             recordingLimitPopup.numberOfItems,
             themePopup.numberOfItems,
         ]
@@ -1039,6 +1116,11 @@ public final class AdvancedSettingsWindowController:
     func selectModelForTesting(_ model: DictationModel) {
         select(model: model)
         selectModel(modelControl)
+    }
+
+    func selectDecodingProfileForTesting(_ profile: DecodingProfile) {
+        select(decodingProfile: profile)
+        selectDecodingProfile(decodingControl)
     }
 
     func selectEngineForTesting(_ engine: RecognitionEngine) {

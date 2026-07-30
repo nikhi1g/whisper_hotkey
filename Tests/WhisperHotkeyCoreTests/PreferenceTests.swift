@@ -102,6 +102,37 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
+    func testDecodingProfileDefaultsToPrecisionAndPersists() {
+        let suite = "whisper_hotkey-decoding-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(
+            DecodingProfile.selected(defaults: defaults),
+            .precision
+        )
+        XCTAssertEqual(
+            DecodingProfile.allCases,
+            [.precision, .adaptive]
+        )
+        defaults.set(
+            DecodingProfile.adaptive.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.decodingProfile
+        )
+        XCTAssertEqual(
+            DecodingProfile.selected(defaults: defaults),
+            .adaptive
+        )
+        defaults.set(
+            "unknown",
+            forKey: WhisperHotkeyPreferenceKeys.decodingProfile
+        )
+        XCTAssertEqual(
+            DecodingProfile.selected(defaults: defaults),
+            .precision
+        )
+    }
+
     func testRecordingLimitsCoverThirtySecondsThroughOneHour() {
         XCTAssertEqual(RecordingLimit.allCases.first?.seconds, 30)
         XCTAssertEqual(RecordingLimit.allCases.last?.seconds, 3_600)

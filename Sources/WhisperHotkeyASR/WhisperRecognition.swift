@@ -14,17 +14,20 @@ public struct WhisperRuntimeConfiguration: Equatable, Sendable {
     public let commandLineExecutableURL: URL?
     public let modelURL: URL
     public let engine: RecognitionEngine
+    public let decodingProfile: DecodingProfile
 
     public init(
         helperExecutableURL: URL?,
         commandLineExecutableURL: URL?,
         modelURL: URL,
-        engine: RecognitionEngine = .whisperCppMetal
+        engine: RecognitionEngine = .whisperCppMetal,
+        decodingProfile: DecodingProfile = .defaultProfile
     ) {
         self.helperExecutableURL = helperExecutableURL
         self.commandLineExecutableURL = commandLineExecutableURL
         self.modelURL = modelURL
         self.engine = engine
+        self.decodingProfile = decodingProfile
     }
 }
 
@@ -76,6 +79,7 @@ public enum WhisperRuntimeDiscovery {
     public static func discover(
         model: DictationModel = DictationModel.selected(),
         engine: RecognitionEngine = RecognitionEngine.selected(),
+        decodingProfile: DecodingProfile = DecodingProfile.selected(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundle: Bundle = .main,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -158,7 +162,8 @@ public enum WhisperRuntimeDiscovery {
                 atPath: commandLine.path
             ) ? commandLine : nil,
             modelURL: modelURL,
-            engine: engine
+            engine: engine,
+            decodingProfile: decodingProfile
         )
     }
 
@@ -176,6 +181,7 @@ public enum WhisperRuntimeDiscovery {
 enum WhisperDecodingStrategy: String, Equatable, Sendable {
     case beam
     case greedy
+    case adaptive
 }
 
 struct WhisperRecognitionOptions: Equatable, Sendable {
@@ -217,9 +223,9 @@ enum WhisperCommandLineInvocation {
             "-m", modelURL.path,
             "-f", audioURL.path,
             "-t", String(options.threadCount),
-            "-bs", options.strategy == .beam
-                ? String(options.beamSize)
-                : "1",
+            "-bs", options.strategy == .greedy
+                ? "1"
+                : String(options.beamSize),
             "-nt",
             "-np",
             "-sns",
@@ -540,13 +546,17 @@ public actor WhisperRecognizer {
             let newGeneration = UUID()
             generation = newGeneration
             taskGeneration = newGeneration
-            let options = options
+            var configuredOptions = options
+            configuredOptions.strategy =
+                configuration.decodingProfile == .adaptive
+                    ? .adaptive
+                    : .beam
             let processController = processController
             task = Task.detached(priority: .userInitiated) {
                 try await WhisperHelperSession.start(
                     executableURL: helperURL,
                     modelURL: configuration.modelURL,
-                    options: options,
+                    options: configuredOptions,
                     requireCoreML:
                         configuration.engine == .whisperCppCoreML,
                     processController: processController,

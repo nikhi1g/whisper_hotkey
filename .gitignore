@@ -16,3 +16,5 @@ DerivedData/
 .swiftpm/
 __pycache__/
 *.pyc
+Benchmarks/Data/
+Benchmarks/Results/

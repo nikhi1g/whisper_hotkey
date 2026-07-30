@@ -65,6 +65,19 @@ never silently switches engines.
 Files live in `~/.cache/whisper/`. Missing choices remain visible but disabled.
 The normal application never downloads models.
 
+## Decoding
+
+**Precision** is the default. It always uses five-beam whisper.cpp decoding.
+
+**Smart Decode** uses a one-candidate greedy pass and accepts it only when its
+token confidence, no-speech probability, and repetition checks are strong. It
+automatically retries uncertain audio with the same five-beam Precision
+decoder. The setting is available for the whisper.cpp Metal and Core ML
+encoder engines. WhisperKit continues to use its native decoding behavior.
+
+The app stores only the selected profile. Confidence values are used in memory
+for the current inference and are not logged or retained.
+
 ## SHA-256
 
 ```text

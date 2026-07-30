@@ -5,7 +5,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -13,13 +15,18 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
 
 constexpr std::size_t kMaximumCommandBytes = 65'536;
 constexpr std::size_t kMaximumWaveBytes = 64 * 1024 * 1024;
+constexpr float kAdaptiveMinimumAverageLogProbability = -0.55f;
+constexpr float kAdaptiveMaximumWeakTokenFraction = 0.05f;
+constexpr float kAdaptiveMaximumNoSpeechProbability = 0.50f;
 
 struct Options {
     std::string model_path;
@@ -27,6 +34,15 @@ struct Options {
     int beam_size = 5;
     bool require_coreml = false;
     whisper_sampling_strategy strategy = WHISPER_SAMPLING_BEAM_SEARCH;
+    bool adaptive = false;
+};
+
+struct DecodeResult {
+    std::string text;
+    float average_log_probability = -std::numeric_limits<float>::infinity();
+    float weak_token_fraction = 1.0f;
+    float maximum_no_speech_probability = 1.0f;
+    bool has_repetition = false;
 };
 
 std::string json_escape(const std::string & value) {
@@ -59,10 +75,21 @@ void emit_ready() {
     std::cout << "{\"event\":\"ready\"}" << std::endl;
 }
 
-void emit_result(const std::string & text) {
+void emit_result(
+    const DecodeResult & result,
+    bool adaptive_fallback
+) {
     std::cout << "{\"event\":\"result\",\"text\":\""
-              << json_escape(text)
-              << "\"}" << std::endl;
+              << json_escape(result.text)
+              << "\",\"adaptiveFallback\":"
+              << (adaptive_fallback ? "true" : "false")
+              << ",\"averageLogProbability\":"
+              << result.average_log_probability
+              << ",\"weakTokenFraction\":"
+              << result.weak_token_fraction
+              << ",\"maximumNoSpeechProbability\":"
+              << result.maximum_no_speech_probability
+              << "}" << std::endl;
 }
 
 int emit_error(
@@ -112,6 +139,9 @@ bool parse_options(int argc, char ** argv, Options * options) {
                 options->strategy = WHISPER_SAMPLING_BEAM_SEARCH;
             } else if (strategy == "greedy") {
                 options->strategy = WHISPER_SAMPLING_GREEDY;
+            } else if (strategy == "adaptive") {
+                options->strategy = WHISPER_SAMPLING_GREEDY;
+                options->adaptive = true;
             } else {
                 return false;
             }
@@ -461,6 +491,173 @@ void discard_whisper_log(
     void *
 ) {}
 
+std::vector<std::string> normalized_words(const std::string & text) {
+    std::vector<std::string> words;
+    std::string current;
+    for (const unsigned char character : text) {
+        if ((character >= 'a' && character <= 'z')
+            || (character >= '0' && character <= '9')) {
+            current.push_back(static_cast<char>(character));
+        } else if (character >= 'A' && character <= 'Z') {
+            current.push_back(
+                static_cast<char>(character - 'A' + 'a')
+            );
+        } else if (!current.empty()) {
+            words.push_back(std::move(current));
+            current.clear();
+        }
+    }
+    if (!current.empty()) {
+        words.push_back(std::move(current));
+    }
+    return words;
+}
+
+bool has_repeated_ngram(const std::string & text) {
+    constexpr std::size_t ngram_size = 3;
+    const std::vector<std::string> words = normalized_words(text);
+    if (words.size() < ngram_size * 2) {
+        return false;
+    }
+    std::unordered_map<std::string, int> counts;
+    for (std::size_t index = 0;
+         index + ngram_size <= words.size();
+         ++index) {
+        std::string key;
+        for (std::size_t offset = 0; offset < ngram_size; ++offset) {
+            if (!key.empty()) {
+                key.push_back('\n');
+            }
+            key += words[index + offset];
+        }
+        if (++counts[key] >= 3) {
+            return true;
+        }
+    }
+    return false;
+}
+
+DecodeResult collect_result(whisper_context * context) {
+    DecodeResult result;
+    double log_probability_sum = 0;
+    int token_count = 0;
+    int weak_token_count = 0;
+    float maximum_no_speech = 0;
+    const whisper_token end_of_text = whisper_token_eot(context);
+    const int segment_count = whisper_full_n_segments(context);
+    for (int segment = 0; segment < segment_count; ++segment) {
+        const char * text = whisper_full_get_segment_text(
+            context,
+            segment
+        );
+        if (text != nullptr) {
+            result.text += text;
+        }
+        maximum_no_speech = std::max(
+            maximum_no_speech,
+            whisper_full_get_segment_no_speech_prob(context, segment)
+        );
+        const int segment_tokens = whisper_full_n_tokens(
+            context,
+            segment
+        );
+        for (int token = 0; token < segment_tokens; ++token) {
+            const whisper_token_data data = whisper_full_get_token_data(
+                context,
+                segment,
+                token
+            );
+            if (data.id >= end_of_text || !std::isfinite(data.plog)) {
+                continue;
+            }
+            log_probability_sum += data.plog;
+            ++token_count;
+            if (data.p < 0.20f) {
+                ++weak_token_count;
+            }
+        }
+    }
+    if (token_count > 0) {
+        result.average_log_probability = static_cast<float>(
+            log_probability_sum / token_count
+        );
+        result.weak_token_fraction = static_cast<float>(
+            weak_token_count
+        ) / token_count;
+    } else {
+        result.average_log_probability = -100.0f;
+    }
+    result.maximum_no_speech_probability = maximum_no_speech;
+    result.has_repetition = has_repeated_ngram(result.text);
+    return result;
+}
+
+whisper_full_params decoding_params(
+    const Options & options,
+    whisper_sampling_strategy strategy,
+    const std::string & prompt,
+    bool fast_first_pass
+) {
+    whisper_full_params params = whisper_full_default_params(strategy);
+    params.n_threads = options.threads;
+    params.translate = false;
+    params.no_context = true;
+    params.initial_prompt = prompt.empty() ? nullptr : prompt.c_str();
+    params.carry_initial_prompt = false;
+    params.no_timestamps = true;
+    params.print_special = false;
+    params.print_progress = false;
+    params.print_realtime = false;
+    params.print_timestamps = false;
+    params.language = "en";
+    params.detect_language = false;
+    params.suppress_nst = true;
+    params.beam_search.beam_size = options.beam_size;
+    if (fast_first_pass) {
+        params.greedy.best_of = 1;
+        params.temperature_inc = -1.0f;
+    }
+    return params;
+}
+
+bool is_confident(const DecodeResult & result) {
+    return !result.text.empty()
+        && result.average_log_probability
+            >= kAdaptiveMinimumAverageLogProbability
+        && result.weak_token_fraction
+            <= kAdaptiveMaximumWeakTokenFraction
+        && result.maximum_no_speech_probability
+            <= kAdaptiveMaximumNoSpeechProbability
+        && !result.has_repetition;
+}
+
+bool decode(
+    whisper_context * context,
+    const Options & options,
+    const std::string & prompt,
+    const std::vector<float> & samples,
+    whisper_sampling_strategy strategy,
+    bool fast_first_pass,
+    DecodeResult * result
+) {
+    const whisper_full_params params = decoding_params(
+        options,
+        strategy,
+        prompt,
+        fast_first_pass
+    );
+    if (whisper_full(
+        context,
+        params,
+        samples.data(),
+        static_cast<int>(samples.size())
+    ) != 0) {
+        return false;
+    }
+    *result = collect_result(context);
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char ** argv) {
@@ -541,31 +738,17 @@ int main(int argc, char ** argv) {
             continue;
         }
 
-        whisper_full_params params = whisper_full_default_params(
-            options.strategy
-        );
         const std::string prompt = command["prompt"];
-        params.n_threads = options.threads;
-        params.translate = false;
-        params.no_context = true;
-        params.initial_prompt = prompt.empty() ? nullptr : prompt.c_str();
-        params.carry_initial_prompt = false;
-        params.no_timestamps = true;
-        params.print_special = false;
-        params.print_progress = false;
-        params.print_realtime = false;
-        params.print_timestamps = false;
-        params.language = "en";
-        params.detect_language = false;
-        params.suppress_nst = true;
-        params.beam_search.beam_size = options.beam_size;
-
-        if (whisper_full(
+        DecodeResult result;
+        if (!decode(
             context.get(),
-            params,
-            samples.data(),
-            static_cast<int>(samples.size())
-        ) != 0) {
+            options,
+            prompt,
+            samples,
+            options.strategy,
+            options.adaptive,
+            &result
+        )) {
             emit_error(
                 "inference_failed",
                 "local inference failed",
@@ -574,18 +757,27 @@ int main(int argc, char ** argv) {
             continue;
         }
 
-        std::string transcript;
-        const int segment_count = whisper_full_n_segments(context.get());
-        for (int index = 0; index < segment_count; ++index) {
-            const char * text = whisper_full_get_segment_text(
+        bool adaptive_fallback = false;
+        if (options.adaptive && !is_confident(result)) {
+            adaptive_fallback = true;
+            if (!decode(
                 context.get(),
-                index
-            );
-            if (text != nullptr) {
-                transcript += text;
+                options,
+                prompt,
+                samples,
+                WHISPER_SAMPLING_BEAM_SEARCH,
+                false,
+                &result
+            )) {
+                emit_error(
+                    "inference_failed",
+                    "local fallback inference failed",
+                    70
+                );
+                continue;
             }
         }
-        if (transcript.empty()) {
+        if (result.text.empty()) {
             emit_error(
                 "no_speech",
                 "no speech was detected",
@@ -593,7 +785,7 @@ int main(int argc, char ** argv) {
             );
             continue;
         }
-        emit_result(transcript);
+        emit_result(result, adaptive_fallback);
     }
     return 0;
 }

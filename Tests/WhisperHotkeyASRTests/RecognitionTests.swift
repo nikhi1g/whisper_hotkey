@@ -44,6 +44,27 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(commandLineArguments.value(after: "-bs"), "1")
     }
 
+    func testAdaptiveStrategyIsPassedOnlyToTheOwnedHelper() {
+        var options = WhisperRecognitionOptions()
+        options.strategy = .adaptive
+
+        let helperArguments = WhisperHelperInvocation.arguments(
+            modelURL: URL(fileURLWithPath: "/private/model.bin"),
+            options: options
+        )
+        let commandLineArguments = WhisperCommandLineInvocation.arguments(
+            modelURL: URL(fileURLWithPath: "/private/model.bin"),
+            audioURL: URL(fileURLWithPath: "/private/audio.wav"),
+            options: options
+        )
+
+        XCTAssertEqual(
+            helperArguments.value(after: "--strategy"),
+            "adaptive"
+        )
+        XCTAssertEqual(commandLineArguments.value(after: "-bs"), "5")
+    }
+
     func testCommandLineFallbackUsesMetalThenCPUOnlyWhenRequested() {
         let options = WhisperRecognitionOptions()
         let model = URL(fileURLWithPath: "/private/model.bin")

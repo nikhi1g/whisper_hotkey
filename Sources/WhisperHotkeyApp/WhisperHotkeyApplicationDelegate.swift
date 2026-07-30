@@ -15,6 +15,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         activationMode: .hold,
         selectedModel: .baseEnglish,
         selectedEngine: .whisperCppMetal,
+        decodingProfile: .precision,
         keepModelReady: false,
         internalDictionaryEntries: [],
         recordingLimit: .minutes10,
@@ -66,6 +67,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         WhisperHotkeyApplicationDelegate.loadDictationMode()
     private var selectedModel = DictationModel.selected()
     private var selectedEngine = RecognitionEngine.selected()
+    private var decodingProfile = DecodingProfile.selected()
     private var keepModelReady =
         WhisperModelReadinessPreference.keepsModelReady()
     private var internalDictionary = InternalDictionary.selected()
@@ -1152,6 +1154,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
             selectedEngine: selectedEngine,
+            decodingProfile: decodingProfile,
             keepModelReady: keepModelReady,
             internalDictionaryEntries: internalDictionary.entries,
             recordingLimit: recordingLimit,
@@ -1184,6 +1187,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectEngine: { [weak self] engine in
                         self?.selectEngine(engine)
+                    },
+                    selectDecodingProfile: { [weak self] profile in
+                        self?.selectDecodingProfile(profile)
                     },
                     setKeepModelReady: { [weak self] enabled in
                         self?.setKeepModelReady(enabled)
@@ -1300,6 +1306,22 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
         setupWindowController.refresh()
+    }
+
+    private func selectDecodingProfile(_ profile: DecodingProfile) {
+        guard !machine.phase.isBusy,
+              selectedEngine != .whisperKitCoreML,
+              decodingProfile != profile
+        else {
+            return
+        }
+        decodingProfile = profile
+        UserDefaults.standard.set(
+            profile.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.decodingProfile
+        )
+        configureModelReadiness(reloadSelectedModel: true)
+        advancedSettingsWindowController?.refreshIfVisible()
     }
 
     private func setKeepModelReady(_ enabled: Bool) {
