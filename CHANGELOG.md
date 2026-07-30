@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Reduced the red No Speech Detected feedback to 200 milliseconds without
+  changing other error or cancellation durations
+
 ## 3.0.0: 2026-07-30
 
 Parallel Recognition release.

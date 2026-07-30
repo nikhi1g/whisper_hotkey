@@ -199,7 +199,7 @@ distinguishes starting, ready, preparing, listening, transcribing, inserting,
 unavailable, and failed states. Cancellation shows its distinct menu icon for
 500 milliseconds, then returns to Ready without waiting for another dictation.
 There is no live text preview or success confirmation. No Speech Detected clears
-after one second; other errors remain visible for two seconds.
+after 200 milliseconds; other errors remain visible for two seconds.
 
 Insertion always posts one local Command-V to the currently focused application.
 This naturally replaces the current selection in normal text controls. When

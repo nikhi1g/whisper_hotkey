@@ -2,15 +2,15 @@ import XCTest
 @testable import WhisperHotkeyShell
 
 final class BadgePresentationDurationTests: XCTestCase {
-    func testNoSpeechDismissesTwiceAsFastAsStandardErrors() {
+    func testNoSpeechDismissesAfterTwoTenthsOfASecond() {
         XCTAssertEqual(
-            BadgePresentationDuration.noSpeech * 2,
-            BadgePresentationDuration.standardError
+            BadgePresentationDuration.noSpeech,
+            .milliseconds(200)
         )
     }
 
-    func testCancelledMenuStateIsBrief() {
-        XCTAssertLessThan(
+    func testNoSpeechDismissesBeforeCancelledMenuState() {
+        XCTAssertGreaterThan(
             BadgePresentationDuration.cancelledMenuState,
             BadgePresentationDuration.noSpeech
         )
