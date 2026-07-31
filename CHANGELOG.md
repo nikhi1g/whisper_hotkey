@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.5: 2026-07-31
+
+Settings Continuity hotfix.
+
+- Replaced the separate custom-theme sheet with an inline Settings editor that
+  expands and collapses the existing scrollable document
+- Added the runtime HUD's top-center waiting marker to the custom-theme preview
+- Enabled standard Settings window close, minimize, resize, and full-screen
+  controls plus their native keyboard shortcuts
+- Removed the redundant explanatory subtitle from the User Guide header
+
 ## 3.0.3: 2026-07-31
 
 Transcription Continuity patch.

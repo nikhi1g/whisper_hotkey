@@ -216,7 +216,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$(/usr/bin/uname -s)" == "Darwin" ]] || die "macOS is required"
-[[ "$(/usr/bin/uname -m)" == "arm64" ]] || die "v3.0.3 supports Apple Silicon only"
+[[ "$(/usr/bin/uname -m)" == "arm64" ]] || die "v3.0.5 supports Apple Silicon only"
 [[ "$(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d. -f1)" -ge 14 ]] \
     || die "macOS 14 or newer is required"
 /usr/bin/xcode-select -p >/dev/null 2>&1 \
