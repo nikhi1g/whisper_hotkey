@@ -197,10 +197,11 @@ invent a phrase from an empty recording. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord
 cancellation. The badge has no static outline, gradient, or panel shadow; its
 opaque theme background alone separates it from the destination. During
-transcribing, all listening controls and status text disappear while a thin
-activity trail starts at the capsule's top center and traverses its complete
-perimeter clockwise. Seven short segments fade progressively behind the leading
-segment and repeat on one deterministic 0.92-second Core Animation cycle.
+transcribing, the final waveform, elapsed time, and listening controls remain
+frozen in place while the panel ignores input and a thin activity trail starts
+at the capsule's top center and traverses its complete perimeter clockwise.
+Seven short segments fade progressively behind the leading segment and repeat
+on one deterministic 0.92-second Core Animation cycle.
 Leaving the transcribing state removes every animation immediately. This
 presentation uses no polling task, changes no panel geometry, and retains a
 Transcribing accessibility label.

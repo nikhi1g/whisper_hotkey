@@ -395,6 +395,10 @@ public final class CaretBadgeController {
         badgeView.transcribingIndicatorSnapshotForTesting
     }
 
+    var listeningContentIsVisibleForTesting: Bool {
+        badgeView.listeningContentIsVisibleForTesting
+    }
+
     var badgeAccessibilityLabelForTesting: String? {
         badgeView.accessibilityLabel()
     }
@@ -742,13 +746,17 @@ private final class BadgeView: NSView {
     }
 
     private func updatePresentation() {
+        let showsListeningContent =
+            presentation == .listening || presentation == .transcribing
         statusLabel.isHidden =
             presentation == .listening || presentation == .transcribing
-        waveformView.isHidden = presentation != .listening
-        timeLabel.isHidden = presentation != .listening
-        stopButton.isHidden = presentation != .listening
-        sendButton.isHidden = presentation != .listening
-        limitTrackLayer.isHidden = presentation != .listening
+        waveformView.isHidden = !showsListeningContent
+        timeLabel.isHidden = !showsListeningContent
+        stopButton.isHidden = !showsListeningContent
+        sendButton.isHidden = !showsListeningContent
+        if !showsListeningContent {
+            limitTrackLayer.isHidden = true
+        }
         if presentation == .transcribing {
             transcribingIndicatorLayer.startAnimating()
         } else {
@@ -864,6 +872,13 @@ private final class BadgeView: NSView {
         CapsuleActivityIndicatorSnapshot
     {
         transcribingIndicatorLayer.snapshot
+    }
+
+    var listeningContentIsVisibleForTesting: Bool {
+        !waveformView.isHidden
+            && !timeLabel.isHidden
+            && !stopButton.isHidden
+            && !sendButton.isHidden
     }
 }
 

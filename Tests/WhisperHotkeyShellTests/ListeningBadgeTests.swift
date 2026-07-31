@@ -189,6 +189,7 @@ final class ListeningBadgeTests: XCTestCase {
             caretFrame: CGRect(x: 200, y: 200, width: 1, height: 18),
             screenFrame: screen
         )
+        controller.updateListening(elapsed: 2, limit: 600, level: 0.8)
         let listeningFrame = controller.panelFrameForTesting
         XCTAssertFalse(
             controller.transcribingIndicatorSnapshotForTesting.isVisible
@@ -199,6 +200,8 @@ final class ListeningBadgeTests: XCTestCase {
 
         XCTAssertEqual(controller.panelFrameForTesting, listeningFrame)
         XCTAssertEqual(controller.statusTextForTesting, "")
+        XCTAssertEqual(controller.listeningTextForTesting, "0:02")
+        XCTAssertTrue(controller.listeningContentIsVisibleForTesting)
         XCTAssertEqual(
             controller.badgeAccessibilityLabelForTesting,
             "Transcribing"
