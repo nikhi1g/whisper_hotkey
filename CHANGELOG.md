@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.3: 2026-07-31
+
+Transcription Continuity patch.
+
+- Kept the final waveform, elapsed time, and listening controls visible while
+  local transcription runs
+- Layered the existing perimeter activity trail over the frozen listening HUD
+  without changing its geometry or restoring input handling
+- Added a small top-center waiting marker at the activity trail's exact origin
+- Removed the blank transcribing capsule between recording and insertion
+
 ## 3.0.2: 2026-07-30
 
 Theme Studio release.
