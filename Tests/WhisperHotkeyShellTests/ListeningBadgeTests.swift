@@ -194,6 +194,16 @@ final class ListeningBadgeTests: XCTestCase {
         XCTAssertFalse(
             controller.transcribingIndicatorSnapshotForTesting.isVisible
         )
+        let waitingOrigin = controller.activityOriginSnapshotForTesting
+        XCTAssertTrue(waitingOrigin.isVisible)
+        XCTAssertEqual(waitingOrigin.frame.size.width, ActivityOriginStyle.size)
+        XCTAssertEqual(waitingOrigin.frame.size.height, ActivityOriginStyle.size)
+        XCTAssertEqual(
+            CGPoint(x: waitingOrigin.frame.midX, y: waitingOrigin.frame.midY),
+            CapsuleActivityIndicatorStyle.geometry(
+                in: CGRect(origin: .zero, size: RuntimeBadgeLayout.size)
+            ).startPoint
+        )
 
         controller.present(.transcribing, screenFrame: screen)
         let snapshot = controller.transcribingIndicatorSnapshotForTesting
@@ -207,6 +217,9 @@ final class ListeningBadgeTests: XCTestCase {
             "Transcribing"
         )
         XCTAssertTrue(snapshot.isVisible)
+        XCTAssertFalse(
+            controller.activityOriginSnapshotForTesting.isVisible
+        )
         XCTAssertEqual(
             snapshot.segmentCount,
             CapsuleActivityIndicatorStyle.segmentCount

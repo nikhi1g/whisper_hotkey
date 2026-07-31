@@ -399,6 +399,10 @@ public final class CaretBadgeController {
         badgeView.listeningContentIsVisibleForTesting
     }
 
+    var activityOriginSnapshotForTesting: ActivityOriginSnapshot {
+        badgeView.activityOriginSnapshotForTesting
+    }
+
     var badgeAccessibilityLabelForTesting: String? {
         badgeView.accessibilityLabel()
     }
@@ -494,6 +498,7 @@ private final class BadgeView: NSView {
     private let sendButton = BadgeActionButton()
     private let limitTrackLayer = CALayer()
     private let limitProgressLayer = CALayer()
+    private let activityOriginLayer = CALayer()
     private let transcribingIndicatorLayer =
         CapsuleActivityIndicatorLayer()
     private var listeningProgress: CGFloat = 0
@@ -532,6 +537,10 @@ private final class BadgeView: NSView {
         limitProgressLayer.backgroundColor = waveformColor.cgColor
         limitProgressLayer.cornerRadius = 0.75
         limitTrackLayer.addSublayer(limitProgressLayer)
+
+        activityOriginLayer.backgroundColor = palette.waveform.cgColor
+        activityOriginLayer.isHidden = true
+        layer?.addSublayer(activityOriginLayer)
 
         transcribingIndicatorLayer.color = palette.waveform
         layer?.addSublayer(transcribingIndicatorLayer)
@@ -593,6 +602,7 @@ private final class BadgeView: NSView {
         waveformView.color = palette.waveform
         limitTrackLayer.backgroundColor = palette.limitTrack.cgColor
         limitProgressLayer.backgroundColor = palette.waveform.cgColor
+        activityOriginLayer.backgroundColor = palette.waveform.cgColor
         transcribingIndicatorLayer.color = palette.waveform
         applyActionButtonStyle(
             stopButton,
@@ -689,6 +699,15 @@ private final class BadgeView: NSView {
                 * listeningProgress,
             height: listeningLayout.limitTrackFrame.height
         )
+        let activityOrigin = CapsuleActivityIndicatorStyle.geometry(
+            in: bounds
+        ).startPoint
+        activityOriginLayer.frame = CGRect(
+            x: activityOrigin.x - ActivityOriginStyle.size / 2,
+            y: activityOrigin.y - ActivityOriginStyle.size / 2,
+            width: ActivityOriginStyle.size,
+            height: ActivityOriginStyle.size
+        )
         transcribingIndicatorLayer.frame = bounds
         transcribingIndicatorLayer.updatePath()
     }
@@ -757,6 +776,7 @@ private final class BadgeView: NSView {
         if !showsListeningContent {
             limitTrackLayer.isHidden = true
         }
+        activityOriginLayer.isHidden = presentation != .listening
         if presentation == .transcribing {
             transcribingIndicatorLayer.startAnimating()
         } else {
@@ -880,6 +900,22 @@ private final class BadgeView: NSView {
             && !stopButton.isHidden
             && !sendButton.isHidden
     }
+
+    var activityOriginSnapshotForTesting: ActivityOriginSnapshot {
+        ActivityOriginSnapshot(
+            isVisible: !activityOriginLayer.isHidden,
+            frame: activityOriginLayer.frame
+        )
+    }
+}
+
+struct ActivityOriginSnapshot: Equatable {
+    let isVisible: Bool
+    let frame: CGRect
+}
+
+enum ActivityOriginStyle {
+    static let size: CGFloat = 3
 }
 
 enum BadgeMessageStyle {
