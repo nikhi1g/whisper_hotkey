@@ -2,11 +2,11 @@ import XCTest
 @testable import WhisperHotkeyShell
 import WhisperHotkeyCore
 
-final class CustomThemeEditorWindowControllerTests: XCTestCase {
+final class CustomThemeEditorViewControllerTests: XCTestCase {
     @MainActor
     func testValidHexUpdatesLivePreviewAndSavesNamedPreset() {
         var saved: CustomBadgeTheme?
-        let controller = CustomThemeEditorWindowController(theme: nil) {
+        let controller = CustomThemeEditorViewController(theme: nil) {
             saved = $0
         }
 
@@ -28,6 +28,7 @@ final class CustomThemeEditorWindowControllerTests: XCTestCase {
             controller.previewThemeForTesting?.accentHex,
             "#AAFF00"
         )
+        XCTAssertTrue(controller.previewShowsActivityOriginForTesting)
 
         controller.saveForTesting()
         XCTAssertEqual(saved, controller.previewThemeForTesting)
@@ -35,7 +36,7 @@ final class CustomThemeEditorWindowControllerTests: XCTestCase {
 
     @MainActor
     func testInvalidHexDisablesSavingAndKeepsLastValidPreview() {
-        let controller = CustomThemeEditorWindowController(theme: nil) { _ in }
+        let controller = CustomThemeEditorViewController(theme: nil) { _ in }
         let original = controller.previewThemeForTesting
 
         controller.setValuesForTesting(

@@ -127,6 +127,26 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.window?.title,
             "Settings for whisper_hotkey"
         )
+        XCTAssertTrue(controller.supportsStandardWindowCommandsForTesting)
+        XCTAssertTrue(controller.usesScrollableSettingsContentForTesting)
+    }
+
+    @MainActor
+    func testCustomThemeEditorExpandsInlineWithoutOpeningASheet() {
+        let box = AdvancedSettingsStateBox(makeAdvancedSettingsState())
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+
+        controller.openNewThemeEditorForTesting()
+
+        XCTAssertTrue(controller.customThemeEditorIsInlineForTesting)
+        XCTAssertTrue(controller.customThemeEditorExpandedWindowForTesting)
+        XCTAssertNil(controller.window?.attachedSheet)
+
+        controller.closeCustomThemeEditorForTesting()
+        XCTAssertFalse(controller.customThemeEditorIsInlineForTesting)
     }
 
     @MainActor

@@ -22,10 +22,15 @@ configuration value, and includes the actions available during that workflow.
 Its second and final table contains only unselected keys, behaviors, models,
 engines, decoding and processing choices, limits, themes, and startup behavior.
 The tables rebuild from current state whenever the guide opens and add no idle
-task.
+task. The guide header contains only its title, without explanatory subtitle
+copy.
 Settings and its User Guide use the selected visual theme on an opaque
 background. Theme changes update the HUD, Settings, and an open guide
 immediately without adding an idle task.
+Settings behaves as a standard resizable macOS window: Command-W closes,
+Command-M minimizes, and Control-Command-F or the green title-bar control
+toggles full screen. Its document scrolls vertically when its content exceeds
+the available window height.
 
 The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
@@ -139,13 +144,17 @@ and Monokai. The light group contains Light Frost, GitHub Light, Solarized
 Light, Nord Snow, Rosé Pine Dawn, Paper, Mint, Sky, Lavender, and High Contrast
 Light. Existing saved identifiers remain valid. Theme application is
 event-driven and adds no idle work.
-The Theme row also opens a native custom-theme editor. A named preset chooses
-Dark or Light classification plus Background, Text, and Accent colors through
-standard macOS color wells or synchronized six-digit hex fields. A miniature
-listening capsule updates immediately inside the editor. Saving validates and
-normalizes the values, derives all secondary HUD colors, persists up to 32
-named presets locally, selects the saved preset, and applies it to the HUD,
-Settings, and User Guide. Custom themes appear under a separate Custom heading.
+The Theme row expands a native custom-theme editor inline within the scrollable
+Settings document; it never opens a sheet or second window. Existing sections
+shift down and the Settings window grows within the visible screen when room is
+available, then returns to its prior size after Save or Cancel. A named preset
+chooses Dark or Light classification plus Background, Text, and Accent colors
+through standard macOS color wells or synchronized six-digit hex fields. A
+miniature listening capsule updates immediately inside the editor and includes
+the runtime HUD's top-center waiting marker. Saving validates and normalizes the
+values, derives all secondary HUD colors, persists up to 32 named presets,
+selects the saved preset, and applies it to the HUD, Settings, and User Guide.
+Custom themes appear under a separate Custom heading.
 Editing and theme loading happen only through Settings and add no idle worker,
 file watcher, or network request.
 

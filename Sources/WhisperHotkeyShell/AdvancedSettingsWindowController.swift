@@ -164,7 +164,11 @@ public final class AdvancedSettingsWindowController:
         }
     )
     private weak var settingsRootView: NSView?
-    private var customThemeEditor: CustomThemeEditorWindowController?
+    private weak var settingsStack: NSStackView?
+    private weak var settingsScrollView: NSScrollView?
+    private weak var appearanceGrid: NSGridView?
+    private var customThemeEditor: CustomThemeEditorViewController?
+    private var collapsedSettingsFrame: CGRect?
     private var themedPrimaryLabels: [NSTextField] = []
     private var themedSecondaryLabels: [NSTextField] = []
     private var themedSectionLabels: [NSTextField] = []
@@ -183,9 +187,9 @@ public final class AdvancedSettingsWindowController:
         configureLoginItemControls()
         configureHelpButton()
 
-        let window = NSWindow(
+        let window = SettingsWindow(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 700),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -193,6 +197,8 @@ public final class AdvancedSettingsWindowController:
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.animationBehavior = .utilityWindow
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.minSize = NSSize(width: 620, height: 520)
         window.center()
         window.delegate = self
         window.contentView = makeContentView()
@@ -306,6 +312,7 @@ public final class AdvancedSettingsWindowController:
     public func windowWillClose(_ notification: Notification) {
         window?.makeFirstResponder(nil)
         commitInternalDictionary()
+        hideCustomThemeEditor()
         userGuidePopover.close()
         NSApp.deactivate()
     }
@@ -469,25 +476,85 @@ public final class AdvancedSettingsWindowController:
 
     private func showCustomThemeEditor(theme: CustomBadgeTheme?) {
         guard stateProvider().configurationEnabled,
-              let parentWindow = window
+              let stack = settingsStack,
+              customThemeEditor == nil
         else {
             return
         }
-        let editor = CustomThemeEditorWindowController(theme: theme) {
-            [weak self] savedTheme in
-            guard let self else {
-                return
+        let editor = CustomThemeEditorViewController(
+            theme: theme,
+            onSave: { [weak self] savedTheme in
+                guard let self else {
+                    return
+                }
+                actions.saveCustomTheme(savedTheme)
+                hideCustomThemeEditor()
+                refresh()
+            },
+            onCancel: { [weak self] in
+                self?.hideCustomThemeEditor()
             }
-            actions.saveCustomTheme(savedTheme)
-            customThemeEditor = nil
-            refresh()
-        }
+        )
         customThemeEditor = editor
-        guard let editorWindow = editor.window else {
-            customThemeEditor = nil
+        let editorView = editor.view
+        editorView.translatesAutoresizingMaskIntoConstraints = false
+        let insertionIndex = (appearanceGrid.flatMap {
+            stack.arrangedSubviews.firstIndex(of: $0)
+        } ?? stack.arrangedSubviews.count - 1) + 1
+        stack.insertArrangedSubview(editorView, at: insertionIndex)
+        editorView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        editorView.heightAnchor.constraint(equalToConstant: 430).isActive = true
+        stack.setCustomSpacing(20, after: editorView)
+        expandSettingsWindowForEditor()
+        stack.layoutSubtreeIfNeeded()
+        settingsScrollView?.contentView.scrollToVisible(editorView.frame)
+    }
+
+    private func hideCustomThemeEditor() {
+        guard let editor = customThemeEditor else {
             return
         }
-        parentWindow.beginSheet(editorWindow)
+        editor.view.removeFromSuperview()
+        customThemeEditor = nil
+        restoreCollapsedSettingsFrame()
+    }
+
+    private func expandSettingsWindowForEditor() {
+        guard let window,
+              !window.styleMask.contains(.fullScreen),
+              collapsedSettingsFrame == nil
+        else {
+            return
+        }
+        let original = window.frame
+        collapsedSettingsFrame = original
+        let availableHeight = window.screen?.visibleFrame.height ?? original.height
+        let targetHeight = max(
+            original.height,
+            min(original.height + 430, availableHeight - 40)
+        )
+        let target = CGRect(
+            x: original.minX,
+            y: original.maxY - targetHeight,
+            width: original.width,
+            height: targetHeight
+        )
+        window.setFrame(target, display: true, animate: window.isVisible)
+    }
+
+    private func restoreCollapsedSettingsFrame() {
+        guard let window, let collapsedSettingsFrame else {
+            return
+        }
+        self.collapsedSettingsFrame = nil
+        guard !window.styleMask.contains(.fullScreen) else {
+            return
+        }
+        window.setFrame(
+            collapsedSettingsFrame,
+            display: true,
+            animate: window.isVisible
+        )
     }
 
     private func themeSelection(
@@ -877,12 +944,25 @@ public final class AdvancedSettingsWindowController:
         let root = NSView()
         root.wantsLayer = true
         settingsRootView = root
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(scrollView)
+        settingsScrollView = scrollView
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(stack)
+        documentView.addSubview(stack)
+        settingsStack = stack
 
         let title = NSTextField(labelWithString: "Settings")
         title.font = .systemFont(ofSize: 22, weight: .semibold)
@@ -943,6 +1023,7 @@ public final class AdvancedSettingsWindowController:
         let appearanceTitle = makeSectionTitle("APPEARANCE")
         stack.addArrangedSubview(appearanceTitle)
         let appearanceGrid = makeGrid()
+        self.appearanceGrid = appearanceGrid
         let themeControls = NSStackView(
             views: [themePopup, newThemeButton, editThemeButton]
         )
@@ -1015,13 +1096,15 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(footer)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 32),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -32),
-            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 26),
-            stack.bottomAnchor.constraint(
-                lessThanOrEqualTo: root.bottomAnchor,
-                constant: -24
-            ),
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -32),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 26),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -24),
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -1116,6 +1199,43 @@ public final class AdvancedSettingsWindowController:
             identifier: identifier,
             state: stateProvider()
         )
+    }
+
+    var supportsStandardWindowCommandsForTesting: Bool {
+        guard let window else {
+            return false
+        }
+        return window.styleMask.contains(.closable)
+            && window.styleMask.contains(.miniaturizable)
+            && window.styleMask.contains(.resizable)
+            && window.collectionBehavior.contains(.fullScreenPrimary)
+    }
+
+    var usesScrollableSettingsContentForTesting: Bool {
+        settingsScrollView?.hasVerticalScroller == true
+    }
+
+    func openNewThemeEditorForTesting() {
+        createCustomTheme()
+    }
+
+    var customThemeEditorIsInlineForTesting: Bool {
+        guard let editor = customThemeEditor else {
+            return false
+        }
+        return editor.view.superview === settingsStack
+            && window?.attachedSheet == nil
+    }
+
+    var customThemeEditorExpandedWindowForTesting: Bool {
+        guard let collapsedSettingsFrame, let currentFrame = window?.frame else {
+            return false
+        }
+        return currentFrame.height >= collapsedSettingsFrame.height
+    }
+
+    func closeCustomThemeEditorForTesting() {
+        hideCustomThemeEditor()
     }
 
     var selectableThemeCountForTesting: Int {
@@ -1392,6 +1512,27 @@ public final class AdvancedSettingsWindowController:
             return nil
         }
         return Value(rawValue: rawValue)
+    }
+}
+
+private final class SettingsWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(
+            .deviceIndependentFlagsMask
+        )
+        switch (event.charactersIgnoringModifiers?.lowercased(), flags) {
+        case ("w", [.command]):
+            performClose(nil)
+            return true
+        case ("m", [.command]):
+            miniaturize(nil)
+            return true
+        case ("f", [.command, .control]):
+            toggleFullScreen(nil)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
     }
 }
 

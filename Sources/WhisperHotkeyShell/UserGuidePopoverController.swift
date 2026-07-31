@@ -400,7 +400,6 @@ final class UserGuideViewController: NSViewController {
     private var theme: BadgeThemeSelection
     private var textView: NSTextView!
     private var titleLabel: NSTextField!
-    private var subtitleLabel: NSTextField!
 
     init(
         sections: [UserGuideSection],
@@ -429,12 +428,6 @@ final class UserGuideViewController: NSViewController {
         titleLabel = title
         header.addArrangedSubview(title)
 
-        let subtitle = NSTextField(
-            labelWithString: "Your active workflow first, then every alternative."
-        )
-        subtitle.textColor = .secondaryLabelColor
-        subtitleLabel = subtitle
-        header.addArrangedSubview(subtitle)
         root.addSubview(header)
 
         let scrollView = NSTextView.scrollableTextView()
@@ -558,7 +551,6 @@ final class UserGuideViewController: NSViewController {
         let background = palette.background.withAlphaComponent(1)
         view.layer?.backgroundColor = background.cgColor
         titleLabel.textColor = palette.primaryText
-        subtitleLabel.textColor = palette.primaryText.withAlphaComponent(0.72)
         textView.backgroundColor = background
         textView.textStorage?.setAttributedString(makeGuideText())
     }

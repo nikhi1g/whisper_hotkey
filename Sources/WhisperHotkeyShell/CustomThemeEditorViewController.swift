@@ -2,14 +2,15 @@ import AppKit
 import WhisperHotkeyCore
 
 @MainActor
-final class CustomThemeEditorWindowController:
-    NSWindowController,
+final class CustomThemeEditorViewController:
+    NSViewController,
     NSTextFieldDelegate
 {
     typealias SaveHandler = (CustomBadgeTheme) -> Void
 
     private let themeID: UUID
     private let onSave: SaveHandler
+    private let onCancel: () -> Void
     private let nameField = NSTextField()
     private let modeControl = NSSegmentedControl(
         labels: ["Dark", "Light"],
@@ -30,7 +31,11 @@ final class CustomThemeEditorWindowController:
         action: nil
     )
 
-    init(theme: CustomBadgeTheme?, onSave: @escaping SaveHandler) {
+    init(
+        theme: CustomBadgeTheme?,
+        onSave: @escaping SaveHandler,
+        onCancel: @escaping () -> Void = {}
+    ) {
         let initial = theme ?? CustomBadgeTheme(
             name: "My Theme",
             mode: .dark,
@@ -40,18 +45,8 @@ final class CustomThemeEditorWindowController:
         )!
         themeID = initial.id
         self.onSave = onSave
-        super.init(window: nil)
-
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 430),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = theme == nil ? "New Theme" : "Edit Theme"
-        window.isReleasedWhenClosed = false
-        window.contentView = makeContentView()
-        self.window = window
+        self.onCancel = onCancel
+        super.init(nibName: nil, bundle: nil)
 
         nameField.stringValue = initial.name
         modeControl.selectedSegment = initial.mode == .dark ? 0 : 1
@@ -65,6 +60,10 @@ final class CustomThemeEditorWindowController:
         nil
     }
 
+    override func loadView() {
+        view = makeContentView()
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         let stack = NSStackView()
@@ -74,8 +73,9 @@ final class CustomThemeEditorWindowController:
         stack.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(stack)
 
-        let title = NSTextField(labelWithString: "Custom Theme")
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
+        let title = NSTextField(labelWithString: "CUSTOM THEME")
+        title.font = .systemFont(ofSize: 11, weight: .semibold)
+        title.textColor = .tertiaryLabelColor
         stack.addArrangedSubview(title)
 
         let subtitle = NSTextField(
@@ -154,13 +154,10 @@ final class CustomThemeEditorWindowController:
         )
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 28),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -28),
-            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(
-                lessThanOrEqualTo: root.bottomAnchor,
-                constant: -22
-            ),
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             form.widthAnchor.constraint(equalTo: stack.widthAnchor),
             preview.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -295,22 +292,10 @@ final class CustomThemeEditorWindowController:
             return
         }
         onSave(draft)
-        closeSheet()
     }
 
     @objc private func cancelEditing() {
-        closeSheet()
-    }
-
-    private func closeSheet() {
-        guard let window else {
-            return
-        }
-        if let parent = window.sheetParent {
-            parent.endSheet(window)
-        } else {
-            window.close()
-        }
+        onCancel()
     }
 
     private static func color(_ hex: String) -> NSColor {
@@ -345,10 +330,9 @@ final class CustomThemeEditorWindowController:
     }
 
     var controlsFitWindowForTesting: Bool {
-        guard let contentView = window?.contentView else {
-            return false
-        }
-        contentView.layoutSubtreeIfNeeded()
+        loadViewIfNeeded()
+        view.frame = CGRect(x: 0, y: 0, width: 556, height: 430)
+        view.layoutSubtreeIfNeeded()
         return [
             nameField,
             modeControl,
@@ -361,10 +345,10 @@ final class CustomThemeEditorWindowController:
             preview,
             saveButton,
         ].allSatisfy { view in
-            let frame = view.convert(view.bounds, to: contentView)
+            let frame = view.convert(view.bounds, to: self.view)
             return frame.width > 0
                 && frame.height > 0
-                && contentView.bounds.contains(frame)
+                && self.view.bounds.contains(frame)
         }
     }
 
@@ -386,11 +370,16 @@ final class CustomThemeEditorWindowController:
     func saveForTesting() {
         saveTheme()
     }
+
+    var previewShowsActivityOriginForTesting: Bool {
+        preview.showsActivityOriginForTesting
+    }
 }
 
 @MainActor
 private final class CustomThemePreviewView: NSView {
     private(set) var themeForTesting: CustomBadgeTheme?
+    private(set) var showsActivityOriginForTesting = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -403,6 +392,7 @@ private final class CustomThemePreviewView: NSView {
 
     func apply(theme: CustomBadgeTheme) {
         themeForTesting = theme
+        showsActivityOriginForTesting = true
         needsDisplay = true
     }
 
@@ -417,6 +407,18 @@ private final class CustomThemePreviewView: NSView {
             roundedRect: capsule,
             xRadius: capsule.height / 2,
             yRadius: capsule.height / 2
+        ).fill()
+
+        let originSize = ActivityOriginStyle.size
+        palette.waveform.setFill()
+        NSBezierPath(
+            rect: NSRect(
+                x: capsule.midX - originSize / 2,
+                y: capsule.maxY - CapsuleActivityIndicatorStyle.inset
+                    - originSize / 2,
+                width: originSize,
+                height: originSize
+            )
         ).fill()
 
         palette.waveform.setFill()
