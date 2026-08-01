@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.7: 2026-07-31
+
+Instant Start patch.
+
+- Ordered and synchronously displayed the listening HUD before potentially
+  blocking microphone hardware initialization
+- Removed the consistent visible dead period at accepted dictation startup
+- Preserved idle microphone shutdown and ordinary modifier-chord behavior
+
 ## 3.0.6: 2026-07-31
 
 Completion Tail hotfix.
