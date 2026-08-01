@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.6: 2026-07-31
+
+Completion Tail hotfix.
+
+- Added a bounded 240-millisecond capture post-roll when confirmed speech
+  reaches Send or Enter with less than 180 milliseconds of trailing silence
+- Kept silent and already-paused completion gestures immediate
+- Preserved the original completion-time insertion target throughout post-roll
+- Cancelled pending post-roll work on cancellation, replacement, and shutdown
+
 ## 3.0.5: 2026-07-31
 
 Settings Continuity hotfix.
