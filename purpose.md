@@ -48,9 +48,12 @@ choices appear as one-click segmented chips, avoiding an extra menu interaction.
 Toggle changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
-and remains between 300 and 750 milliseconds. One uninterrupted private WAV
-retains the complete session while the same converted samples feed a small
-current inference segment. A phrase boundary rotates only that segment: the
+and remains between 300 and 750 milliseconds. An accepted start orders and
+synchronously displays the listening badge before
+potentially blocking microphone hardware initialization, so visible feedback is
+immediate without keeping an audio worker active at idle. One uninterrupted
+private WAV retains the complete session while the same converted samples feed
+a small current inference segment. A phrase boundary rotates only that segment: the
 microphone and full recording remain uninterrupted while phrases are transcribed
 and pasted in strict order. It reuses one loaded helper during the active
 session. Every later phrase

@@ -7,7 +7,7 @@ final class StateMachineTests: XCTestCase {
 
         XCTAssertEqual(
             machine.handle(.hotkeyPressed(at: 10)),
-            [.beginSession, .showBadge(.listening)]
+            [.showBadge(.listening), .beginSession]
         )
         XCTAssertEqual(machine.phase, .preparing)
         XCTAssertEqual(machine.handle(.captureStarted), [])

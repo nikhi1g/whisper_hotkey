@@ -160,6 +160,7 @@ public final class CaretBadgeController {
 
         placePanel(size: size, display: true)
         panel.orderFrontRegardless()
+        panel.displayIfNeeded()
         lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
     }
 

@@ -45,7 +45,7 @@ public struct DictationStateMachine: Equatable, Sendable {
             pressedAt = timestamp
             lastError = nil
             phase = .preparing
-            return [.beginSession, .showBadge(.listening)]
+            return [.showBadge(.listening), .beginSession]
 
         case .captureStarted:
             guard phase == .preparing else { return [] }
