@@ -7,6 +7,24 @@ public enum WhisperSpeechPresence: Equatable, Sendable {
     case present
 }
 
+public enum CompletionCaptureGracePolicy {
+    public static let recentSpeechWindow: TimeInterval = 0.18
+    public static let graceDuration: TimeInterval = 0.24
+
+    public static func delay(
+        speechPresence: WhisperSpeechPresence,
+        trailingSilence: TimeInterval
+    ) -> TimeInterval? {
+        guard speechPresence == .present,
+              trailingSilence >= 0,
+              trailingSilence < recentSpeechWindow
+        else {
+            return nil
+        }
+        return graceDuration
+    }
+}
+
 public final class WhisperAudioFile: @unchecked Sendable {
     public let url: URL
 
@@ -99,6 +117,15 @@ public final class WhisperAudioRecorder {
 
     public var currentSegmentSpeechPresence: WhisperSpeechPresence {
         writer?.segmentSpeechPresence ?? .unknown
+    }
+
+    /// A bounded post-roll used only when confirmed speech reaches the
+    /// completion gesture. Silence and already-paused speech stop immediately.
+    public var completionCaptureGrace: TimeInterval? {
+        CompletionCaptureGracePolicy.delay(
+            speechPresence: currentSegmentSpeechPresence,
+            trailingSilence: trailingSilenceDuration
+        )
     }
 
     /// The current cadence-aware pause boundary. It is learned only from the

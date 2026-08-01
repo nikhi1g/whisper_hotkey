@@ -4,6 +4,42 @@ import XCTest
 @testable import WhisperHotkeyASR
 
 final class AudioCaptureTests: XCTestCase {
+    func testCompletionGraceAppliesOnlyToConfirmedRecentSpeech() {
+        XCTAssertEqual(
+            CompletionCaptureGracePolicy.delay(
+                speechPresence: .present,
+                trailingSilence: 0
+            ),
+            CompletionCaptureGracePolicy.graceDuration
+        )
+        XCTAssertEqual(
+            CompletionCaptureGracePolicy.delay(
+                speechPresence: .present,
+                trailingSilence:
+                    CompletionCaptureGracePolicy.recentSpeechWindow - 0.001
+            ),
+            CompletionCaptureGracePolicy.graceDuration
+        )
+        XCTAssertNil(
+            CompletionCaptureGracePolicy.delay(
+                speechPresence: .present,
+                trailingSilence:
+                    CompletionCaptureGracePolicy.recentSpeechWindow
+            )
+        )
+        XCTAssertNil(
+            CompletionCaptureGracePolicy.delay(
+                speechPresence: .absent,
+                trailingSilence: 0
+            )
+        )
+        XCTAssertNil(
+            CompletionCaptureGracePolicy.delay(
+                speechPresence: .unknown,
+                trailingSilence: 0
+            )
+        )
+    }
     func testWriterConvertsToPrivate16KHzMonoPCM16WAV() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(

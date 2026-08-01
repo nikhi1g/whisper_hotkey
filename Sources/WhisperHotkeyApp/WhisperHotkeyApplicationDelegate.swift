@@ -154,6 +154,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var cancellationPresentationTask: Task<Void, Never>?
     private var errorPresentationTask: Task<Void, Never>?
     private var submitAfterPasteTask: Task<Void, Never>?
+    private var completionCaptureGraceTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
     private var modelConfigurationTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
@@ -539,6 +540,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         maximumDurationTask?.cancel()
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
+        completionCaptureGraceTask?.cancel()
+        completionCaptureGraceTask = nil
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
@@ -1053,6 +1056,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         maximumDurationTask = nil
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
+        completionCaptureGraceTask?.cancel()
+        completionCaptureGraceTask = nil
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
@@ -1247,13 +1252,35 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     ) {
         guard runtimeReadyForHotkey,
               !isTerminating,
+              completionCaptureGraceTask == nil,
               machine.phase == .preparing || machine.phase == .listening
         else {
             return
         }
         completionBehavior = behavior
         captureInsertionContext(suppliedContext)
-        process(.maximumDurationReached)
+        guard let grace = recorder.completionCaptureGrace else {
+            process(.maximumDurationReached)
+            return
+        }
+        let generation = sessionGeneration
+        completionCaptureGraceTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(grace))
+            } catch {
+                return
+            }
+            guard let self,
+                  generation == sessionGeneration,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  machine.phase == .preparing || machine.phase == .listening
+            else {
+                return
+            }
+            completionCaptureGraceTask = nil
+            process(.maximumDurationReached)
+        }
     }
 
     private func scheduleSubmitAfterPaste() {
@@ -1671,6 +1698,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         errorPresentationTask = nil
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
+        completionCaptureGraceTask?.cancel()
+        completionCaptureGraceTask = nil
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false

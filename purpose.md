@@ -69,8 +69,13 @@ unambiguous abort action: during active dictation it stops capture, cancels
 queued or active recognition, deletes the private audio, and inserts nothing.
 It cannot be selected as the dictation trigger; a legacy stored Escape choice
 migrates to Right Command. Return and keypad Enter act exactly like Send: they
-finalize, insert, and then post one unmodified Return. These keys are consumed
-only for an active dictation; ordinary Escape and Return remain untouched.
+capture the release-time destination immediately, then finalize, insert, and
+post one unmodified Return. When confirmed speech reaches the completion
+gesture with less than 180 milliseconds of trailing silence, capture remains
+open for one bounded 240-millisecond post-roll before finalization. Silence,
+unknown speech state, and an already-paused speaker finalize immediately. These
+keys are consumed only for an active dictation; ordinary Escape and Return
+remain untouched.
 Cancellation and audio discard are also available from the menu.
 Settings and Setup controls are disabled during active dictation so
 they cannot steal the destination focus. The **Recording limit** picker persists
