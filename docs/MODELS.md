@@ -54,23 +54,24 @@ The Engine chips in Settings are independent of model size:
   Engine compute units.
 
 Core ML choices are enabled only when the selected model's complete verified
-artifacts are installed. The running app never downloads missing files and
-never silently switches engines.
+artifacts are installed. Add missing artifacts with `run.sh`; the app never
+silently switches engines.
 
 ## Install models
 
 ```sh
-./run.sh                 # Base
-./run.sh --model small
-./run.sh --model medium
-./run.sh --model turbo
-./run.sh --all-models    # all four, about 2.7 GB
-./run.sh --model turbo --engine coreml
-./run.sh --model turbo --engine whisperkit
+./run.sh                                      # install/select Base + Metal
+./run.sh --model small                        # install/select Small + Metal
+./run.sh --model medium                       # install/select Medium + Metal
+./run.sh --model turbo                        # install/select Turbo + Metal
+./run.sh --all-models                         # install all; select Base + Metal
+./run.sh --model turbo --engine coreml        # install/select Core ML Encoder
+./run.sh --model turbo --engine whisperkit    # install/select WhisperKit
 ```
 
 Files live in `~/.cache/whisper/`. Missing choices remain visible but disabled.
-The normal application never downloads models.
+An explicit model or engine option is persisted before the installed app
+launches. Rerun the bootstrap whenever you want to add another model.
 
 ## Decoding
 

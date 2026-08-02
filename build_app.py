@@ -151,6 +151,10 @@ def bundled_dynamic_libraries() -> list[Path]:
 def signing_identity() -> str:
     explicit = os.environ.get("WHISPER_HOTKEY_CODESIGN_IDENTITY", "").strip()
     if explicit:
+        if explicit == "-":
+            raise RuntimeError(
+                "Ad-hoc signing is not supported. Provide a stable code-signing identity."
+            )
         return explicit
 
     result = subprocess.run(
@@ -163,9 +167,10 @@ def signing_identity() -> str:
         if ")" in line and '"' in line:
             return line.split('"', 2)[1]
     raise RuntimeError(
-        "No stable code-signing identity found. Create an Apple Development or "
-        "Developer ID Application certificate, or set "
-        "WHISPER_HOTKEY_CODESIGN_IDENTITY. Ad-hoc signing is intentionally refused."
+        "No stable code-signing identity found. Run ./run.sh to create the local "
+        "development identity, install an Apple Development or Developer ID "
+        "Application certificate, or set WHISPER_HOTKEY_CODESIGN_IDENTITY. "
+        "Ad-hoc signing is intentionally refused."
     )
 
 
