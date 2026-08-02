@@ -16,4 +16,33 @@ final class ContractsTests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         XCTAssertEqual(try JSONDecoder().decode(ControlRequest.self, from: data), request)
     }
+
+    func testSetupVerificationRequiresEveryReadinessField() {
+        let ready = RuntimeStatus(
+            running: true,
+            phase: .idle,
+            microphoneGranted: true,
+            accessibilityGranted: true,
+            inputMonitoringGranted: true,
+            loginItemEnabled: true,
+            helperAvailable: true,
+            modelAvailable: true
+        )
+        XCTAssertTrue(ready.setupIsVerified)
+
+        let requirements: [WritableKeyPath<RuntimeStatus, Bool>] = [
+            \.running,
+            \.microphoneGranted,
+            \.accessibilityGranted,
+            \.inputMonitoringGranted,
+            \.loginItemEnabled,
+            \.helperAvailable,
+            \.modelAvailable,
+        ]
+        for requirement in requirements {
+            var missing = ready
+            missing[keyPath: requirement] = false
+            XCTAssertFalse(missing.setupIsVerified)
+        }
+    }
 }

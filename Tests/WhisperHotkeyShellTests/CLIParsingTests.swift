@@ -11,6 +11,7 @@ final class CLIParsingTests: XCTestCase {
             "stop",
             "restart",
             "status",
+            "verify-setup",
             "cancel",
             "setup",
             "enable-login",

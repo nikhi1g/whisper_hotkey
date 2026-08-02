@@ -82,6 +82,16 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.threadCount = threadCount
         self.lastError = lastError
     }
+
+    public var setupIsVerified: Bool {
+        running
+            && microphoneGranted
+            && accessibilityGranted
+            && inputMonitoringGranted
+            && loginItemEnabled
+            && helperAvailable
+            && modelAvailable
+    }
 }
 
 public enum ControlCommand: String, Codable, CaseIterable, Sendable {

@@ -53,6 +53,7 @@ class RunScriptTests(unittest.TestCase):
         self.assertIn("Install and select one model", result.stdout)
         self.assertIn("Missing Homebrew and signing setup", result.stdout)
         self.assertIn("At least one verified model is ready", result.stdout)
+        self.assertIn("stays open until the complete macOS setup", result.stdout)
         self.assertEqual(result.stderr, "")
 
     def test_unknown_model_fails_before_bootstrap_changes(self) -> None:

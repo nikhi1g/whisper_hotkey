@@ -4,6 +4,7 @@ import WhisperHotkeyCore
 enum CLICommand: Equatable {
     case start
     case restart
+    case verifySetup
     case control(ControlCommand)
     case logs
     case help
@@ -29,6 +30,8 @@ enum CLICommandParser {
             return .start
         case "restart":
             return .restart
+        case "verify-setup":
+            return .verifySetup
         case "logs":
             return .logs
         case "help", "-h", "--help":

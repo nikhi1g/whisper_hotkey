@@ -32,7 +32,8 @@ Build, install, launch, and open setup for whisper_hotkey.
 
 With no options, the recommended Base English model and whisper.cpp Metal
 engine are installed. Missing Homebrew and signing setup are bootstrapped
-interactively. At least one verified model is ready before the app launches.
+interactively. At least one verified model is ready before the app launches,
+and this script stays open until the complete macOS setup is verified.
 EOF
 }
 
@@ -236,6 +237,35 @@ persist_requested_selection() {
     /usr/bin/defaults write "$BUNDLE_IDENTIFIER" recognitionEngine \
         -string "$(engine_preference "$ENGINE")"
     note "Selected $(model_preference "$model") with $(engine_preference "$ENGINE")"
+}
+
+wait_for_verified_setup() {
+    local controller verification previous_verification
+    controller="${HOME}/bin/whisper_hotkey"
+    previous_verification=""
+
+    while true; do
+        if verification="$("$controller" verify-setup 2>&1)"; then
+            printf '\n%s\n' "$verification"
+            note "Model installation and macOS setup are verified"
+            return 0
+        fi
+
+        if [[ "$verification" != "$previous_verification" ]]; then
+            printf '\n%s\n' "$verification"
+            previous_verification="$verification"
+        fi
+
+        if [[ -t 0 ]]; then
+            "$controller" setup >/dev/null 2>&1 || true
+            printf '%s' \
+                "Complete every item in the setup window, then press Return to verify again. "
+            read -r _
+        else
+            note "Waiting for setup verification; checking again in 2 seconds"
+            /bin/sleep 2
+        fi
+    done
 }
 
 coreml_encoder_name() {
@@ -500,6 +530,7 @@ note "Installing and launching whisper_hotkey"
 /usr/bin/python3 install.py
 note "Opening permission setup"
 "${HOME}/bin/whisper_hotkey" setup
+wait_for_verified_setup
 printf '\n%s\n' \
-    "Installed. Complete the permission window, then hold Right Command to dictate."
+    "Installed and verified. Use your selected dictation key anywhere text can be entered."
 printf '%s\n' "Check readiness any time with: ${HOME}/bin/whisper_hotkey status"

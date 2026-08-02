@@ -19,8 +19,11 @@ signing state, and the terminal controller for the account that runs it.
 
 The first run may take several minutes. It checks the Mac, installs missing
 build dependencies, downloads a verified model, builds and signs the app,
-installs it, launches it, and opens the permission window. It is safe to run
-again after an interrupted or completed installation.
+installs it, launches it, and opens the permission window. The script remains
+attached: complete setup, return to Terminal, and press Return when prompted.
+It rechecks every requirement and exits only after the model, helper, Login
+Item, and all three permissions are verified. It is safe to run again after an
+interrupted or completed installation.
 
 ## Requirements
 
@@ -69,6 +72,11 @@ The setup window opens automatically. Complete every row:
 4. Approve its Login Item if macOS asks. You can turn **Open at login** off
    later in the app's Settings.
 
+Return to Terminal and press Return after completing the rows. If anything is
+still missing, `run.sh` prints the current status, reopens Setup, and waits for
+you again. Once every requirement is ready, it prints `Setup verified` and
+finishes installation.
+
 If macOS asks to quit and reopen the app after a permission change, allow it.
 Reopen the setup window at any time with:
 
@@ -97,8 +105,12 @@ If `~/bin` is already on your `PATH`, the controller can be called simply as
 
 ```text
 start  stop  restart  status  cancel  setup
-enable-login  disable-login  logs
+verify-setup  enable-login  disable-login  logs
 ```
+
+`verify-setup` prints the same readiness details as `status`, but returns a
+nonzero exit status until the complete setup is ready. `run.sh` uses it for the
+human-in-the-loop verification gate.
 
 ## Models and recognition engines
 

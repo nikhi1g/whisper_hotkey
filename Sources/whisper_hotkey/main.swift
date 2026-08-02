@@ -36,6 +36,8 @@ private struct Controller {
             return start()
         case .restart:
             return restart()
+        case .verifySetup:
+            return verifySetup()
         case .logs:
             return showLogs()
         case let .control(command):
@@ -120,6 +122,34 @@ private struct Controller {
             return ExitCode.ioError
         } catch {
             writeError("Control request failed: \(error.localizedDescription)")
+            return ExitCode.ioError
+        }
+    }
+
+    private func verifySetup() -> Int32 {
+        do {
+            let response = try SocketControlClient(socketURL: socketURL).send(.status)
+            guard response.ok, let status = response.status else {
+                writeError(
+                    response.message.isEmpty
+                        ? "Setup status is unavailable."
+                        : response.message
+                )
+                return ExitCode.software
+            }
+
+            writeOutput(format(status))
+            guard status.setupIsVerified else {
+                writeError("Setup is not verified yet.")
+                return ExitCode.software
+            }
+            writeOutput("Setup verified.")
+            return ExitCode.success
+        } catch let error as SocketClientError where error.isUnavailable {
+            writeError("whisper_hotkey is not running.")
+            return ExitCode.unavailable
+        } catch {
+            writeError("Setup verification failed: \(error.localizedDescription)")
             return ExitCode.ioError
         }
     }
@@ -255,6 +285,7 @@ private struct Controller {
           stop            Stop the running agent
           restart         Restart the running agent
           status          Show runtime and setup status
+          verify-setup    Exit successfully only when setup is complete
           cancel          Cancel the current dictation
           setup           Open the one-time setup window
           enable-login    Enable the native Login Item
