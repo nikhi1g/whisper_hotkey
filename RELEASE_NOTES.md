@@ -1,19 +1,18 @@
-Version 3.2.0 gives a clean installation responsive, hardware-aware defaults.
+Version 3.2.2 makes the internal recognition dictionary safer and faster to
+manage.
 
 ## Highlights
 
-- Default a clean installation to Right Option while preserving every existing
-  user's selected key.
-- Select the strongest verified model already available within the Mac's
-  memory tier without downloading anything at runtime.
-- Use Metal and Precision for predictable local quality.
-- Select Decode While Speaking on Macs with at least 8 GB for the shortest
-  completion latency; lower-memory Macs retain After Recording.
-- Keep all first-run recommendations strictly one-time and preserve every
-  existing preference during an update.
+- Separate unsaved additions from existing entries so editing or deleting draft
+  text cannot remove saved vocabulary.
+- Dictate comma, semicolon, or newline-separated entries directly into the Add
+  draft using the normal local hotkey.
+- Preview deterministic local parsing before saving, including duplicate and
+  capacity feedback.
+- Press Return to add valid draft entries and use Command-A to select the entire
+  draft for fast replacement or deletion.
+- Preserve the saved dictionary across app updates in the existing preferences
+  domain.
 
+Audio, transcripts, dictionary parsing, and recognition prompts remain local.
 The verified in-app update and restart flow remains unchanged.
-
-The repository now documents a fresh-user and virtual-machine download test so
-local preferences, permissions, model caches, and developer tools cannot mask
-first-run issues.

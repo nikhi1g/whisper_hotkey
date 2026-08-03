@@ -489,8 +489,14 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
 
         XCTAssertFalse(controller.internalDictionaryDraftIsFocused)
+        controller.appendDictatedInternalDictionaryDraft("Codex, projLab")
         controller.focusInternalDictionaryDraftForTesting()
         XCTAssertTrue(controller.internalDictionaryDraftIsFocused)
+        XCTAssertTrue(controller.internalDictionaryDraftAddsOnReturnForTesting)
+        XCTAssertEqual(
+            controller.selectAllInternalDictionaryDraftForTesting(),
+            NSRange(location: 0, length: "Codex, projLab".utf16.count)
+        )
     }
 
     @MainActor

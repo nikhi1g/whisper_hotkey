@@ -130,7 +130,9 @@ whisper.cpp half of the Mac's logical CPUs up to an eight-thread cap. The
 preference strings outside the application bundle so updates retain them.
 Settings separates an ephemeral **Add** draft from the saved **Existing** list.
 Typing, pasting, or dictating into Add produces a deterministic local preview;
-only the explicit Add button merges validated candidates into the saved list.
+only the explicit Add button or Return merges validated candidates into the
+saved list. Command-A selects the complete Add draft for fast replacement or
+deletion.
 Delete and Backspace edit only the Add draft. Existing entries are removed only
 through their individually labeled remove buttons. When the Add editor owns the
 release-time destination, the normal hotkey and local recognizer route the

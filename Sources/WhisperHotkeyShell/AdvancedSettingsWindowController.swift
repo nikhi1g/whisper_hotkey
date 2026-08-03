@@ -791,6 +791,9 @@ public final class AdvancedSettingsWindowController:
         }
         processingModeControl.setAccessibilityLabel("Processing")
         internalDictionaryDraftField.delegate = self
+        internalDictionaryDraftField.target = self
+        internalDictionaryDraftField.action =
+            #selector(addInternalDictionaryDraft)
         internalDictionaryDraftField.placeholderString =
             "Type or dictate a comma-separated list"
         internalDictionaryDraftField.toolTip =
@@ -1888,6 +1891,34 @@ public final class AdvancedSettingsWindowController:
     func focusInternalDictionaryDraftForTesting() {
         window?.orderFront(nil)
         window?.makeFirstResponder(internalDictionaryDraftField)
+    }
+
+    var internalDictionaryDraftAddsOnReturnForTesting: Bool {
+        internalDictionaryDraftField.target === self
+            && internalDictionaryDraftField.action
+                == #selector(addInternalDictionaryDraft)
+    }
+
+    func selectAllInternalDictionaryDraftForTesting() -> NSRange? {
+        focusInternalDictionaryDraftForTesting()
+        guard let window,
+              let event = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .command,
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "a",
+                charactersIgnoringModifiers: "a",
+                isARepeat: false,
+                keyCode: 0
+              )
+        else {
+            return nil
+        }
+        _ = window.performKeyEquivalent(with: event)
+        return internalDictionaryDraftField.currentEditor()?.selectedRange
     }
 
     var internalDictionaryExistingEntryCountForTesting: Int {
