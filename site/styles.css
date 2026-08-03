@@ -24,7 +24,7 @@ body {
   height: 100vh;
   min-height: 0;
   display: grid;
-  grid-template-rows: 54px minmax(0, 1fr) 36px;
+  grid-template-rows: 54px minmax(0, 1fr) 42px;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -92,8 +92,10 @@ footer a:hover { color: var(--text); }
   padding: 12px 0;
   display: grid;
   grid-template-columns: minmax(390px, .88fr) minmax(440px, 1.12fr);
+  align-content: start;
+  align-items: start;
   gap: 30px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hero {
@@ -221,7 +223,7 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .document-body { padding: 32px 34px; }
 .document-label { margin: 0 0 14px; color: #768390; font-size: 9px; font-weight: 750; letter-spacing: .18em; }
 .typed-line { max-width: 430px; margin: 0; font-family: ui-serif, Georgia, serif; font-size: 21px; line-height: 1.4; letter-spacing: -.02em; }
-.caret { display: inline-block; width: 2px; height: 1.08em; margin-left: 3px; vertical-align: -3px; background: #539bf5; animation: blink 1s steps(1) infinite; }
+.caret { display: inline-block; width: 2px; height: 1.08em; margin-left: 3px; vertical-align: -3px; background: #539bf5; }
 
 .listening-badge {
   position: absolute;
@@ -241,11 +243,11 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 .badge-marker { position: absolute; top: -1px; left: 50%; width: 3px; height: 3px; background: #87c7ff; transform: translateX(-50%); }
 .waveform { width: 68px; height: 20px; display: flex; align-items: center; justify-content: center; gap: 1.05px; }
-.waveform b { width: 1.6px; height: 24%; flex: 0 0 1.6px; border-radius: 1px; background: #87c7ff; animation: wave 820ms ease-in-out infinite alternate; }
-.waveform b:nth-child(3n) { height: 38%; animation-delay: -640ms; }
-.waveform b:nth-child(4n) { height: 56%; animation-delay: -310ms; }
-.waveform b:nth-child(5n) { height: 78%; animation-delay: -500ms; }
-.waveform b:nth-child(7n) { height: 92%; animation-delay: -120ms; }
+.waveform b { width: 1.6px; height: 24%; flex: 0 0 1.6px; border-radius: 1px; background: #87c7ff; }
+.waveform b:nth-child(3n) { height: 38%; }
+.waveform b:nth-child(4n) { height: 56%; }
+.waveform b:nth-child(5n) { height: 78%; }
+.waveform b:nth-child(7n) { height: 92%; }
 .timer { color: #f0f3f6; font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 
 .hud-control { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; }
@@ -288,7 +290,7 @@ h2 { margin: 0; font-size: 27px; font-weight: 690; line-height: 1.05; letter-spa
 
 .system-graph { min-width: 0; min-height: 0; flex: none; }
 .system-graph svg { width: 100%; height: auto; display: block; }
-.graph-edges path { fill: none; stroke: var(--accent); stroke-width: 1.5; marker-end: url(#graph-arrow); stroke-dasharray: 5 5; animation: graph-flow 1.8s linear infinite; }
+.graph-edges path { fill: none; stroke: var(--accent); stroke-width: 1.5; marker-end: url(#graph-arrow); stroke-dasharray: 5 5; }
 .graph-edges .graph-edge-muted { stroke: var(--line); }
 .graph-edges .graph-edge-fallback { stroke: var(--accent-strong); }
 #graph-arrow path { fill: var(--accent); }
@@ -312,10 +314,6 @@ footer {
   color: #768390;
   font-size: 11px;
 }
-
-@keyframes blink { 50% { opacity: 0; } }
-@keyframes wave { to { height: 95%; } }
-@keyframes graph-flow { to { stroke-dashoffset: -20; } }
 
 @media (max-width: 920px) {
   body { height: auto; min-height: 100vh; display: block; overflow: auto; }
