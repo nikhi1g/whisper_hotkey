@@ -317,14 +317,14 @@ const runCycle = async signal => {
   badge?.classList.remove('is-listening');
   badge?.classList.add('is-transcribing');
   badge?.setAttribute('aria-label', 'Transcribing locally.');
-  await delay(1380, signal);
+  await delay(320, signal);
 
   phase = 'inserting';
-  await replaceOutput(demoPhrases[phraseIndex], signal);
-  phraseIndex = (phraseIndex + 1) % demoPhrases.length;
   badge?.classList.remove('is-transcribing');
   badge?.classList.add('is-displaying');
   badge?.setAttribute('aria-label', 'Dictation inserted.');
+  await replaceOutput(demoPhrases[phraseIndex], signal);
+  phraseIndex = (phraseIndex + 1) % demoPhrases.length;
   await delay(1250, signal);
 
   if (!selectionLocked) {
