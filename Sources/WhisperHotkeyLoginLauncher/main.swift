@@ -223,11 +223,11 @@ private func installUpdate(
     let parent = applicationURL.deletingLastPathComponent()
     let token = UUID().uuidString
     let incoming = parent.appendingPathComponent(
-        ".whisper_hotkey.app.incoming-\(token)",
+        ".whisper_hotkey-incoming-\(token).app",
         isDirectory: true
     )
     let backup = parent.appendingPathComponent(
-        ".whisper_hotkey.app.backup-\(token)",
+        ".whisper_hotkey-backup-\(token).app",
         isDirectory: true
     )
     defer {

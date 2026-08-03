@@ -6,6 +6,8 @@ Recommended for users testing the version 3.1 update path.
 
 - Read the designated signing requirement from either output stream used by
   `codesign`, matching current macOS behavior.
+- Keep the launcher's private incoming copy named as an `.app` bundle so its
+  post-copy safety verification can complete before replacement.
 - Keep checksum, bundle identity, version, signature, and signing identity
   verification intact.
 - Show **Update failed** for an installation failure instead of the unrelated
