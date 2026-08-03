@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-12">
-  <script src="./app.js?v=compact-12" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-13">
+  <script src="./app.js?v=compact-13" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -43,39 +43,67 @@
         </div>
       </div>
 
-      <div class="product-stage" aria-label="Illustration of whisper_hotkey listening in a text field">
+      <div class="product-stage" aria-label="Interactive whisper_hotkey dictation demo">
         <div class="document-window">
           <div class="window-bar" aria-hidden="true">
             <span></span><span></span><span></span>
             <b>Notes</b>
           </div>
           <div class="document-body">
-            <p class="typed-line">The fastest interface is the one that you don’t have to think about.<span class="caret"></span></p>
+            <div class="demo-settings" aria-label="Demo settings">
+              <label>
+                <span>Key</span>
+                <select data-demo-key aria-label="Dictation key">
+                  <option value="right-command">Right Command</option>
+                  <option value="left-command">Left Command</option>
+                  <option value="right-shift">Right Shift</option>
+                  <option value="left-shift">Left Shift</option>
+                  <option value="right-option">Right Option</option>
+                  <option value="left-option">Left Option</option>
+                  <option value="right-control">Right Control</option>
+                  <option value="left-control">Left Control</option>
+                  <option value="caps-lock">Caps Lock</option>
+                  <option value="fn-globe">Fn / Globe</option>
+                </select>
+              </label>
+              <label>
+                <span>Mode</span>
+                <select data-demo-behavior aria-label="Input behavior">
+                  <option value="hold">Press and Hold</option>
+                  <option value="toggle">Toggle</option>
+                  <option value="pause">Pause Mode</option>
+                </select>
+              </label>
+            </div>
+            <p class="demo-instruction" data-demo-instruction>
+              Hold Right Command, speak, and release. Your words appear in the field where you are typing.
+            </p>
+            <p class="typed-line" aria-live="polite"><span data-demo-output>Capture the thought while it is still clear.</span><span class="caret"></span></p>
           </div>
         </div>
-        <div class="listening-badge" role="img" aria-label="The actual listening HUD with waveform, elapsed time, Stop and Insert, and Send controls">
+        <div class="listening-badge is-listening" data-demo-badge role="group" aria-label="Listening. Use Stop and Insert or Send.">
           <span class="badge-marker" aria-hidden="true"></span>
+          <svg class="activity-trail" viewBox="0 0 203 42" preserveAspectRatio="none" aria-hidden="true">
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+          </svg>
           <span class="waveform" aria-hidden="true">
             <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
             <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
             <b></b><b></b><b></b><b></b><b></b><b></b><b></b>
           </span>
-          <span class="timer">0:02</span>
-          <span class="hud-control hud-stop" aria-hidden="true"><i></i></span>
-          <span class="hud-control hud-send" aria-hidden="true">
+          <span class="timer" data-demo-timer>0:00</span>
+          <button class="hud-control hud-stop" data-demo-stop type="button" aria-label="Stop and insert"><i aria-hidden="true"></i></button>
+          <button class="hud-control hud-send" data-demo-send type="button" aria-label="Send and insert a new line">
             <svg viewBox="0 0 32 32" focusable="false">
               <path d="M16 24V8M9.3 14L16 8l6.7 6"></path>
             </svg>
-          </span>
-        </div>
-      </div>
-      <div class="demo-caption">
-        <p class="hero-summary" data-dictation-copy>
-          <span class="summary-copy" data-visible-copy aria-hidden="true">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
-          <span class="visually-hidden" data-live-copy aria-live="polite">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
-        </p>
-        <div class="key-hint" data-hotkey-cycle aria-label="Press and Hold with Right Command">
-          <kbd aria-hidden="true">Right ⌘</kbd><span aria-hidden="true">hold to talk</span>
+          </button>
         </div>
       </div>
     </section>
@@ -147,7 +175,10 @@
 
   <footer>
     <span>© <span id="year"></span> Nikhil Gupta</span>
-    <span class="footer-privacy">Copy Last Dictation keeps only the latest successful transcript in memory until quit.</span>
+    <span class="footer-center">
+      <em>“The fastest interface is the one that you don’t have to think about.”</em>
+      <small>Copy Last Dictation keeps only the latest successful transcript in memory until quit.</small>
+    </span>
     <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>
 </body>

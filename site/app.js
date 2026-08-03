@@ -1,107 +1,81 @@
-const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
-const heroSummary = document.querySelector('[data-dictation-copy]');
 const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
-const waveform = document.querySelector('.waveform');
-const waveformBars = document.querySelectorAll('.waveform b');
+const badge = document.querySelector('[data-demo-badge]');
+const waveform = badge?.querySelector('.waveform');
+const waveformBars = badge?.querySelectorAll('.waveform b') ?? [];
+const timer = document.querySelector('[data-demo-timer]');
+const stopButton = document.querySelector('[data-demo-stop]');
+const sendButton = document.querySelector('[data-demo-send]');
+const keySelect = document.querySelector('[data-demo-key]');
+const behaviorSelect = document.querySelector('[data-demo-behavior]');
+const instruction = document.querySelector('[data-demo-instruction]');
+const demoOutput = document.querySelector('[data-demo-output]');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
-if (waveformBars.length > 0) {
-  const noiseSamples = new Uint32Array(waveformBars.length * 8);
-
-  if (window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(noiseSamples);
-  } else {
-    noiseSamples.forEach((_, index) => {
-      noiseSamples[index] = Math.floor(Math.random() * 0xffffffff);
-    });
-  }
-
-  let noiseIndex = 0;
-  const nextNoise = () => noiseSamples[noiseIndex++] / 0xffffffff;
-  const level = (minimum, range) => (minimum + nextNoise() * range).toFixed(2);
-
-  waveformBars.forEach(bar => {
-    bar.style.setProperty('--wave-a', level(.14, .34));
-    bar.style.setProperty('--wave-b', level(.42, .56));
-    bar.style.setProperty('--wave-c', level(.18, .48));
-    bar.style.setProperty('--wave-d', level(.52, .48));
-    bar.style.setProperty('--wave-e', level(.16, .52));
-    bar.style.setProperty('--wave-f', level(.38, .57));
-    bar.style.setProperty('--wave-duration', `${Math.round(520 + nextNoise() * 680)}ms`);
-    bar.style.setProperty('--wave-delay', `${Math.round(-nextNoise() * 1200)}ms`);
-  });
-}
-
-const randomUnit = () => {
-  if (!window.crypto?.getRandomValues) return Math.random();
-  const sample = new Uint32Array(1);
-  window.crypto.getRandomValues(sample);
-  return sample[0] / 0xffffffff;
-};
-
-if (waveform && !prefersReducedMotion) {
-  const scheduleDeadSpace = () => {
-    const speechDuration = 2200 + randomUnit() * 4800;
-
-    window.setTimeout(() => {
-      waveform.classList.add('is-silent');
-      const silenceDuration = 320 + randomUnit() * 1000;
-
-      window.setTimeout(() => {
-        waveform.classList.remove('is-silent');
-        scheduleDeadSpace();
-      }, silenceDuration);
-    }, speechDuration);
-  };
-
-  scheduleDeadSpace();
-}
-
 const hotkeyChoices = [
-  {label: 'Right ⌘', spoken: 'Right Command'},
-  {label: 'Left ⌘', spoken: 'Left Command'},
-  {label: 'Right ⇧', spoken: 'Right Shift'},
-  {label: 'Left ⇧', spoken: 'Left Shift'},
-  {label: 'Right ⌥', spoken: 'Right Option'},
-  {label: 'Left ⌥', spoken: 'Left Option'},
-  {label: 'Right ⌃', spoken: 'Right Control'},
-  {label: 'Left ⌃', spoken: 'Left Control'},
-  {label: 'Caps Lock ⇪', spoken: 'Caps Lock', holdSupported: false},
-  {label: 'Fn / Globe', spoken: 'Fn or Globe'}
+  {id: 'right-command', spoken: 'Right Command', holdSupported: true},
+  {id: 'left-command', spoken: 'Left Command', holdSupported: true},
+  {id: 'right-shift', spoken: 'Right Shift', holdSupported: true},
+  {id: 'left-shift', spoken: 'Left Shift', holdSupported: true},
+  {id: 'right-option', spoken: 'Right Option', holdSupported: true},
+  {id: 'left-option', spoken: 'Left Option', holdSupported: true},
+  {id: 'right-control', spoken: 'Right Control', holdSupported: true},
+  {id: 'left-control', spoken: 'Left Control', holdSupported: true},
+  {id: 'caps-lock', spoken: 'Caps Lock', holdSupported: false},
+  {id: 'fn-globe', spoken: 'Fn or Globe', holdSupported: true}
 ];
 
 const behaviorChoices = [
   {
+    id: 'hold',
     name: 'Press and Hold',
-    action: 'hold to talk',
-    isAvailable: hotkey => hotkey.holdSupported !== false,
     sentence: hotkey => `Hold ${hotkey.spoken}, speak, and release. Your words appear in the field where you are typing.`
   },
   {
+    id: 'toggle',
     name: 'Toggle',
-    action: 'tap to toggle',
-    isAvailable: () => true,
     sentence: hotkey => `Tap ${hotkey.spoken} to start, speak, and tap it again. Your words appear in the field where you are typing.`
   },
   {
+    id: 'pause',
     name: 'Pause Mode',
-    action: 'pause mode',
-    isAvailable: () => true,
     sentence: hotkey => `Tap ${hotkey.spoken} to start, then speak naturally. Your words appear in the field as you pause.`
   }
 ];
 
-const dictationStates = hotkeyChoices.flatMap(hotkey =>
+const demoPhrases = [
+  'Capture the thought while it is still clear.',
+  'Turn the rough idea into a useful first draft.',
+  'Write the next step without leaving the keyboard.',
+  'Keep your attention on the work in front of you.'
+];
+
+const validCombinations = hotkeyChoices.flatMap(hotkey =>
   behaviorChoices
-    .filter(behavior => behavior.isAvailable(hotkey))
-    .map(behavior => ({hotkey, behavior, sentence: behavior.sentence(hotkey)}))
+    .filter(behavior => hotkey.holdSupported || behavior.id !== 'hold')
+    .map(behavior => ({hotkey, behavior}))
 );
 
-const wait = duration => new Promise(resolve => window.setTimeout(resolve, duration));
+const delay = (duration, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(new DOMException('Aborted', 'AbortError'));
+    return;
+  }
+
+  const finish = () => {
+    signal?.removeEventListener('abort', handleAbort);
+    resolve();
+  };
+  const timeout = window.setTimeout(finish, duration);
+  const handleAbort = () => {
+    window.clearTimeout(timeout);
+    reject(new DOMException('Aborted', 'AbortError'));
+  };
+  signal?.addEventListener('abort', handleAbort, {once: true});
+});
 
 const refreshSourceRevision = async () => {
   if (!sourceButton || !sourceRevision) return;
@@ -171,54 +145,220 @@ copyOptions.forEach(option => {
   });
 });
 
-if (hotkeyHint && heroSummary && !prefersReducedMotion) {
-  const keyLabel = hotkeyHint.querySelector('kbd');
-  const actionLabel = hotkeyHint.querySelector('span');
-  const visibleCopy = heroSummary.querySelector('[data-visible-copy]');
-  const liveCopy = heroSummary.querySelector('[data-live-copy]');
-  let stateIndex = 0;
+if (waveformBars.length > 0) {
+  const noiseSamples = new Uint32Array(waveformBars.length * 8);
 
-  const replaceSentence = async (nextSentence, updateLabels) => {
-    if (typeof visibleCopy.animate !== 'function') {
-      visibleCopy.textContent = nextSentence;
-      liveCopy.textContent = nextSentence;
-      updateLabels();
-      return;
-    }
-
-    const transitionTargets = [visibleCopy, hotkeyHint];
-    const outgoing = transitionTargets.map(target => target.animate(
-      [{opacity: 1, transform: 'translateY(0)'}, {opacity: 0, transform: 'translateY(-6px)'}],
-      {duration: 180, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards'}
-    ));
-
-    await Promise.all(outgoing.map(animation => animation.finished));
-
-    visibleCopy.textContent = nextSentence;
-    liveCopy.textContent = nextSentence;
-    updateLabels();
-    outgoing.forEach(animation => animation.cancel());
-
-    const incoming = transitionTargets.map(target => target.animate(
-      [{opacity: 0, transform: 'translateY(7px)'}, {opacity: 1, transform: 'translateY(0)'}],
-      {duration: 280, easing: 'cubic-bezier(.22, 1, .36, 1)'}
-    ));
-
-    await Promise.all(incoming.map(animation => animation.finished));
-  };
-
-  const showNextState = async () => {
-    await wait(6500);
-    stateIndex = (stateIndex + 1) % dictationStates.length;
-    const state = dictationStates[stateIndex];
-
-    await replaceSentence(state.sentence, () => {
-      keyLabel.textContent = state.hotkey.label;
-      actionLabel.textContent = state.behavior.action;
-      hotkeyHint.setAttribute('aria-label', `${state.behavior.name} with ${state.hotkey.spoken}`);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(noiseSamples);
+  } else {
+    noiseSamples.forEach((_, index) => {
+      noiseSamples[index] = (index * 2654435761) >>> 0;
     });
-    showNextState();
-  };
+  }
 
-  showNextState();
+  let noiseIndex = 0;
+  const nextNoise = () => noiseSamples[noiseIndex++] / 0xffffffff;
+  const level = (minimum, range) => (minimum + nextNoise() * range).toFixed(2);
+
+  waveformBars.forEach(bar => {
+    bar.style.setProperty('--wave-a', level(.14, .34));
+    bar.style.setProperty('--wave-b', level(.42, .56));
+    bar.style.setProperty('--wave-c', level(.18, .48));
+    bar.style.setProperty('--wave-d', level(.52, .48));
+    bar.style.setProperty('--wave-e', level(.16, .52));
+    bar.style.setProperty('--wave-f', level(.38, .57));
+    bar.style.setProperty('--wave-duration', `${Math.round(520 + nextNoise() * 680)}ms`);
+    bar.style.setProperty('--wave-delay', `${Math.round(-nextNoise() * 1200)}ms`);
+  });
 }
+
+const selectedHotkey = () => hotkeyChoices.find(choice => choice.id === keySelect?.value) ?? hotkeyChoices[0];
+const selectedBehavior = () => behaviorChoices.find(choice => choice.id === behaviorSelect?.value) ?? behaviorChoices[0];
+
+const updateInstruction = () => {
+  if (!instruction) return;
+  instruction.textContent = selectedBehavior().sentence(selectedHotkey());
+};
+
+const enforceValidSelection = () => {
+  if (!behaviorSelect) return;
+  const holdOption = behaviorSelect.querySelector('option[value="hold"]');
+  const supportsHold = selectedHotkey().holdSupported;
+  holdOption.disabled = !supportsHold;
+  if (!supportsHold && behaviorSelect.value === 'hold') behaviorSelect.value = 'toggle';
+};
+
+const setTimer = elapsedMilliseconds => {
+  if (!timer) return;
+  const totalSeconds = Math.max(0, Math.floor(elapsedMilliseconds / 1000));
+  timer.textContent = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+};
+
+const replaceOutput = async (text, signal) => {
+  if (!demoOutput) return;
+
+  if (prefersReducedMotion || typeof demoOutput.animate !== 'function') {
+    demoOutput.textContent = text;
+    return;
+  }
+
+  const outgoing = demoOutput.animate(
+    [{opacity: 1, transform: 'translateY(0)'}, {opacity: 0, transform: 'translateY(-4px)'}],
+    {duration: 140, easing: 'ease-in', fill: 'forwards'}
+  );
+  await outgoing.finished;
+  if (signal.aborted) return;
+  demoOutput.textContent = text;
+  outgoing.cancel();
+  const incoming = demoOutput.animate(
+    [{opacity: 0, transform: 'translateY(5px)'}, {opacity: 1, transform: 'translateY(0)'}],
+    {duration: 260, easing: 'cubic-bezier(.22, 1, .36, 1)'}
+  );
+  await incoming.finished;
+};
+
+let demoController;
+let phase = 'idle';
+let completeRecording;
+let phraseIndex = 1;
+let combinationIndex = 0;
+let selectionLocked = false;
+
+const setListeningState = () => {
+  phase = 'listening';
+  badge?.classList.remove('is-transcribing');
+  badge?.classList.add('is-listening');
+  waveform?.classList.remove('is-silent');
+  badge?.setAttribute('aria-label', 'Listening. Use Stop and Insert or Send.');
+};
+
+const runRecordingPattern = async signal => {
+  await delay(1900, signal);
+  waveform?.classList.add('is-silent');
+  await delay(650, signal);
+  waveform?.classList.remove('is-silent');
+  await delay(1250, signal);
+  return 'send';
+};
+
+const runCycle = async signal => {
+  updateInstruction();
+  setListeningState();
+  setTimer(0);
+
+  const recordingStarted = performance.now();
+  const timerUpdate = window.setInterval(() => setTimer(performance.now() - recordingStarted), 80);
+  const recordingController = new AbortController();
+  const stopRecording = () => recordingController.abort();
+  signal.addEventListener('abort', stopRecording, {once: true});
+
+  let cycleCompletion;
+  const gesture = new Promise(resolve => {
+    cycleCompletion = resolve;
+    completeRecording = cycleCompletion;
+  });
+  const pattern = runRecordingPattern(recordingController.signal).catch(error => {
+    if (error.name !== 'AbortError') throw error;
+    return null;
+  });
+
+  const completion = await Promise.race([pattern, gesture]);
+  recordingController.abort();
+  await pattern;
+  signal.removeEventListener('abort', stopRecording);
+  if (completeRecording === cycleCompletion) completeRecording = undefined;
+  window.clearInterval(timerUpdate);
+  setTimer(performance.now() - recordingStarted);
+  if (signal.aborted || !completion) return;
+
+  waveform?.classList.remove('is-silent');
+  if (completion === 'send') {
+    sendButton?.classList.add('is-pressed');
+    await delay(180, signal);
+    sendButton?.classList.remove('is-pressed');
+  } else {
+    stopButton?.classList.add('is-pressed');
+    await delay(180, signal);
+    stopButton?.classList.remove('is-pressed');
+  }
+
+  phase = 'transcribing';
+  badge?.classList.remove('is-listening');
+  badge?.classList.add('is-transcribing');
+  badge?.setAttribute('aria-label', 'Transcribing locally.');
+  await delay(1380, signal);
+
+  phase = 'inserting';
+  await replaceOutput(demoPhrases[phraseIndex], signal);
+  phraseIndex = (phraseIndex + 1) % demoPhrases.length;
+  await delay(1250, signal);
+
+  if (!selectionLocked) {
+    combinationIndex = (combinationIndex + 1) % validCombinations.length;
+    const next = validCombinations[combinationIndex];
+    keySelect.value = next.hotkey.id;
+    behaviorSelect.value = next.behavior.id;
+    enforceValidSelection();
+    updateInstruction();
+  }
+};
+
+const runDemo = async signal => {
+  try {
+    while (!signal.aborted) {
+      await runCycle(signal);
+      await delay(700, signal);
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') throw error;
+  }
+};
+
+const restartDemo = () => {
+  demoController?.abort();
+  completeRecording = undefined;
+  sendButton?.classList.remove('is-pressed');
+  stopButton?.classList.remove('is-pressed');
+  enforceValidSelection();
+  updateInstruction();
+  setTimer(0);
+
+  if (prefersReducedMotion) {
+    phase = 'idle';
+    badge?.classList.remove('is-transcribing');
+    badge?.classList.add('is-listening');
+    return;
+  }
+
+  demoController = new AbortController();
+  runDemo(demoController.signal);
+};
+
+const handleSelection = () => {
+  selectionLocked = true;
+  enforceValidSelection();
+  restartDemo();
+};
+
+keySelect?.addEventListener('change', handleSelection);
+behaviorSelect?.addEventListener('change', handleSelection);
+
+sendButton?.addEventListener('click', () => {
+  if (prefersReducedMotion) {
+    demoOutput.textContent = demoPhrases[phraseIndex];
+    phraseIndex = (phraseIndex + 1) % demoPhrases.length;
+    return;
+  }
+  if (phase === 'listening') completeRecording?.('send');
+});
+
+stopButton?.addEventListener('click', () => {
+  if (prefersReducedMotion) {
+    demoOutput.textContent = demoPhrases[phraseIndex];
+    phraseIndex = (phraseIndex + 1) % demoPhrases.length;
+    return;
+  }
+  if (phase === 'listening') completeRecording?.('stop');
+});
+
+restartDemo();
