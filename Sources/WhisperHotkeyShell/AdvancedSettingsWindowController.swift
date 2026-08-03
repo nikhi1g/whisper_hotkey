@@ -503,7 +503,9 @@ public final class AdvancedSettingsWindowController:
         } ?? stack.arrangedSubviews.count - 1) + 1
         stack.insertArrangedSubview(editorView, at: insertionIndex)
         editorView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        editorView.heightAnchor.constraint(equalToConstant: 430).isActive = true
+        editorView.heightAnchor.constraint(
+            equalToConstant: CustomThemeEditorViewController.contentHeight
+        ).isActive = true
         stack.setCustomSpacing(20, after: editorView)
         expandSettingsWindowForEditor()
         stack.layoutSubtreeIfNeeded()
@@ -531,7 +533,10 @@ public final class AdvancedSettingsWindowController:
         let availableHeight = window.screen?.visibleFrame.height ?? original.height
         let targetHeight = max(
             original.height,
-            min(original.height + 430, availableHeight - 40)
+            min(
+                original.height + CustomThemeEditorViewController.contentHeight,
+                availableHeight - 40
+            )
         )
         let target = CGRect(
             x: original.minX,

@@ -7,6 +7,7 @@ final class CustomThemeEditorViewController:
     NSTextFieldDelegate
 {
     typealias SaveHandler = (CustomBadgeTheme) -> Void
+    static let contentHeight: CGFloat = 460
 
     private let themeID: UUID
     private let onSave: SaveHandler
@@ -331,7 +332,12 @@ final class CustomThemeEditorViewController:
 
     var controlsFitWindowForTesting: Bool {
         loadViewIfNeeded()
-        view.frame = CGRect(x: 0, y: 0, width: 556, height: 430)
+        view.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: 556,
+            height: Self.contentHeight
+        )
         view.layoutSubtreeIfNeeded()
         let containmentBounds = view.bounds.insetBy(dx: -0.5, dy: -0.5)
         return [
