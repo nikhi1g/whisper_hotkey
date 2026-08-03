@@ -25,21 +25,11 @@ const demoTiming = Object.freeze({
   speechPause: 650,
   speechTail: 1250,
   controlPress: 180,
-  transcription: 320,
-  outgoingText: 140,
+  transcriptionLap: 1110,
   incomingText: 260
 });
-const demoPhraseInterval = demoTiming.speechLead
-  + demoTiming.speechPause
-  + demoTiming.speechTail
-  + demoTiming.controlPress
-  + demoTiming.transcription
-  + demoTiming.outgoingText;
-const demoTrailDuration = demoPhraseInterval / 4;
+const demoTrailDuration = demoTiming.transcriptionLap;
 badge?.style.setProperty('--demo-trail-duration', `${demoTrailDuration}ms`);
-activityTrail?.addEventListener('animationend', event => {
-  if (event.animationName === 'trail-flow') badge?.classList.add('is-trail-complete');
-});
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -107,6 +97,30 @@ const delay = (duration, signal) => new Promise((resolve, reject) => {
   };
   signal?.addEventListener('abort', handleAbort, {once: true});
 });
+
+const waitForTrailCompletion = signal => {
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  if (prefersReducedMotion || !activityTrail) return delay(1, signal);
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      activityTrail.removeEventListener('animationend', handleAnimationEnd);
+      signal?.removeEventListener('abort', handleAbort);
+    };
+    const handleAnimationEnd = event => {
+      if (event.animationName !== 'trail-flow') return;
+      cleanup();
+      badge?.classList.add('is-trail-complete');
+      resolve();
+    };
+    const handleAbort = () => {
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    activityTrail.addEventListener('animationend', handleAnimationEnd);
+    signal?.addEventListener('abort', handleAbort, {once: true});
+  });
+};
 
 const refreshSourceRevision = async () => {
   if (!sourceButton || !sourceRevision) return;
@@ -284,21 +298,14 @@ const setTimer = elapsedMilliseconds => {
 const replaceOutput = async (text, signal) => {
   if (!demoOutput) return;
 
+  demoOutput.textContent = text;
+
   if (prefersReducedMotion || typeof demoOutput.animate !== 'function') {
-    demoOutput.textContent = text;
     return;
   }
 
-  const outgoing = demoOutput.animate(
-    [{opacity: 1, transform: 'translateY(0)'}, {opacity: 0, transform: 'translateY(-4px)'}],
-    {duration: demoTiming.outgoingText, easing: 'ease-in', fill: 'forwards'}
-  );
-  await outgoing.finished;
-  if (signal.aborted) return;
-  demoOutput.textContent = text;
-  outgoing.cancel();
   const incoming = demoOutput.animate(
-    [{opacity: 0, transform: 'translateY(5px)'}, {opacity: 1, transform: 'translateY(0)'}],
+    [{opacity: .25, transform: 'translateY(5px)'}, {opacity: 1, transform: 'translateY(0)'}],
     {duration: demoTiming.incomingText, easing: 'cubic-bezier(.22, 1, .36, 1)'}
   );
   await incoming.finished;
@@ -320,8 +327,7 @@ const setListeningState = () => {
       'is-cycle-progress',
       'is-trail-complete'
     );
-    void badge.offsetWidth;
-    badge.classList.add('is-listening', 'is-cycle-progress');
+    badge.classList.add('is-listening');
   }
   waveform?.classList.remove('is-silent');
   badge?.setAttribute('aria-label', 'Listening. Use Stop and Insert or Send.');
@@ -378,18 +384,18 @@ const runCycle = async signal => {
   }
 
   phase = 'transcribing';
-  badge?.classList.remove('is-listening');
-  badge?.classList.add('is-transcribing');
+  badge?.classList.remove('is-listening', 'is-trail-complete', 'is-cycle-progress');
+  if (badge) void badge.offsetWidth;
+  const trailCompletion = waitForTrailCompletion(signal);
+  badge?.classList.add('is-transcribing', 'is-cycle-progress');
   badge?.setAttribute('aria-label', 'Transcribing locally.');
-  await delay(demoTiming.transcription, signal);
+  await trailCompletion;
 
   phase = 'inserting';
-  badge?.classList.remove('is-transcribing');
+  badge?.classList.remove('is-transcribing', 'is-cycle-progress', 'is-trail-complete');
   badge?.classList.add('is-displaying');
   badge?.setAttribute('aria-label', 'Dictation inserted.');
   await replaceOutput(demoPhrases[phraseIndex], signal);
-  badge?.classList.remove('is-cycle-progress');
-  badge?.classList.remove('is-trail-complete');
   phraseIndex = (phraseIndex + 1) % demoPhrases.length;
   await delay(1250, signal);
 
