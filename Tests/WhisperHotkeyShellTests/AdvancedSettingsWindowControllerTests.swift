@@ -324,7 +324,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedEngines: [RecognitionEngine] = []
         var selectedDecodingProfiles: [DecodingProfile] = []
         var processingSelections: [ModelProcessingMode] = []
-        var dictionarySelections: [[String]] = []
+        var dictionaryAdditions: [[String]] = []
+        var dictionaryRemovals: [String] = []
         var retentionSelections: [Bool] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeThemeSelection] = []
@@ -341,7 +342,12 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                     selectedDecodingProfiles.append($0)
                 },
                 selectProcessingMode: { processingSelections.append($0) },
-                setInternalDictionary: { dictionarySelections.append($0) },
+                addInternalDictionaryEntries: {
+                    dictionaryAdditions.append($0)
+                },
+                removeInternalDictionaryEntry: {
+                    dictionaryRemovals.append($0)
+                },
                 setKeepsLatestDictation: { retentionSelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) },
@@ -375,7 +381,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
         XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
         XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
-        XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
+        XCTAssertEqual(dictionaryAdditions, [["Codex", "Claude Code"]])
+        XCTAssertTrue(dictionaryRemovals.isEmpty)
         XCTAssertEqual(retentionSelections, [false])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.builtIn(.nord)])
@@ -426,6 +433,67 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testDictionaryDraftIsIsolatedFromExplicitExistingEntryRemoval() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                internalDictionaryEntries: ["AGENTS.md", "Codex"]
+            )
+        )
+        var additions: [[String]] = []
+        var removals: [String] = []
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: { box.value },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                addInternalDictionaryEntries: { additions.append($0) },
+                removeInternalDictionaryEntry: { removals.append($0) },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        controller.appendDictatedInternalDictionaryDraft(
+            "Add SAM, and projLab"
+        )
+        XCTAssertEqual(
+            controller.internalDictionaryDraftForTesting,
+            "Add SAM, and projLab"
+        )
+        XCTAssertTrue(
+            controller.internalDictionaryPreviewForTesting.contains(
+                "Ready: SAM · projLab"
+            )
+        )
+
+        controller.removeInternalDictionaryEntryForTesting(at: 0)
+        XCTAssertEqual(removals, ["AGENTS.md"])
+        XCTAssertEqual(
+            controller.internalDictionaryDraftForTesting,
+            "Add SAM, and projLab"
+        )
+        XCTAssertTrue(additions.isEmpty)
+
+        controller.addInternalDictionaryDraftForTesting()
+        XCTAssertEqual(additions, [["SAM", "projLab"]])
+        XCTAssertEqual(controller.internalDictionaryDraftForTesting, "")
+    }
+
+    @MainActor
+    func testDictionaryDraftCanOwnTheAppLocalDictationDestination() {
+        let box = AdvancedSettingsStateBox(makeAdvancedSettingsState())
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+
+        XCTAssertFalse(controller.internalDictionaryDraftIsFocused)
+        controller.focusInternalDictionaryDraftForTesting()
+        XCTAssertTrue(controller.internalDictionaryDraftIsFocused)
+    }
+
+    @MainActor
     func testCapsLockForcesToggle() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
@@ -471,7 +539,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectHotkey: { _ in mutationCount += 1 },
                 selectModel: { _ in mutationCount += 1 },
                 selectProcessingMode: { _ in mutationCount += 1 },
-                setInternalDictionary: { _ in mutationCount += 1 },
+                addInternalDictionaryEntries: { _ in mutationCount += 1 },
+                removeInternalDictionaryEntry: { _ in mutationCount += 1 },
                 setKeepsLatestDictation: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },

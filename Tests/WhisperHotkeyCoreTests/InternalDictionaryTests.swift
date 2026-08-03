@@ -69,6 +69,98 @@ final class InternalDictionaryTests: XCTestCase {
         )
     }
 
+    func testExistingDictionarySurvivesNewBinaryBootstrap() {
+        let suiteName = "InternalDictionaryUpdateTests.\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        InternalDictionary(entries: ["AGENTS.md", "projLab"]).persist(
+            defaults: defaults
+        )
+        var replacementWasApplied = false
+
+        FirstRunPreferenceBootstrap.applyIfNeeded(
+            defaults: defaults,
+            bundleIdentifier: suiteName,
+            version: 2
+        ) {
+            replacementWasApplied = true
+            InternalDictionary(entries: ["replacement"]).persist(
+                defaults: defaults
+            )
+        }
+
+        XCTAssertFalse(replacementWasApplied)
+        XCTAssertEqual(
+            InternalDictionary.selected(defaults: defaults).entries,
+            ["AGENTS.md", "projLab"]
+        )
+    }
+
+    func testAddsAndRemovesEntriesByNormalizedIdentity() {
+        let dictionary = InternalDictionary(entries: ["Codex", "Café"])
+
+        XCTAssertEqual(
+            dictionary.adding(["Claude Code", "codex"]).entries,
+            ["Codex", "Café", "Claude Code"]
+        )
+        XCTAssertEqual(
+            dictionary.removing("CAFE").entries,
+            ["Codex"]
+        )
+    }
+
+    func testDraftParserHandlesDictatedListsAndPreservesPhrases() {
+        let result = InternalDictionaryDraftParser.parse(
+            "Add Codex, \"Claude, Code\", and research and development.",
+            existingEntries: []
+        )
+
+        XCTAssertEqual(
+            result.candidates,
+            ["Codex", "Claude, Code", "research and development"]
+        )
+        XCTAssertTrue(result.duplicates.isEmpty)
+        XCTAssertTrue(result.rejected.isEmpty)
+    }
+
+    func testDraftParserReportsDuplicatesAndInvalidCandidates() {
+        let oversized = String(
+            repeating: "x",
+            count: InternalDictionary.maximumEntryCharacters + 1
+        )
+        let result = InternalDictionaryDraftParser.parse(
+            "codex; \(oversized)",
+            existingEntries: ["Codex"]
+        )
+
+        XCTAssertTrue(result.candidates.isEmpty)
+        XCTAssertEqual(result.duplicates, ["codex"])
+        XCTAssertEqual(
+            result.rejected,
+            [
+                InternalDictionaryDraftRejection(
+                    value: oversized,
+                    reason: .tooLong
+                )
+            ]
+        )
+    }
+
+    func testDraftParserReportsPromptCapacityWithoutMutatingExisting() {
+        let existing = (0..<8).map {
+            "term-\($0)-" + String(repeating: "x", count: 30)
+        }
+        let saved = InternalDictionary(entries: existing)
+        let result = InternalDictionaryDraftParser.parse(
+            "one more long candidate",
+            existingEntries: saved.entries
+        )
+
+        XCTAssertTrue(result.candidates.isEmpty)
+        XCTAssertEqual(result.rejected.first?.reason, .capacity)
+        XCTAssertEqual(InternalDictionary(entries: existing), saved)
+    }
+
     func testCombinesVocabularyWithPauseContextOnlyWhenPresent() {
         XCTAssertEqual(
             RecognitionPrompt.combined(

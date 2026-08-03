@@ -230,6 +230,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var softwareUpdateTask: Task<Void, Never>?
     private var softwareUpdateInstallationTask: Task<Void, Never>?
     private var insertionContext: DictationInsertionContext?
+    private var deliversToInternalDictionaryDraft = false
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
     private var badgeFieldRect: CGRect?
@@ -529,6 +530,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 badgeCaretRect = nil
                 badgeFieldRect = nil
                 insertionContext = nil
+                deliversToInternalDictionaryDraft =
+                    advancedSettingsWindowController?
+                        .internalDictionaryDraftIsFocused == true
             }
             process(.hotkeyPressed(at: eventTime))
 
@@ -846,6 +850,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let precedingRecognition = recognitionTask
         let sessionPreload = preloadTask
         let shouldSubmit = completionBehavior == .insertAndSubmit
+            && !deliversToInternalDictionaryDraft
         recognitionTask = Task { @MainActor [weak self, recognizer] in
             defer { recording.delete() }
             if let precedingRecognition {
@@ -892,6 +897,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
             }
+            deliversToInternalDictionaryDraft = false
             process(.chunkedSessionFinished)
         }
         return true
@@ -1058,6 +1064,20 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliverPauseChunk(_ transcript: String) {
+        if deliversToInternalDictionaryDraft {
+            let trimmed = transcript.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmed.isEmpty {
+                advancedSettingsWindowController?
+                    .appendDictatedInternalDictionaryDraft(trimmed)
+                lastDictation.retainSuccessful(trimmed)
+                pauseSessionDidInsert = true
+                logger.info("Pause-mode chunk added to dictionary draft")
+                updateMenuBar()
+            }
+            return
+        }
         let context = contextProvider.captureInsertionContext()
         switch delivery.deliver(transcript: transcript, context: context) {
         case .inserted:
@@ -1092,6 +1112,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func deliver(_ transcript: String) -> Bool {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if deliversToInternalDictionaryDraft {
+            insertionContext = nil
+            deliversToInternalDictionaryDraft = false
+            guard !trimmed.isEmpty else {
+                fail(
+                    "No speech detected.",
+                    presentationDuration: BadgePresentationDuration.noSpeech
+                )
+                return false
+            }
+            advancedSettingsWindowController?
+                .appendDictatedInternalDictionaryDraft(trimmed)
+            lastDictation.retainSuccessful(trimmed)
+            logger.info("Dictation added to dictionary draft")
+            completionBehavior = .insert
+            process(.deliveryFinished)
+            return true
+        }
         let result = delivery.deliver(
             transcript: transcript,
             context: insertionContext
@@ -1134,6 +1172,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
         completionBehavior = .insert
+        deliversToInternalDictionaryDraft = false
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionTranscript = nil
@@ -1511,8 +1550,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     selectProcessingMode: { [weak self] mode in
                         self?.selectProcessingMode(mode)
                     },
-                    setInternalDictionary: { [weak self] entries in
-                        self?.setInternalDictionary(entries)
+                    addInternalDictionaryEntries: { [weak self] entries in
+                        self?.addInternalDictionaryEntries(entries)
+                    },
+                    removeInternalDictionaryEntry: { [weak self] entry in
+                        self?.removeInternalDictionaryEntry(entry)
                     },
                     setKeepsLatestDictation: { [weak self] enabled in
                         self?.setKeepsLatestDictation(enabled)
@@ -1775,11 +1817,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         updateMenuBar()
     }
 
-    private func setInternalDictionary(_ entries: [String]) {
+    private func addInternalDictionaryEntries(_ entries: [String]) {
         guard !machine.phase.isBusy else {
             return
         }
-        let updated = InternalDictionary(entries: entries)
+        let updated = internalDictionary.adding(entries)
+        guard updated != internalDictionary else {
+            return
+        }
+        internalDictionary = updated
+        updated.persist()
+        advancedSettingsWindowController?.refreshIfVisible()
+    }
+
+    private func removeInternalDictionaryEntry(_ entry: String) {
+        guard !machine.phase.isBusy else {
+            return
+        }
+        let updated = internalDictionary.removing(entry)
         guard updated != internalDictionary else {
             return
         }
@@ -1923,6 +1978,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
         completionBehavior = .insert
+        deliversToInternalDictionaryDraft = false
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionTranscript = nil

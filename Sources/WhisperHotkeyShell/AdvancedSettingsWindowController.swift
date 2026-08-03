@@ -65,7 +65,8 @@ public struct AdvancedSettingsActions {
     public var selectEngine: (RecognitionEngine) -> Void
     public var selectDecodingProfile: (DecodingProfile) -> Void
     public var selectProcessingMode: (ModelProcessingMode) -> Void
-    public var setInternalDictionary: ([String]) -> Void
+    public var addInternalDictionaryEntries: ([String]) -> Void
+    public var removeInternalDictionaryEntry: (String) -> Void
     public var setKeepsLatestDictation: (Bool) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeThemeSelection) -> Void
@@ -82,7 +83,8 @@ public struct AdvancedSettingsActions {
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
-        setInternalDictionary: @escaping ([String]) -> Void = { _ in },
+        addInternalDictionaryEntries: @escaping ([String]) -> Void = { _ in },
+        removeInternalDictionaryEntry: @escaping (String) -> Void = { _ in },
         setKeepsLatestDictation: @escaping (Bool) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeThemeSelection) -> Void = { _ in },
@@ -98,7 +100,8 @@ public struct AdvancedSettingsActions {
         self.selectEngine = selectEngine
         self.selectDecodingProfile = selectDecodingProfile
         self.selectProcessingMode = selectProcessingMode
-        self.setInternalDictionary = setInternalDictionary
+        self.addInternalDictionaryEntries = addInternalDictionaryEntries
+        self.removeInternalDictionaryEntry = removeInternalDictionaryEntry
         self.setKeepsLatestDictation = setKeepsLatestDictation
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
@@ -143,7 +146,7 @@ enum DictationModelPresentation {
 public final class AdvancedSettingsWindowController:
     NSWindowController,
     NSWindowDelegate,
-    NSTokenFieldDelegate
+    NSTextFieldDelegate
 {
     public typealias StateProvider = () -> AdvancedSettingsState
 
@@ -156,7 +159,16 @@ public final class AdvancedSettingsWindowController:
     private let engineControl = NSSegmentedControl()
     private let decodingControl = NSSegmentedControl()
     private let processingModeControl = NSSegmentedControl()
-    private let internalDictionaryField = NSTokenField()
+    private let internalDictionaryDraftField = NSTextField()
+    private let internalDictionaryPreviewLabel = NSTextField(labelWithString: "")
+    private let internalDictionaryAddButton = NSButton(
+        title: "Add",
+        target: nil,
+        action: nil
+    )
+    private let internalDictionaryExistingStack = NSStackView()
+    private let internalDictionaryExistingScrollView = NSScrollView()
+    private lazy var internalDictionaryControl = makeInternalDictionaryControl()
     private let keepLatestDictationToggle = NSButton(
         checkboxWithTitle: "Keep latest dictation",
         target: nil,
@@ -278,6 +290,28 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
+    public var internalDictionaryDraftIsFocused: Bool {
+        guard window?.isVisible == true else {
+            return false
+        }
+        let responder = window?.firstResponder
+        return responder === internalDictionaryDraftField
+            || responder === internalDictionaryDraftField.currentEditor()
+    }
+
+    public func appendDictatedInternalDictionaryDraft(_ transcript: String) {
+        let value = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            return
+        }
+        if internalDictionaryDraftField.stringValue.isEmpty {
+            internalDictionaryDraftField.stringValue = value
+        } else {
+            internalDictionaryDraftField.stringValue += ", " + value
+        }
+        updateInternalDictionaryDraftPreview()
+    }
+
     public func refresh() {
         let state = stateProvider()
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
@@ -286,10 +320,8 @@ public final class AdvancedSettingsWindowController:
         select(engine: state.selectedEngine)
         select(decodingProfile: state.decodingProfile)
         select(processingMode: state.processingMode)
-        if window?.firstResponder !== internalDictionaryField.currentEditor() {
-            internalDictionaryField.objectValue =
-                state.internalDictionaryEntries
-        }
+        rebuildInternalDictionaryEntries(state.internalDictionaryEntries)
+        updateInternalDictionaryDraftPreview()
         keepLatestDictationToggle.state =
             state.keepsLatestDictation ? .on : .off
         automaticUpdateCheckToggle.state =
@@ -323,7 +355,12 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled
                 && state.selectedEngine != .whisperKitCoreML
         processingModeControl.isEnabled = state.configurationEnabled
-        internalDictionaryField.isEnabled = state.configurationEnabled
+        internalDictionaryDraftField.isEnabled = state.configurationEnabled
+        internalDictionaryAddButton.isEnabled = state.configurationEnabled
+            && !currentInternalDictionaryDraftResult.candidates.isEmpty
+        internalDictionaryExistingStack.arrangedSubviews
+            .compactMap { $0 as? NSButton }
+            .forEach { $0.isEnabled = state.configurationEnabled }
         keepLatestDictationToggle.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
@@ -377,7 +414,8 @@ public final class AdvancedSettingsWindowController:
 
     public func windowWillClose(_ notification: Notification) {
         window?.makeFirstResponder(nil)
-        commitInternalDictionary()
+        internalDictionaryDraftField.stringValue = ""
+        updateInternalDictionaryDraftPreview()
         hideCustomThemeEditor()
         userGuidePopover.close()
         NSApp.deactivate()
@@ -504,10 +542,6 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func updateInternalDictionary(_ sender: NSTokenField) {
-        commitInternalDictionary()
-    }
-
     @objc private func toggleLatestDictationRetention(_ sender: NSButton) {
         guard stateProvider().configurationEnabled else {
             refresh()
@@ -517,12 +551,13 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    public func controlTextDidEndEditing(_ notification: Notification) {
-        guard notification.object as? NSTokenField === internalDictionaryField
+    public func controlTextDidChange(_ notification: Notification) {
+        guard notification.object as? NSTextField
+                === internalDictionaryDraftField
         else {
             return
         }
-        commitInternalDictionary()
+        updateInternalDictionaryDraftPreview()
     }
 
     @objc private func selectTheme(_ sender: NSPopUpButton) {
@@ -755,22 +790,25 @@ public final class AdvancedSettingsWindowController:
             )
         }
         processingModeControl.setAccessibilityLabel("Processing")
-        internalDictionaryField.delegate = self
-        internalDictionaryField.target = self
-        internalDictionaryField.action =
-            #selector(updateInternalDictionary(_:))
-        internalDictionaryField.tokenStyle = .rounded
-        internalDictionaryField.tokenizingCharacterSet =
-            CharacterSet(charactersIn: ",\n")
-        internalDictionaryField.placeholderString =
-            "Add words or phrases, then press Return"
-        internalDictionaryField.toolTip =
-            "Biases local recognition toward these spellings. Separate entries with commas or Return."
-        internalDictionaryField.setAccessibilityLabel("Internal Dictionary")
-        internalDictionaryField.maximumNumberOfLines = 3
-        internalDictionaryField.lineBreakMode = .byWordWrapping
-        internalDictionaryField.cell?.wraps = true
-        internalDictionaryField.cell?.usesSingleLineMode = false
+        internalDictionaryDraftField.delegate = self
+        internalDictionaryDraftField.placeholderString =
+            "Type or dictate a comma-separated list"
+        internalDictionaryDraftField.toolTip =
+            "Draft entries stay unsaved until you choose Add."
+        internalDictionaryDraftField.setAccessibilityLabel(
+            "Add internal dictionary entries"
+        )
+        internalDictionaryDraftField.maximumNumberOfLines = 3
+        internalDictionaryDraftField.lineBreakMode = .byWordWrapping
+        internalDictionaryDraftField.cell?.wraps = true
+        internalDictionaryDraftField.cell?.usesSingleLineMode = false
+        internalDictionaryAddButton.target = self
+        internalDictionaryAddButton.action =
+            #selector(addInternalDictionaryDraft)
+        internalDictionaryAddButton.bezelStyle = .rounded
+        internalDictionaryAddButton.setAccessibilityLabel(
+            "Add parsed dictionary entries"
+        )
         configure(
             recordingLimitPopup,
             values: RecordingLimit.allCases.map {
@@ -975,27 +1013,101 @@ public final class AdvancedSettingsWindowController:
         loginItemToggle.isEnabled = status != .unknown
     }
 
-    private func commitInternalDictionary() {
+    private var currentInternalDictionaryDraftResult:
+        InternalDictionaryDraftParseResult
+    {
+        InternalDictionaryDraftParser.parse(
+            internalDictionaryDraftField.stringValue,
+            existingEntries: stateProvider().internalDictionaryEntries
+        )
+    }
+
+    @objc private func addInternalDictionaryDraft() {
         guard stateProvider().configurationEnabled else {
             refresh()
             return
         }
-        let rawEntries: [String]
-        if let entries = internalDictionaryField.objectValue as? [String] {
-            rawEntries = entries
-        } else {
-            rawEntries = internalDictionaryField.stringValue.components(
-                separatedBy: CharacterSet(charactersIn: ",\n")
-            )
-        }
-        let dictionary = InternalDictionary(entries: rawEntries)
-        internalDictionaryField.objectValue = dictionary.entries
-        guard dictionary.entries
-                != stateProvider().internalDictionaryEntries
-        else {
+        let result = currentInternalDictionaryDraftResult
+        guard !result.candidates.isEmpty else {
+            updateInternalDictionaryDraftPreview()
             return
         }
-        actions.setInternalDictionary(dictionary.entries)
+        actions.addInternalDictionaryEntries(result.candidates)
+        internalDictionaryDraftField.stringValue = ""
+        updateInternalDictionaryDraftPreview()
+    }
+
+    @objc private func removeInternalDictionaryEntry(_ sender: NSButton) {
+        guard stateProvider().configurationEnabled,
+              stateProvider().internalDictionaryEntries.indices.contains(
+                sender.tag
+              )
+        else {
+            refresh()
+            return
+        }
+        actions.removeInternalDictionaryEntry(
+            stateProvider().internalDictionaryEntries[sender.tag]
+        )
+    }
+
+    private func updateInternalDictionaryDraftPreview() {
+        let result = currentInternalDictionaryDraftResult
+        var parts: [String] = []
+        if !result.candidates.isEmpty {
+            parts.append("Ready: " + result.candidates.joined(separator: " · "))
+        }
+        if !result.duplicates.isEmpty {
+            parts.append("Already saved: \(result.duplicates.count)")
+        }
+        if !result.rejected.isEmpty {
+            parts.append("Could not add: \(result.rejected.count)")
+        }
+        internalDictionaryPreviewLabel.stringValue = parts.joined(
+            separator: "   "
+        )
+        internalDictionaryAddButton.title = result.candidates.isEmpty
+            ? "Add"
+            : "Add \(result.candidates.count)"
+        internalDictionaryAddButton.isEnabled =
+            stateProvider().configurationEnabled
+                && !result.candidates.isEmpty
+    }
+
+    private func rebuildInternalDictionaryEntries(_ entries: [String]) {
+        internalDictionaryExistingStack.arrangedSubviews.forEach { view in
+            internalDictionaryExistingStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        if entries.isEmpty {
+            let empty = NSTextField(labelWithString: "No saved entries")
+            empty.textColor = .secondaryLabelColor
+            empty.font = .systemFont(ofSize: 11)
+            internalDictionaryExistingStack.addArrangedSubview(empty)
+            return
+        }
+        for (index, entry) in entries.enumerated() {
+            let button = NSButton(
+                title: "\(entry)  ×",
+                target: self,
+                action: #selector(removeInternalDictionaryEntry(_:))
+            )
+            button.tag = index
+            button.bezelStyle = .rounded
+            button.alignment = .left
+            button.setContentCompressionResistancePriority(
+                .defaultLow,
+                for: .horizontal
+            )
+            button.cell?.lineBreakMode = .byTruncatingMiddle
+            button.setAccessibilityLabel("Remove \(entry)")
+            button.toolTip = "Remove \(entry)"
+            button.isEnabled = stateProvider().configurationEnabled
+            internalDictionaryExistingStack.addArrangedSubview(button)
+            button.widthAnchor.constraint(
+                lessThanOrEqualTo: internalDictionaryExistingStack.widthAnchor
+            ).isActive = true
+        }
     }
 
     private func updateSummary(
@@ -1109,6 +1221,84 @@ public final class AdvancedSettingsWindowController:
         processingModeControl.selectedSegment = index
     }
 
+    private func makeInternalDictionaryControl() -> NSView {
+        let addStack = NSStackView()
+        addStack.orientation = .vertical
+        addStack.alignment = .leading
+        addStack.spacing = 6
+        addStack.edgeInsets = NSEdgeInsets(
+            top: 8,
+            left: 8,
+            bottom: 8,
+            right: 8
+        )
+        internalDictionaryDraftField.translatesAutoresizingMaskIntoConstraints =
+            false
+        internalDictionaryDraftField.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: 44
+        ).isActive = true
+        internalDictionaryDraftField.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: 176
+        ).isActive = true
+        internalDictionaryPreviewLabel.font = .systemFont(ofSize: 10)
+        internalDictionaryPreviewLabel.textColor = .secondaryLabelColor
+        internalDictionaryPreviewLabel.maximumNumberOfLines = 1
+        internalDictionaryPreviewLabel.lineBreakMode = .byTruncatingTail
+        internalDictionaryPreviewLabel.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        addStack.addArrangedSubview(internalDictionaryDraftField)
+        addStack.addArrangedSubview(internalDictionaryPreviewLabel)
+        addStack.addArrangedSubview(internalDictionaryAddButton)
+
+        let addBox = NSBox()
+        addBox.title = "Add"
+        addBox.titlePosition = .atTop
+        addBox.boxType = .primary
+        addBox.contentView = addStack
+
+        internalDictionaryExistingStack.orientation = .vertical
+        internalDictionaryExistingStack.alignment = .leading
+        internalDictionaryExistingStack.spacing = 5
+        internalDictionaryExistingStack.edgeInsets = NSEdgeInsets(
+            top: 4,
+            left: 4,
+            bottom: 4,
+            right: 4
+        )
+        internalDictionaryExistingStack.translatesAutoresizingMaskIntoConstraints =
+            false
+        internalDictionaryExistingScrollView.drawsBackground = false
+        internalDictionaryExistingScrollView.hasVerticalScroller = true
+        internalDictionaryExistingScrollView.autohidesScrollers = true
+        internalDictionaryExistingScrollView.borderType = .noBorder
+        internalDictionaryExistingScrollView.documentView =
+            internalDictionaryExistingStack
+        internalDictionaryExistingStack.widthAnchor.constraint(
+            equalTo: internalDictionaryExistingScrollView.contentView.widthAnchor
+        ).isActive = true
+        internalDictionaryExistingScrollView.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: 88
+        ).isActive = true
+
+        let existingBox = NSBox()
+        existingBox.title = "Existing"
+        existingBox.titlePosition = .atTop
+        existingBox.boxType = .primary
+        existingBox.contentView = internalDictionaryExistingScrollView
+
+        let panes = NSStackView(views: [addBox, existingBox])
+        panes.orientation = .horizontal
+        panes.alignment = .top
+        panes.spacing = 10
+        panes.distribution = .fillEqually
+        panes.translatesAutoresizingMaskIntoConstraints = false
+        panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 132).isActive =
+            true
+        return panes
+    }
+
     private func makeContentView() -> NSView {
         let root = NSView()
         root.wantsLayer = true
@@ -1171,11 +1361,8 @@ public final class AdvancedSettingsWindowController:
         addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
-            control: internalDictionaryField
+            control: internalDictionaryControl
         )
-        internalDictionaryField.heightAnchor.constraint(
-            greaterThanOrEqualToConstant: 52
-        ).isActive = true
         addRow(
             to: recognitionGrid,
             title: "Recording limit",
@@ -1450,7 +1637,7 @@ public final class AdvancedSettingsWindowController:
             && engineControl.isEnabled
             && decodingControl.isEnabled
             && processingModeControl.isEnabled
-            && internalDictionaryField.isEnabled
+            && internalDictionaryDraftField.isEnabled
             && recordingLimitPopup.isEnabled
             && themePopup.isEnabled
             && newThemeButton.isEnabled
@@ -1493,7 +1680,7 @@ public final class AdvancedSettingsWindowController:
             ("engine", engineControl),
             ("decoding", decodingControl),
             ("processing", processingModeControl),
-            ("internal dictionary", internalDictionaryField),
+            ("internal dictionary", internalDictionaryControl),
             ("last dictation retention", keepLatestDictationToggle),
             ("limit", recordingLimitPopup),
             ("theme", themePopup),
@@ -1676,12 +1863,46 @@ public final class AdvancedSettingsWindowController:
     }
 
     var internalDictionaryEntriesForTesting: [String] {
-        internalDictionaryField.objectValue as? [String] ?? []
+        stateProvider().internalDictionaryEntries
     }
 
     func setInternalDictionaryForTesting(_ entries: [String]) {
-        internalDictionaryField.objectValue = entries
-        updateInternalDictionary(internalDictionaryField)
+        internalDictionaryDraftField.stringValue = entries.joined(
+            separator: ", "
+        )
+        addInternalDictionaryDraft()
+    }
+
+    var internalDictionaryDraftForTesting: String {
+        internalDictionaryDraftField.stringValue
+    }
+
+    var internalDictionaryPreviewForTesting: String {
+        internalDictionaryPreviewLabel.stringValue
+    }
+
+    func addInternalDictionaryDraftForTesting() {
+        addInternalDictionaryDraft()
+    }
+
+    func focusInternalDictionaryDraftForTesting() {
+        window?.orderFront(nil)
+        window?.makeFirstResponder(internalDictionaryDraftField)
+    }
+
+    var internalDictionaryExistingEntryCountForTesting: Int {
+        stateProvider().internalDictionaryEntries.count
+    }
+
+    func removeInternalDictionaryEntryForTesting(at index: Int) {
+        guard internalDictionaryExistingStack.arrangedSubviews.indices.contains(
+            index
+        ), let button = internalDictionaryExistingStack.arrangedSubviews[index]
+            as? NSButton
+        else {
+            return
+        }
+        removeInternalDictionaryEntry(button)
     }
 
     func selectLimitForTesting(_ limit: RecordingLimit) {

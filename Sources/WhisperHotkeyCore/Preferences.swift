@@ -183,6 +183,26 @@ public struct InternalDictionary: Equatable, Sendable {
         )
     }
 
+    public func adding(_ candidates: [String]) -> Self {
+        Self(entries: entries + candidates)
+    }
+
+    public func removing(_ entry: String) -> Self {
+        let removedIdentity = Self.identity(for: entry)
+        return Self(
+            entries: entries.filter {
+                Self.identity(for: $0) != removedIdentity
+            }
+        )
+    }
+
+    public static func identity(for entry: String) -> String {
+        entry.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+    }
+
     private static func normalized(_ entries: [String]) -> [String] {
         var seen: Set<String> = []
         var result: [String] = []
@@ -197,10 +217,7 @@ public struct InternalDictionary: Equatable, Sendable {
                 continue
             }
             let value = String(entry)
-            let identity = value.folding(
-                options: [.caseInsensitive, .diacriticInsensitive],
-                locale: Locale(identifier: "en_US_POSIX")
-            )
+            let identity = Self.identity(for: value)
             guard seen.insert(identity).inserted else {
                 continue
             }
@@ -237,6 +254,193 @@ public struct InternalDictionary: Equatable, Sendable {
             characterCount += separatorCount + entry.count
         }
         return included.isEmpty ? nil : included.joined(separator: ", ")
+    }
+}
+
+public enum InternalDictionaryDraftRejectionReason: Equatable, Sendable {
+    case tooLong
+    case capacity
+}
+
+public struct InternalDictionaryDraftRejection: Equatable, Sendable {
+    public let value: String
+    public let reason: InternalDictionaryDraftRejectionReason
+
+    public init(
+        value: String,
+        reason: InternalDictionaryDraftRejectionReason
+    ) {
+        self.value = value
+        self.reason = reason
+    }
+}
+
+public struct InternalDictionaryDraftParseResult: Equatable, Sendable {
+    public let candidates: [String]
+    public let duplicates: [String]
+    public let rejected: [InternalDictionaryDraftRejection]
+
+    public init(
+        candidates: [String],
+        duplicates: [String],
+        rejected: [InternalDictionaryDraftRejection]
+    ) {
+        self.candidates = candidates
+        self.duplicates = duplicates
+        self.rejected = rejected
+    }
+}
+
+/// Parses explicitly entered or dictated dictionary drafts without using a
+/// model, network request, or background worker. Saved entries are never
+/// changed by parsing alone.
+public enum InternalDictionaryDraftParser {
+    private static let commandPrefixes = ["add", "include", "save"]
+
+    public static func parse(
+        _ draft: String,
+        existingEntries: [String]
+    ) -> InternalDictionaryDraftParseResult {
+        let rawValues = splitPreservingQuotedDelimiters(draft)
+        var existingIdentities = Set(
+            existingEntries.map(InternalDictionary.identity(for:))
+        )
+        var candidates: [String] = []
+        var duplicates: [String] = []
+        var rejected: [InternalDictionaryDraftRejection] = []
+
+        for (index, rawValue) in rawValues.enumerated() {
+            let value = cleaned(
+                rawValue,
+                isFirst: index == rawValues.startIndex,
+                isLastInList: rawValues.count > 1
+                    && index == rawValues.index(before: rawValues.endIndex)
+            )
+            guard !value.isEmpty else {
+                continue
+            }
+            guard value.count <= InternalDictionary.maximumEntryCharacters
+            else {
+                rejected.append(
+                    InternalDictionaryDraftRejection(
+                        value: value,
+                        reason: .tooLong
+                    )
+                )
+                continue
+            }
+
+            let identity = InternalDictionary.identity(for: value)
+            guard existingIdentities.insert(identity).inserted else {
+                duplicates.append(value)
+                continue
+            }
+
+            let merged = InternalDictionary(
+                entries: existingEntries + candidates + [value]
+            )
+            guard merged.entries.contains(where: {
+                InternalDictionary.identity(for: $0) == identity
+            }) else {
+                existingIdentities.remove(identity)
+                rejected.append(
+                    InternalDictionaryDraftRejection(
+                        value: value,
+                        reason: .capacity
+                    )
+                )
+                continue
+            }
+            candidates.append(value)
+        }
+
+        return InternalDictionaryDraftParseResult(
+            candidates: candidates,
+            duplicates: duplicates,
+            rejected: rejected
+        )
+    }
+
+    private static func splitPreservingQuotedDelimiters(
+        _ draft: String
+    ) -> [String] {
+        var result: [String] = []
+        var current = ""
+        var quote: Character?
+
+        for character in draft {
+            if character == "\"" || character == "'"
+                || character == "“" || character == "”"
+                || character == "‘" || character == "’"
+            {
+                if quote == nil {
+                    quote = character
+                } else if quoteMatches(opening: quote, closing: character) {
+                    quote = nil
+                } else {
+                    current.append(character)
+                }
+                continue
+            }
+            if quote == nil,
+               character == "," || character == ";" || character == "\n"
+            {
+                result.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        result.append(current)
+        return result
+    }
+
+    private static func quoteMatches(
+        opening: Character?,
+        closing: Character
+    ) -> Bool {
+        switch (opening, closing) {
+        case ("\"", "\""), ("'", "'"), ("“", "”"), ("‘", "’"):
+            true
+        default:
+            false
+        }
+    }
+
+    private static func cleaned(
+        _ rawValue: String,
+        isFirst: Bool,
+        isLastInList: Bool
+    ) -> String {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let first = value.first,
+              first == "-" || first == "•"
+        {
+            value.removeFirst()
+            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if isFirst {
+            let lowercase = value.lowercased()
+            for prefix in commandPrefixes {
+                let command = prefix + " "
+                if lowercase.hasPrefix(command) {
+                    value.removeFirst(command.count)
+                    break
+                }
+            }
+        }
+        if isLastInList {
+            let lowercase = value.lowercased()
+            for connector in ["and ", "or "] where lowercase.hasPrefix(connector) {
+                value.removeFirst(connector.count)
+                break
+            }
+        }
+        return value.trimmingCharacters(
+            in: CharacterSet.whitespacesAndNewlines.union(
+                CharacterSet(charactersIn: ".")
+            )
+        )
     }
 }
 

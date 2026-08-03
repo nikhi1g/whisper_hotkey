@@ -127,11 +127,19 @@ decision. WhisperKit retains its native decoding behavior and disables this
 selector. Both whisper.cpp profiles use Metal and flash attention and give
 whisper.cpp half of the Mac's logical CPUs up to an eight-thread cap. The
 **Internal dictionary** stores up to 64 user-defined words or phrases as native
-preference strings. Settings presents them as editable tokens: commas and Return
-commit an entry and Backspace removes one. Entries are trimmed, capped, and
-deduplicated case-insensitively. The complete saved list fits a precomputed
-prompt of at most 320 characters and combines with the existing bounded Pause
-Mode context.
+preference strings outside the application bundle so updates retain them.
+Settings separates an ephemeral **Add** draft from the saved **Existing** list.
+Typing, pasting, or dictating into Add produces a deterministic local preview;
+only the explicit Add button merges validated candidates into the saved list.
+Delete and Backspace edit only the Add draft. Existing entries are removed only
+through their individually labeled remove buttons. When the Add editor owns the
+release-time destination, the normal hotkey and local recognizer route the
+transcript directly into that draft without placing it on the clipboard.
+Comma, semicolon, and newline lists are parsed without a model or network
+request, quoted phrases retain delimiters, and a final list connector is
+normalized. Entries are trimmed, capped, and deduplicated case-insensitively.
+The complete saved list fits a precomputed prompt of at most 320 characters and
+combines with the existing bounded Pause Mode context.
 Dictionary parsing happens only at launch or while Settings is edited; it adds
 no idle task, process, model, or network work. The prompt remains local, travels
 only through the owned helper's stdin, and is never logged or placed in process
