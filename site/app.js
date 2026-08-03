@@ -1,5 +1,7 @@
 const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
+const downloadButton = document.querySelector('[data-download-button]');
+const downloadLabel = document.querySelector('[data-download-label]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
 const badge = document.querySelector('[data-demo-badge]');
 const waveform = badge?.querySelector('.waveform');
@@ -100,7 +102,31 @@ const refreshSourceRevision = async () => {
   }
 };
 
+const refreshStableDownload = async () => {
+  if (!downloadButton || !downloadLabel) return;
+
+  try {
+    const response = await fetch(
+      'https://api.github.com/repos/nikhi1g/whisper_hotkey/releases/latest',
+      {headers: {Accept: 'application/vnd.github+json'}}
+    );
+    if (!response.ok) return;
+    const release = await response.json();
+    const asset = Array.isArray(release.assets)
+      ? release.assets.find(candidate => candidate.name === 'whisper_hotkey.dmg')
+      : undefined;
+    if (!asset || typeof asset.browser_download_url !== 'string') return;
+
+    downloadButton.href = asset.browser_download_url;
+    downloadButton.title = `Download ${release.tag_name}`;
+    downloadLabel.textContent = 'Download DMG';
+  } catch {
+    // The releases page remains a safe fallback until a stable DMG exists.
+  }
+};
+
 refreshSourceRevision();
+refreshStableDownload();
 window.setInterval(refreshSourceRevision, 30000);
 
 const copyText = async text => {
@@ -231,7 +257,7 @@ let selectionLocked = false;
 
 const setListeningState = () => {
   phase = 'listening';
-  badge?.classList.remove('is-transcribing');
+  badge?.classList.remove('is-transcribing', 'is-displaying');
   badge?.classList.add('is-listening');
   waveform?.classList.remove('is-silent');
   badge?.setAttribute('aria-label', 'Listening. Use Stop and Insert or Send.');
@@ -296,6 +322,9 @@ const runCycle = async signal => {
   phase = 'inserting';
   await replaceOutput(demoPhrases[phraseIndex], signal);
   phraseIndex = (phraseIndex + 1) % demoPhrases.length;
+  badge?.classList.remove('is-transcribing');
+  badge?.classList.add('is-displaying');
+  badge?.setAttribute('aria-label', 'Dictation inserted.');
   await delay(1250, signal);
 
   if (!selectionLocked) {
@@ -330,7 +359,7 @@ const restartDemo = () => {
 
   if (prefersReducedMotion) {
     phase = 'idle';
-    badge?.classList.remove('is-transcribing');
+    badge?.classList.remove('is-transcribing', 'is-displaying');
     badge?.classList.add('is-listening');
     return;
   }

@@ -142,7 +142,7 @@ public final class AdvancedSettingsWindowController:
     private let processingModeControl = NSSegmentedControl()
     private let internalDictionaryField = NSTokenField()
     private let keepLatestDictationToggle = NSButton(
-        checkboxWithTitle: "Keep latest transcript until quit",
+        checkboxWithTitle: "Keep latest dictation",
         target: nil,
         action: nil
     )
@@ -724,10 +724,8 @@ public final class AdvancedSettingsWindowController:
         keepLatestDictationToggle.target = self
         keepLatestDictationToggle.action =
             #selector(toggleLatestDictationRetention(_:))
-        keepLatestDictationToggle.toolTip =
-            "Turn off to clear the retained transcript immediately and hide Copy Last Dictation."
         keepLatestDictationToggle.setAccessibilityLabel(
-            "Keep latest transcript until quit"
+            "Keep latest dictation"
         )
     }
 
@@ -1025,6 +1023,11 @@ public final class AdvancedSettingsWindowController:
         let inputGrid = makeGrid()
         addRow(to: inputGrid, title: "Dictation key", control: hotkeyPopup)
         addRow(to: inputGrid, title: "Behavior", control: modeControl)
+        addRow(
+            to: inputGrid,
+            title: "Copy Last Dictation",
+            control: keepLatestDictationToggle
+        )
         sizeColumns(in: inputGrid)
         stack.addArrangedSubview(inputGrid)
         stack.setCustomSpacing(20, after: inputGrid)
@@ -1060,18 +1063,6 @@ public final class AdvancedSettingsWindowController:
         sizeColumns(in: recognitionGrid)
         stack.addArrangedSubview(recognitionGrid)
         stack.setCustomSpacing(20, after: recognitionGrid)
-
-        let privacyTitle = makeSectionTitle("PRIVACY")
-        stack.addArrangedSubview(privacyTitle)
-        let privacyGrid = makeGrid()
-        addRow(
-            to: privacyGrid,
-            title: "Copy Last Dictation",
-            control: keepLatestDictationToggle
-        )
-        sizeColumns(in: privacyGrid)
-        stack.addArrangedSubview(privacyGrid)
-        stack.setCustomSpacing(20, after: privacyGrid)
 
         let appearanceTitle = makeSectionTitle("APPEARANCE")
         stack.addArrangedSubview(appearanceTitle)
@@ -1161,7 +1152,6 @@ public final class AdvancedSettingsWindowController:
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            privacyGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),

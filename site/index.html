@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-14">
-  <script src="./app.js?v=compact-14" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-16">
+  <script src="./app.js?v=compact-16" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -32,8 +32,8 @@
       <div class="hero-copy">
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg" target="_blank" rel="noopener noreferrer">
-            <span>Download DMG</span>
+          <a class="button button-primary" data-download-button href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">
+            <span data-download-label>View releases</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
           <a class="button button-secondary source-button" data-source-button href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">
@@ -87,13 +87,7 @@
         <div class="listening-badge is-listening" data-demo-badge role="group" aria-label="Listening. Use Stop and Insert or Send.">
           <span class="badge-marker" aria-hidden="true"></span>
           <svg class="activity-trail" viewBox="0 0 203 42" preserveAspectRatio="none" aria-hidden="true">
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
-            <rect x="0.75" y="0.75" width="201.5" height="40.5" rx="20.25"></rect>
+            <path pathLength="100" d="M101.5.75H182a20.25 20.25 0 0 1 0 40.5H21a20.25 20.25 0 0 1 0-40.5h80.5Z"></path>
           </svg>
           <span class="waveform" aria-hidden="true">
             <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
@@ -180,7 +174,6 @@
     <span>© <span id="year"></span> Nikhil Gupta</span>
     <span class="footer-center">
       <em>“The fastest interface is the one that you don’t have to think about.”</em>
-      <small>Copy Last Dictation keeps only the latest successful transcript in memory until quit. Turn off anytime in Settings.</small>
     </span>
     <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>

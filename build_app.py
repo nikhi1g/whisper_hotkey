@@ -132,12 +132,31 @@ def bundle_verified_base_model() -> None:
     shutil.copy2(source, destination_directory / BASE_MODEL_NAME)
 
 
+def dependency_prefix(environment_key: str, formula: str) -> Path | None:
+    configured = os.environ.get(environment_key, "").strip()
+    if configured:
+        return Path(configured).resolve()
+
+    brew = shutil.which("brew")
+    if brew is None:
+        return None
+    result = subprocess.run(
+        [brew, "--prefix", formula],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return Path(result.stdout.strip()).resolve()
+
+
 def bundled_dynamic_libraries() -> list[Path]:
-    configured_prefixes = [
-        os.environ.get("WHISPER_CPP_PREFIX", "").strip(),
-        os.environ.get("GGML_PREFIX", "").strip(),
+    discovered_prefixes = [
+        dependency_prefix("WHISPER_CPP_PREFIX", "whisper-cpp"),
+        dependency_prefix("GGML_PREFIX", "ggml"),
     ]
-    prefixes = [Path(value).resolve() for value in configured_prefixes if value]
+    prefixes = [prefix for prefix in discovered_prefixes if prefix is not None]
     homebrew = os.environ.get("HOMEBREW_PREFIX", "").strip()
     allowed_roots = [*prefixes]
     if homebrew:

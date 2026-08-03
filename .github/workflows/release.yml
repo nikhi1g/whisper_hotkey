@@ -14,6 +14,8 @@ jobs:
   release:
     runs-on: macos-15
     env:
+      RELEASE_REF_TYPE: ${{ github.ref_type }}
+      RELEASE_REF_NAME: ${{ github.ref_name }}
       CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
       CERTIFICATE_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
       NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
@@ -27,8 +29,8 @@ jobs:
 
       - name: Validate release ref and secrets
         run: |
-          test "${GITHUB_REF_TYPE}" = "tag"
-          test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+          test "${RELEASE_REF_TYPE}" = "tag"
+          test "${RELEASE_REF_NAME}" = "v$(cat VERSION)"
           test -n "${CERTIFICATE_P12_BASE64}"
           test -n "${CERTIFICATE_P12_PASSWORD}"
           test -n "${NOTARY_APPLE_ID}"
