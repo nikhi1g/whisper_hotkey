@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-6">
-  <script src="./app.js?v=compact-6" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-7">
+  <script src="./app.js?v=compact-7" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -31,13 +31,19 @@
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
-        <p class="hero-summary">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</p>
+        <p class="hero-summary" data-dictation-copy>
+          <span class="summary-copy" data-visible-copy aria-hidden="true">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
+          <span class="visually-hidden" data-live-copy aria-live="polite">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
+        </p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download preview DMG</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
-          <a class="button button-secondary" href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">View source <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary source-button" data-source-button href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">
+            <span class="source-label">View source <small data-source-revision>main:latest</small></span>
+            <span class="button-arrow" aria-hidden="true">↗</span>
+          </a>
         </div>
         <p class="download-detail">
           <span>Preview, Apple Silicon, macOS 14+. Base model included.</span>
@@ -52,7 +58,7 @@
           </div>
           <div class="document-body">
             <p class="document-label">PROJECT NOTE</p>
-            <p class="typed-line">The fastest interface is the one that’s already under your fingertips.<span class="caret"></span></p>
+            <p class="typed-line">The fastest interface is the one that you don’t have to think about.<span class="caret"></span></p>
           </div>
         </div>
         <div class="listening-badge" role="img" aria-label="The actual listening HUD with waveform, elapsed time, Stop and Insert, and Send controls">
@@ -70,7 +76,7 @@
             </svg>
           </span>
         </div>
-        <div class="key-hint" data-hotkey-cycle aria-label="The dictation key is configurable in Settings">
+        <div class="key-hint" data-hotkey-cycle aria-label="Press and Hold with Right Command">
           <kbd aria-hidden="true">Right ⌘</kbd><span aria-hidden="true">hold to talk</span>
         </div>
       </div>
@@ -82,7 +88,7 @@
         <ol class="compact-steps">
           <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
           <li><span>2</span><p><strong>Allow</strong> Microphone, Accessibility, and Input Monitoring.</p></li>
-          <li><span>3</span><p><strong>Dictate</strong> Release to insert.</p></li>
+          <li><span>3</span><p><strong>Dictate</strong> Use your selected key and behavior.</p></li>
         </ol>
       </div>
 
@@ -125,13 +131,13 @@
             <circle r="30"></circle><text y="-3">Copy last</text><text y="13">dictation</text>
           </g>
         </svg>
-        <p>Audio is deleted. Copy Last Dictation keeps only the latest successful transcript in memory until quit.</p>
       </div>
     </section>
   </main>
 
   <footer>
     <span>© <span id="year"></span> Nikhil Gupta</span>
+    <span class="footer-privacy">Audio is deleted. Copy Last Dictation keeps only the latest successful transcript in memory until quit.</span>
     <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>
 </body>
