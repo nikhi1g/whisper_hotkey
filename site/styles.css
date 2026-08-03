@@ -184,6 +184,9 @@ nav a:focus-visible,
   font-size: 12px;
 }
 
+.download-detail > span { display: block; }
+.download-detail > span + span { margin-top: 4px; color: #8996a5; }
+
 .product-stage {
   position: relative;
   min-height: 520px;
@@ -269,9 +272,12 @@ nav a:focus-visible,
   gap: 10px;
   color: #778493;
   font-size: 11px;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
-kbd { padding: 7px 10px; border: 1px solid #3b4654; border-bottom-width: 3px; border-radius: 7px; background: #181f28; color: #cdd5df; font: 11px -apple-system, BlinkMacSystemFont, sans-serif; }
+.key-hint.is-changing { opacity: 0; transform: translateY(4px); }
+
+kbd { min-width: 66px; padding: 7px 10px; border: 1px solid #3b4654; border-bottom-width: 3px; border-radius: 7px; background: #181f28; color: #cdd5df; font: 11px -apple-system, BlinkMacSystemFont, sans-serif; text-align: center; white-space: nowrap; }
 
 .proof-strip {
   width: min(calc(100% - 40px), var(--content));
