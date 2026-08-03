@@ -1,4 +1,5 @@
 const repository = 'nikhi1g/whisper_hotkey';
+const releasePage = `https://github.com/${repository}/releases/latest`;
 const downloadLinks = [...document.querySelectorAll('.js-download')];
 const releaseDetail = document.querySelector('.js-release-detail');
 const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
@@ -25,6 +26,10 @@ const hydrateRelease = async () => {
     });
     releaseDetail.textContent = `${release.tag_name} · Apple Silicon · macOS 14+ · ${readableSize(dmg.size)}`;
   } catch {
+    downloadLinks.forEach(link => {
+      link.href = releasePage;
+      link.querySelector('span').textContent = 'View latest release';
+    });
     releaseDetail.textContent = 'Apple Silicon · macOS 14+';
   }
 };
