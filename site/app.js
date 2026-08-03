@@ -139,7 +139,7 @@ copyOptions.forEach(option => {
     }
 
     resetTimer = window.setTimeout(() => {
-      state.textContent = 'Copy';
+      state.textContent = 'Click to copy';
     }, 1600);
   });
 });
