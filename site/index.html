@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-20">
-  <script src="./app.js?v=compact-20" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-21">
+  <script src="./app.js?v=compact-21" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -51,24 +51,27 @@
           </div>
           <div class="document-body">
             <div class="demo-settings" aria-label="Demo settings">
-              <label>
+              <div class="key-field">
                 <span>Key</span>
-                <span class="select-shell">
-                  <select data-demo-key aria-label="Dictation key">
-                    <option value="right-option">Right Option</option>
-                    <option value="right-command">Right Command</option>
-                    <option value="left-command">Left Command</option>
-                    <option value="right-shift">Right Shift</option>
-                    <option value="left-shift">Left Shift</option>
-                    <option value="left-option">Left Option</option>
-                    <option value="right-control">Right Control</option>
-                    <option value="left-control">Left Control</option>
-                    <option value="caps-lock">Caps Lock</option>
-                    <option value="fn-globe">Fn / Globe</option>
-                  </select>
-                  <svg viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5"></path></svg>
-                </span>
-              </label>
+                <div class="key-picker" data-key-picker>
+                  <button class="key-trigger" data-demo-key type="button" aria-label="Dictation key" aria-haspopup="listbox" aria-expanded="false" aria-controls="demo-key-options">
+                    <span data-demo-key-label>Right Option</span>
+                    <svg viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5"></path></svg>
+                  </button>
+                  <ul class="key-options" data-demo-key-options id="demo-key-options" role="listbox" aria-label="Dictation key" hidden>
+                    <li data-hotkey-option="right-option" role="option" aria-selected="true" tabindex="-1">Right Option</li>
+                    <li data-hotkey-option="right-command" role="option" aria-selected="false" tabindex="-1">Right Command</li>
+                    <li data-hotkey-option="left-command" role="option" aria-selected="false" tabindex="-1">Left Command</li>
+                    <li data-hotkey-option="right-shift" role="option" aria-selected="false" tabindex="-1">Right Shift</li>
+                    <li data-hotkey-option="left-shift" role="option" aria-selected="false" tabindex="-1">Left Shift</li>
+                    <li data-hotkey-option="left-option" role="option" aria-selected="false" tabindex="-1">Left Option</li>
+                    <li data-hotkey-option="right-control" role="option" aria-selected="false" tabindex="-1">Right Control</li>
+                    <li data-hotkey-option="left-control" role="option" aria-selected="false" tabindex="-1">Left Control</li>
+                    <li data-hotkey-option="caps-lock" role="option" aria-selected="false" tabindex="-1">Caps Lock</li>
+                    <li data-hotkey-option="fn-globe" role="option" aria-selected="false" tabindex="-1">Fn / Globe</li>
+                  </ul>
+                </div>
+              </div>
               <div class="mode-field">
                 <span>Mode</span>
                 <div class="mode-chips" role="radiogroup" aria-label="Input behavior">

@@ -214,27 +214,77 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 .document-body { padding: 20px 24px 70px; }
 .demo-settings { display: grid; grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); align-items: center; gap: 12px; }
-.demo-settings label,
+.key-field,
 .mode-field { min-width: 0; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
-.select-shell { position: relative; min-width: 0; flex: 1; display: block; }
-.demo-settings select {
+.key-picker { position: relative; min-width: 0; flex: 1; }
+.key-trigger {
   width: 100%;
   height: 30px;
   padding: 0 30px 0 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  appearance: none;
   background: #272d35;
   color: var(--text);
   font: 600 10.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  text-align: left;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
-.select-shell svg { position: absolute; top: 50%; right: 10px; width: 10px; height: 7px; pointer-events: none; transform: translateY(-50%); }
-.select-shell path { fill: none; stroke: #adbac7; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.demo-settings select:hover { border-color: var(--muted); background: #2d333b; }
-.demo-settings select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.demo-settings option:disabled { color: var(--muted); }
+.key-trigger svg { position: absolute; top: 50%; right: 10px; width: 10px; height: 7px; pointer-events: none; transform: translateY(-50%); transition: transform 150ms ease; }
+.key-trigger path { fill: none; stroke: #adbac7; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.key-trigger:hover { border-color: var(--muted); background: #2d333b; }
+.key-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.key-trigger[aria-expanded="true"] { border-color: var(--accent); background: #2d333b; box-shadow: 0 0 0 3px rgb(83 155 245 / 10%); }
+.key-trigger[aria-expanded="true"] svg { transform: translateY(-50%) rotate(180deg); }
+.key-options {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 162px);
+  max-height: min(310px, 52vh);
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(39 45 53 / 98%);
+  box-shadow: 0 18px 45px rgb(0 0 0 / 42%), 0 0 0 1px rgb(255 255 255 / 2%);
+  list-style: none;
+  transform-origin: top left;
+  animation: key-menu-in 130ms cubic-bezier(.22, 1, .36, 1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.key-options[hidden] { display: none; }
+.key-options li {
+  position: relative;
+  min-height: 27px;
+  padding: 5px 28px 5px 9px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  color: #adbac7;
+  font: 550 10.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  outline: none;
+}
+.key-options li::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  width: 6px;
+  height: 3px;
+  border-bottom: 1.5px solid var(--accent-strong);
+  border-left: 1.5px solid var(--accent-strong);
+  opacity: 0;
+  transform: translateY(-1px) rotate(-45deg);
+}
+.key-options li:hover,
+.key-options li:focus-visible { background: var(--surface-strong); color: var(--text); }
+.key-options li[aria-selected="true"] { background: rgb(83 155 245 / 14%); color: var(--accent-strong); }
+.key-options li[aria-selected="true"]::after { opacity: 1; }
+@keyframes key-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .mode-chips { min-width: 0; flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .mode-chips button {
   height: 30px;
@@ -289,6 +339,8 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 }
 .listening-badge.is-cycle-progress .badge-marker { opacity: 0; }
 .listening-badge.is-cycle-progress .activity-trail { opacity: 1; }
+.listening-badge.is-cycle-progress.is-trail-complete .badge-marker { opacity: 1; }
+.listening-badge.is-cycle-progress.is-trail-complete .activity-trail { opacity: 0; }
 .listening-badge.is-cycle-progress .activity-trail path {
   animation-name: trail-flow;
   animation-duration: var(--demo-trail-duration, 1110ms);
@@ -437,9 +489,9 @@ footer {
   .document-window { min-height: 300px; }
   .document-body { padding: 22px 20px 76px; }
   .demo-settings { grid-template-columns: 1fr; gap: 8px; }
-  .demo-settings label,
+  .key-field,
   .mode-field { justify-content: space-between; }
-  .select-shell,
+  .key-picker,
   .mode-chips { width: min(230px, calc(100% - 44px)); flex: 0 1 auto; }
   .demo-instruction { font-size: 12px; }
   .typed-line { font-size: 19px; }

@@ -4,12 +4,17 @@ const downloadButton = document.querySelector('[data-download-button]');
 const downloadLabel = document.querySelector('[data-download-label]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
 const badge = document.querySelector('[data-demo-badge]');
+const activityTrail = badge?.querySelector('.activity-trail path');
 const waveform = badge?.querySelector('.waveform');
 const waveformBars = badge?.querySelectorAll('.waveform b') ?? [];
 const timer = document.querySelector('[data-demo-timer]');
 const stopButton = document.querySelector('[data-demo-stop]');
 const sendButton = document.querySelector('[data-demo-send]');
-const keySelect = document.querySelector('[data-demo-key]');
+const keyPicker = document.querySelector('[data-key-picker]');
+const keyTrigger = document.querySelector('[data-demo-key]');
+const keyLabel = document.querySelector('[data-demo-key-label]');
+const keyMenu = document.querySelector('[data-demo-key-options]');
+const keyOptions = [...document.querySelectorAll('[data-hotkey-option]')];
 const behaviorButtons = [...document.querySelectorAll('[data-demo-behavior]')];
 const instruction = document.querySelector('[data-demo-instruction]');
 const demoOutput = document.querySelector('[data-demo-output]');
@@ -32,6 +37,9 @@ const demoPhraseInterval = demoTiming.speechLead
   + demoTiming.outgoingText;
 const demoTrailDuration = demoPhraseInterval / 4;
 badge?.style.setProperty('--demo-trail-duration', `${demoTrailDuration}ms`);
+activityTrail?.addEventListener('animationend', event => {
+  if (event.animationName === 'trail-flow') badge?.classList.add('is-trail-complete');
+});
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -80,6 +88,7 @@ const validCombinations = hotkeyChoices.flatMap(hotkey =>
 );
 
 let selectedBehaviorID = 'hold';
+let selectedHotkeyID = 'right-option';
 
 const delay = (duration, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) {
@@ -218,8 +227,37 @@ if (waveformBars.length > 0) {
   });
 }
 
-const selectedHotkey = () => hotkeyChoices.find(choice => choice.id === keySelect?.value) ?? hotkeyChoices[0];
+const selectedHotkey = () => hotkeyChoices.find(choice => choice.id === selectedHotkeyID) ?? hotkeyChoices[0];
 const selectedBehavior = () => behaviorChoices.find(choice => choice.id === selectedBehaviorID) ?? behaviorChoices[0];
+
+const syncKeyPicker = () => {
+  const selectedOption = keyOptions.find(option => option.dataset.hotkeyOption === selectedHotkeyID);
+  if (keyLabel && selectedOption) keyLabel.textContent = selectedOption.textContent.trim();
+  keyOptions.forEach(option => {
+    option.setAttribute('aria-selected', String(option.dataset.hotkeyOption === selectedHotkeyID));
+  });
+};
+
+const focusKeyOption = index => {
+  if (keyOptions.length === 0) return;
+  keyOptions[(index + keyOptions.length) % keyOptions.length].focus();
+};
+
+const openKeyMenu = direction => {
+  if (!keyMenu || !keyTrigger) return;
+  selectionLocked = true;
+  keyMenu.hidden = false;
+  keyTrigger.setAttribute('aria-expanded', 'true');
+  const selectedIndex = Math.max(0, keyOptions.findIndex(option => option.dataset.hotkeyOption === selectedHotkeyID));
+  window.requestAnimationFrame(() => focusKeyOption(selectedIndex + direction));
+};
+
+const closeKeyMenu = returnFocus => {
+  if (!keyMenu || !keyTrigger) return;
+  keyMenu.hidden = true;
+  keyTrigger.setAttribute('aria-expanded', 'false');
+  if (returnFocus) keyTrigger.focus();
+};
 
 const updateInstruction = () => {
   if (!instruction) return;
@@ -279,7 +317,8 @@ const setListeningState = () => {
     badge.classList.remove(
       'is-transcribing',
       'is-displaying',
-      'is-cycle-progress'
+      'is-cycle-progress',
+      'is-trail-complete'
     );
     void badge.offsetWidth;
     badge.classList.add('is-listening', 'is-cycle-progress');
@@ -350,14 +389,16 @@ const runCycle = async signal => {
   badge?.setAttribute('aria-label', 'Dictation inserted.');
   await replaceOutput(demoPhrases[phraseIndex], signal);
   badge?.classList.remove('is-cycle-progress');
+  badge?.classList.remove('is-trail-complete');
   phraseIndex = (phraseIndex + 1) % demoPhrases.length;
   await delay(1250, signal);
 
   if (!selectionLocked) {
     combinationIndex = (combinationIndex + 1) % validCombinations.length;
     const next = validCombinations[combinationIndex];
-    keySelect.value = next.hotkey.id;
+    selectedHotkeyID = next.hotkey.id;
     selectedBehaviorID = next.behavior.id;
+    syncKeyPicker();
     enforceValidSelection();
     updateInstruction();
   }
@@ -378,6 +419,7 @@ const restartDemo = () => {
   demoController?.abort();
   completeRecording = undefined;
   badge?.classList.remove('is-cycle-progress');
+  badge?.classList.remove('is-trail-complete');
   sendButton?.classList.remove('is-pressed');
   stopButton?.classList.remove('is-pressed');
   enforceValidSelection();
@@ -401,7 +443,49 @@ const handleSelection = () => {
   restartDemo();
 };
 
-keySelect?.addEventListener('change', handleSelection);
+keyTrigger?.addEventListener('click', () => {
+  if (keyMenu?.hidden) openKeyMenu(0);
+  else closeKeyMenu(false);
+});
+
+keyTrigger?.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    openKeyMenu(event.key === 'ArrowDown' ? 0 : -1);
+  }
+});
+
+keyOptions.forEach((option, index) => {
+  option.addEventListener('click', () => {
+    selectedHotkeyID = option.dataset.hotkeyOption;
+    syncKeyPicker();
+    closeKeyMenu(true);
+    handleSelection();
+  });
+
+  option.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusKeyOption(index + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      focusKeyOption(event.key === 'Home' ? 0 : keyOptions.length - 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      option.click();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeKeyMenu(true);
+    } else if (event.key === 'Tab') {
+      closeKeyMenu(false);
+    }
+  });
+});
+
+document.addEventListener('pointerdown', event => {
+  if (!keyPicker?.contains(event.target)) closeKeyMenu(false);
+});
+
 behaviorButtons.forEach(button => {
   button.addEventListener('click', () => {
     if (button.disabled) return;
@@ -428,4 +512,5 @@ stopButton?.addEventListener('click', () => {
   if (phase === 'listening') completeRecording?.('stop');
 });
 
+syncKeyPicker();
 restartDemo();
