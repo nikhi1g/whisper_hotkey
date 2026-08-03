@@ -139,6 +139,7 @@ h1 {
 h1 span { color: #768390; }
 
 .hero-summary {
+  position: relative;
   max-width: 500px;
   min-height: 3em;
   margin: 15px 0 0;
@@ -147,16 +148,7 @@ h1 span { color: #768390; }
   line-height: 1.5;
 }
 
-.hero-summary.is-typing .summary-copy::after {
-  content: "";
-  width: 2px;
-  height: 1em;
-  margin-left: 3px;
-  display: inline-block;
-  vertical-align: -2px;
-  background: var(--accent);
-  animation: summary-caret 620ms steps(1) infinite;
-}
+.summary-copy { display: block; }
 
 .hero-actions {
   display: flex;
@@ -193,14 +185,6 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .source-button { min-height: 50px; }
 .source-label { display: flex; align-items: flex-start; flex-direction: column; line-height: 1.1; }
 .source-label small { margin-top: 4px; color: var(--muted); font: 500 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
-
-.download-detail {
-  margin: 9px 0 0;
-  color: #768390;
-  font-size: 12px;
-}
-
-.download-detail > span { display: block; }
 
 .product-stage {
   position: relative;
@@ -334,7 +318,6 @@ footer {
 .footer-privacy { text-align: center; }
 
 @keyframes graph-flow { to { stroke-dashoffset: -20; } }
-@keyframes summary-caret { 50% { opacity: 0; } }
 
 @media (max-width: 920px) {
   body { height: auto; min-height: 100vh; display: block; overflow: auto; }
@@ -379,7 +362,6 @@ footer {
   .hero-summary { margin-top: 9px; font-size: 13px; line-height: 1.4; }
   .hero-actions { margin-top: 10px; }
   .button { min-height: 38px; font-size: 12px; }
-  .download-detail { margin-top: 6px; font-size: 10px; }
   .product-stage { height: 180px; min-height: 180px; margin-top: 8px; }
   .document-window { min-height: 160px; }
   .window-bar { height: 32px; }

@@ -78,32 +78,36 @@ if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: re
   const liveCopy = heroSummary.querySelector('[data-live-copy]');
   let stateIndex = 0;
 
-  const typeMinimalReplacement = async nextSentence => {
-    const currentSentence = visibleCopy.textContent;
-    let sharedLength = 0;
-
-    while (
-      sharedLength < currentSentence.length &&
-      sharedLength < nextSentence.length &&
-      currentSentence[sharedLength] === nextSentence[sharedLength]
-    ) {
-      sharedLength += 1;
+  const replaceSentence = async (nextSentence, updateLabels) => {
+    if (typeof visibleCopy.animate !== 'function') {
+      visibleCopy.textContent = nextSentence;
+      liveCopy.textContent = nextSentence;
+      updateLabels();
+      return;
     }
 
-    heroSummary.classList.add('is-typing');
+    const outgoing = visibleCopy.animate(
+      [
+        {opacity: 1, transform: 'translateY(0)'},
+        {opacity: 0, transform: 'translateY(-6px)'}
+      ],
+      {duration: 180, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards'}
+    );
 
-    for (let length = currentSentence.length; length > sharedLength; length -= 1) {
-      visibleCopy.textContent = currentSentence.slice(0, length - 1);
-      await wait(3);
-    }
+    await outgoing.finished;
+    outgoing.cancel();
 
-    for (let length = sharedLength + 1; length <= nextSentence.length; length += 1) {
-      visibleCopy.textContent = nextSentence.slice(0, length);
-      await wait(8);
-    }
-
-    heroSummary.classList.remove('is-typing');
+    visibleCopy.textContent = nextSentence;
     liveCopy.textContent = nextSentence;
+    updateLabels();
+
+    await visibleCopy.animate(
+      [
+        {opacity: 0, transform: 'translateY(7px)'},
+        {opacity: 1, transform: 'translateY(0)'}
+      ],
+      {duration: 280, easing: 'cubic-bezier(.22, 1, .36, 1)'}
+    ).finished;
   };
 
   const showNextState = async () => {
@@ -111,10 +115,11 @@ if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: re
     stateIndex = (stateIndex + 1) % dictationStates.length;
     const state = dictationStates[stateIndex];
 
-    keyLabel.textContent = state.hotkey.label;
-    actionLabel.textContent = state.behavior.action;
-    hotkeyHint.setAttribute('aria-label', `${state.behavior.name} with ${state.hotkey.spoken}`);
-    await typeMinimalReplacement(state.sentence);
+    await replaceSentence(state.sentence, () => {
+      keyLabel.textContent = state.hotkey.label;
+      actionLabel.textContent = state.behavior.action;
+      hotkeyHint.setAttribute('aria-label', `${state.behavior.name} with ${state.hotkey.spoken}`);
+    });
     showNextState();
   };
 
