@@ -3,8 +3,36 @@ const heroSummary = document.querySelector('[data-dictation-copy]');
 const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
+const waveformBars = document.querySelectorAll('.waveform b');
 
 document.getElementById('year').textContent = new Date().getFullYear();
+
+if (waveformBars.length > 0) {
+  const noiseSamples = new Uint32Array(waveformBars.length * 8);
+
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(noiseSamples);
+  } else {
+    noiseSamples.forEach((_, index) => {
+      noiseSamples[index] = Math.floor(Math.random() * 0xffffffff);
+    });
+  }
+
+  let noiseIndex = 0;
+  const nextNoise = () => noiseSamples[noiseIndex++] / 0xffffffff;
+  const level = (minimum, range) => (minimum + nextNoise() * range).toFixed(2);
+
+  waveformBars.forEach(bar => {
+    bar.style.setProperty('--wave-a', level(.14, .34));
+    bar.style.setProperty('--wave-b', level(.42, .56));
+    bar.style.setProperty('--wave-c', level(.18, .48));
+    bar.style.setProperty('--wave-d', level(.52, .48));
+    bar.style.setProperty('--wave-e', level(.16, .52));
+    bar.style.setProperty('--wave-f', level(.38, .57));
+    bar.style.setProperty('--wave-duration', `${Math.round(520 + nextNoise() * 680)}ms`);
+    bar.style.setProperty('--wave-delay', `${Math.round(-nextNoise() * 1200)}ms`);
+  });
+}
 
 const hotkeyChoices = [
   {label: 'Right ⌘', spoken: 'Right Command'},
@@ -131,28 +159,25 @@ if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: re
       return;
     }
 
-    const outgoing = visibleCopy.animate(
-      [
-        {opacity: 1, transform: 'translateY(0)'},
-        {opacity: 0, transform: 'translateY(-6px)'}
-      ],
+    const transitionTargets = [visibleCopy, hotkeyHint];
+    const outgoing = transitionTargets.map(target => target.animate(
+      [{opacity: 1, transform: 'translateY(0)'}, {opacity: 0, transform: 'translateY(-6px)'}],
       {duration: 180, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards'}
-    );
+    ));
 
-    await outgoing.finished;
-    outgoing.cancel();
+    await Promise.all(outgoing.map(animation => animation.finished));
 
     visibleCopy.textContent = nextSentence;
     liveCopy.textContent = nextSentence;
     updateLabels();
+    outgoing.forEach(animation => animation.cancel());
 
-    await visibleCopy.animate(
-      [
-        {opacity: 0, transform: 'translateY(7px)'},
-        {opacity: 1, transform: 'translateY(0)'}
-      ],
+    const incoming = transitionTargets.map(target => target.animate(
+      [{opacity: 0, transform: 'translateY(7px)'}, {opacity: 1, transform: 'translateY(0)'}],
       {duration: 280, easing: 'cubic-bezier(.22, 1, .36, 1)'}
-    ).finished;
+    ));
+
+    await Promise.all(incoming.map(animation => animation.finished));
   };
 
   const showNextState = async () => {

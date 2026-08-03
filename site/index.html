@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-9">
-  <script src="./app.js?v=compact-9" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-10">
+  <script src="./app.js?v=compact-10" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -35,6 +35,9 @@
           <span class="summary-copy" data-visible-copy aria-hidden="true">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
           <span class="visually-hidden" data-live-copy aria-live="polite">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</span>
         </p>
+        <div class="key-hint" data-hotkey-cycle aria-label="Press and Hold with Right Command">
+          <kbd aria-hidden="true">Right ⌘</kbd><span aria-hidden="true">hold to talk</span>
+        </div>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download DMG</span>
@@ -73,9 +76,6 @@
             </svg>
           </span>
         </div>
-        <div class="key-hint" data-hotkey-cycle aria-label="Press and Hold with Right Command">
-          <kbd aria-hidden="true">Right ⌘</kbd><span aria-hidden="true">hold to talk</span>
-        </div>
       </div>
     </section>
 
@@ -91,7 +91,7 @@
           <div class="quick-options" aria-label="Copyable setup options">
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Coding agent</strong><span data-copy-state aria-live="polite">Copy</span></span>
-              <span data-copy-content>Set up whisper_hotkey from https://github.com/nikhi1g/whisper_hotkey. Run ./run.sh and do not finish until the model, permissions, and a dictation test are verified.</span>
+              <span data-copy-content>Install nikhi1g/whisper_hotkey with ./run.sh, then verify the model, permissions, and dictation before finishing.</span>
             </button>
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Terminal</strong><span data-copy-state aria-live="polite">Copy</span></span>
