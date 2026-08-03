@@ -4,7 +4,6 @@ const previewDownload = `https://github.com/${repository}/releases/download/${pr
 const downloadLinks = [...document.querySelectorAll('.js-download')];
 const releaseDetail = document.querySelector('.js-release-detail');
 const installDetail = document.querySelector('.js-install-detail');
-const releaseTrust = [...document.querySelectorAll('.js-release-trust')];
 const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -27,21 +26,15 @@ const hydrateRelease = async () => {
       link.href = dmg.browser_download_url;
       link.querySelector('span').textContent = 'Download for macOS';
     });
-    releaseDetail.textContent = `${release.tag_name} · Apple Silicon · macOS 14+ · ${readableSize(dmg.size)}`;
-    installDetail.textContent = 'Open the DMG · Drag to Applications · Complete the one-time setup';
-    releaseTrust.forEach(element => {
-      element.textContent = 'Developer ID signed · Apple notarized · SHA-256 published';
-    });
+    releaseDetail.textContent = `${release.tag_name}, Apple Silicon, macOS 14+, ${readableSize(dmg.size)}`;
+    installDetail.textContent = 'Drag to Applications. Complete the one-time setup.';
   } catch {
     downloadLinks.forEach(link => {
       link.href = previewDownload;
       link.querySelector('span').textContent = 'Download preview DMG';
     });
-    releaseDetail.textContent = `${previewTag} · Apple Silicon · macOS 14+`;
-    installDetail.textContent = 'Open the DMG · Drag to Applications · First launch: use Privacy & Security → Open Anyway';
-    releaseTrust.forEach(element => {
-      element.textContent = 'Preview build · Open Anyway required once · SHA-256 published';
-    });
+    releaseDetail.textContent = `${previewTag}, Apple Silicon, macOS 14+`;
+    installDetail.textContent = 'Drag to Applications. Use Privacy & Security → Open Anyway once.';
   }
 };
 

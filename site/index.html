@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#22272e">
   <meta name="description" content="Private, local hold-to-dictate for Apple Silicon Macs. Download whisper_hotkey for macOS or view the source on GitHub.">
-  <meta property="og:title" content="whisper_hotkey — private local dictation for macOS">
+  <meta property="og:title" content="whisper_hotkey: private local dictation for macOS">
   <meta property="og:description" content="Hold a key, speak, and insert text anywhere. Audio never leaves your Mac.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nikhi1g.github.io/whisper_hotkey/">
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
-  <title>whisper_hotkey — private local dictation for macOS</title>
+  <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=3.0.8-preview.2">
-  <script src="./app.js?v=3.0.8-preview.2" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-1">
+  <script src="./app.js?v=compact-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -23,28 +23,25 @@
       <span>whisper_hotkey</span>
     </a>
     <nav>
-      <a href="#how-it-works">How it works</a>
-      <a href="#privacy">Privacy</a>
-      <a href="https://github.com/nikhi1g/whisper_hotkey">GitHub</a>
+      <a href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
   </header>
 
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> Native dictation for macOS</p>
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
         <p class="hero-summary">Hold Right Command, speak, and release. Your words appear wherever you are typing, with local Whisper recognition and no cloud account.</p>
         <div class="hero-actions">
-          <a class="button button-primary js-download" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg">
+          <a class="button button-primary js-download" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download preview DMG</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
-          <a class="button button-secondary" href="https://github.com/nikhi1g/whisper_hotkey">View source <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">View source <span aria-hidden="true">↗</span></a>
         </div>
         <p class="download-detail">
-          <span><span class="js-release-detail">Preview · Apple Silicon · macOS 14+</span> · Base English model included</span>
-          <span class="js-install-detail">Open the DMG · Drag to Applications · First launch: use Privacy &amp; Security → Open Anyway</span>
+          <span><span class="js-release-detail">Preview, Apple Silicon, macOS 14+</span>. Base model included.</span>
+          <span class="js-install-detail">Drag to Applications. Use Privacy &amp; Security → Open Anyway once.</span>
         </p>
       </div>
 
@@ -81,83 +78,64 @@
       </div>
     </section>
 
-    <section class="proof-strip" aria-label="Product guarantees">
-      <div><strong>Local by design</strong><span>Audio and text stay on-device</span></div>
-      <div><strong>Ready in one download</strong><span>Verified Base model is included</span></div>
-      <div><strong>Built for macOS</strong><span>Native, headless, and lightweight</span></div>
-    </section>
-
-    <section class="steps section" id="how-it-works" aria-labelledby="steps-title">
-      <div class="section-heading reveal">
-        <p class="eyebrow">From download to dictation</p>
-        <h2 id="steps-title">Three steps. Then it stays out of the way.</h2>
+    <section class="overview" id="how-it-works" aria-labelledby="overview-title">
+      <div class="overview-copy reveal">
+        <h2 id="overview-title">Set up once.<br>Dictate anywhere.</h2>
+        <ol class="compact-steps">
+          <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
+          <li><span>2</span><p><strong>Allow</strong> Complete the three macOS permissions.</p></li>
+          <li><span>3</span><p><strong>Dictate</strong> Hold your key, speak, and release.</p></li>
+        </ol>
+        <div class="overview-links">
+          <a class="text-link" href="https://github.com/nikhi1g/whisper_hotkey/blob/main/purpose.md" target="_blank" rel="noopener noreferrer">Privacy contract <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">Source <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
-      <ol class="step-list">
-        <li class="reveal">
-          <span class="step-number">01</span>
-          <div>
-            <h3>Install</h3>
-            <p>Open the DMG and drag whisper_hotkey into Applications. The app, local recognition engine, and Base English model arrive together.</p>
-          </div>
-        </li>
-        <li class="reveal">
-          <span class="step-number">02</span>
-          <div>
-            <h3>Allow</h3>
-            <p>Open the app once and follow its setup window for Microphone, Accessibility, and Input Monitoring permissions.</p>
-          </div>
-        </li>
-        <li class="reveal">
-          <span class="step-number">03</span>
-          <div>
-            <h3>Speak</h3>
-            <p>Focus any text field, hold Right Command, speak, and release. The final text is inserted at the field you chose.</p>
-          </div>
-        </li>
-      </ol>
-    </section>
 
-    <section class="privacy section" id="privacy" aria-labelledby="privacy-title">
-      <div class="privacy-copy reveal">
-        <p class="eyebrow">A deliberately short data path</p>
-        <h2 id="privacy-title">Nothing to sign into.<br>Nothing to send away.</h2>
-        <p>whisper_hotkey records only while you dictate. Recognition runs locally with whisper.cpp, the temporary recording is deleted, and the transcript goes directly to the focused app.</p>
-        <a class="text-link" href="https://github.com/nikhi1g/whisper_hotkey/blob/main/purpose.md">Read the product contract <span aria-hidden="true">↗</span></a>
+      <div class="system-graph reveal" id="privacy">
+        <svg viewBox="0 0 620 350" role="img" aria-labelledby="graph-title graph-description">
+          <title id="graph-title">Local dictation data flow</title>
+          <desc id="graph-description">The selected hotkey starts temporary capture. Local Whisper uses the bundled model, inserts text into the focused field, and the temporary audio is deleted.</desc>
+          <defs>
+            <marker id="graph-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0L8 4L0 8Z"></path>
+            </marker>
+          </defs>
+          <g class="graph-edges">
+            <path d="M102 176H188"></path>
+            <path d="M254 176H350"></path>
+            <path d="M418 176H512"></path>
+            <path d="M384 76V136"></path>
+            <path class="graph-edge-muted" d="M220 210V270"></path>
+          </g>
+          <g class="graph-node" transform="translate(70 176)">
+            <circle r="32"></circle><text y="4">Hotkey</text>
+          </g>
+          <g class="graph-node" transform="translate(220 176)">
+            <circle r="34"></circle><text y="4">Capture</text>
+          </g>
+          <g class="graph-node graph-node-primary" transform="translate(384 176)">
+            <circle r="38"></circle><text y="-3">Local</text><text y="13">Whisper</text>
+          </g>
+          <g class="graph-node" transform="translate(546 176)">
+            <circle r="34"></circle><text y="-3">Focused</text><text y="13">field</text>
+          </g>
+          <g class="graph-node graph-node-small" transform="translate(384 48)">
+            <circle r="28"></circle><text y="-3">Base</text><text y="13">model</text>
+          </g>
+          <g class="graph-node graph-node-small graph-node-muted" transform="translate(220 300)">
+            <circle r="28"></circle><text y="4">Deleted</text>
+          </g>
+        </svg>
+        <p>Audio stays local and temporary. No account. No network request.</p>
       </div>
-      <div class="privacy-path reveal" aria-label="Your voice flows through local recognition to the focused text field">
-        <div class="path-node"><span>01</span><strong>Your voice</strong><small>Temporary audio</small></div>
-        <div class="path-line"><i></i></div>
-        <div class="path-node featured"><span>02</span><strong>On-device Whisper</strong><small>No network request</small></div>
-        <div class="path-line"><i></i></div>
-        <div class="path-node"><span>03</span><strong>Focused field</strong><small>Local insertion</small></div>
-      </div>
-    </section>
-
-    <section class="open-source section reveal" aria-labelledby="source-title">
-      <div>
-        <p class="eyebrow">Open source, end to end</p>
-        <h2 id="source-title">Inspect the same code you run.</h2>
-      </div>
-      <p>The hotkey listener, ephemeral audio path, local recognizer, insertion behavior, build scripts, and release workflow are all public.</p>
-      <a class="button button-secondary" href="https://github.com/nikhi1g/whisper_hotkey">Browse the repository <span aria-hidden="true">↗</span></a>
-    </section>
-
-    <section class="final-cta section reveal" aria-labelledby="download-title">
-      <img src="./assets/icon.png" alt="" width="72" height="72">
-      <p class="eyebrow">Private dictation, one key away</p>
-      <h2 id="download-title">Say it where you need it.</h2>
-      <a class="button button-primary js-download" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg">
-        <span>Download preview DMG</span>
-        <span class="button-arrow" aria-hidden="true">↓</span>
-      </a>
-      <p class="release-trust js-release-trust">Preview build · Open Anyway required once · SHA-256 published</p>
     </section>
   </main>
 
   <footer>
     <span>© <span id="year"></span> Nikhil Gupta</span>
     <span>English dictation · Apple Silicon · macOS 14+</span>
-    <a href="https://github.com/nikhi1g/whisper_hotkey/releases">All releases</a>
+    <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>
 </body>
 </html>
