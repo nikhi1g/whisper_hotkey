@@ -185,14 +185,6 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
   place-items: center;
 }
 
-.stage-light {
-  position: absolute;
-  inset: 3% 0 3% 4%;
-  border: 1px solid #444c56;
-  background: #1c2128;
-  transform: rotate(-2.5deg);
-}
-
 .document-window {
   position: relative;
   width: min(100%, 580px);
