@@ -4,20 +4,28 @@
 Hold the selected key, speak, and release to insert text into the field that is
 focused at release time. Audio and transcripts are not sent to a server.
 
-## Install the Mac app
+## Install the preview Mac app
 
-The fastest path is the conventional Mac download:
+The fastest MVP path is the self-contained preview download:
 
-1. **[Download the latest DMG](https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg).**
+1. **[Download the preview DMG](https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.1/whisper_hotkey-preview.dmg).**
 2. Open it and drag **whisper_hotkey** into **Applications**.
-3. Open `/Applications/whisper_hotkey.app`. The app has no Dock icon; look for
+3. Try to open `/Applications/whisper_hotkey.app` once. Then open **System
+   Settings → Privacy & Security** and click **Open Anyway**.
+4. Open the app again. It has no Dock icon; look for
    its waveform icon in the menu bar and complete the setup window.
 
-The public DMG is Developer ID signed, Apple notarized, and includes the pinned,
-SHA-256-verified Base English model. No compiler, Homebrew installation, model
-download, or Terminal command is required. macOS still requires you to grant
-Microphone, Accessibility, and Input Monitoring access because those permissions
-cannot be pre-approved by an installer.
+The preview DMG uses an isolated self-signed testing identity rather than an
+Apple Developer ID certificate. It is not notarized, so the one-time **Open
+Anyway** step is expected. It includes the pinned, SHA-256-verified Base English
+model, so no compiler, Homebrew installation, model download, or Terminal
+command is required. macOS still requires you to grant Microphone,
+Accessibility, and Input Monitoring access because those permissions cannot be
+pre-approved by an installer.
+
+The production DMG remains a separate release path and will not publish until
+Developer ID signing, Apple notarization, stapling, and Gatekeeper assessment
+all succeed.
 
 Visit the product page at
 [nikhi1g.github.io/whisper_hotkey](https://nikhi1g.github.io/whisper_hotkey/)

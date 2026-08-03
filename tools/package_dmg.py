@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create, sign, notarize, staple, and verify the public release DMG."""
+"""Create and verify either a preview or notarized public release DMG."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_release_app(app: Path) -> str:
+def verify_release_app(app: Path, *, require_developer_id: bool) -> str:
     if not app.is_dir():
         raise RuntimeError(f"Application bundle not found at {app}")
     model = app / "Contents" / "Resources" / "Models" / MODEL_NAME
@@ -54,8 +54,14 @@ def verify_release_app(app: Path) -> str:
         capture_output=True,
     )
     details = f"{result.stdout}\n{result.stderr}"
-    authority = re.search(r"^Authority=(Developer ID Application:.+)$", details, re.M)
+    authority = re.search(r"^Authority=(.+)$", details, re.M)
     if authority is None:
+        raise RuntimeError(
+            "The DMG requires a signed app with a named code-signing authority."
+        )
+    if require_developer_id and not authority.group(1).startswith(
+        "Developer ID Application:"
+    ):
         raise RuntimeError(
             "The public DMG requires a Developer ID Application-signed app."
         )
@@ -91,8 +97,14 @@ def notarize(dmg: Path) -> None:
     run(["/usr/bin/xcrun", "stapler", "validate", str(dmg)])
 
 
-def create_dmg(app: Path, output: Path, *, should_notarize: bool) -> Path:
-    identity = verify_release_app(app)
+def create_dmg(
+    app: Path,
+    output: Path,
+    *,
+    should_notarize: bool,
+    preview: bool,
+) -> Path:
+    identity = verify_release_app(app, require_developer_id=not preview)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="whisper_hotkey-dmg-") as temporary:
@@ -112,14 +124,15 @@ def create_dmg(app: Path, output: Path, *, should_notarize: bool) -> Path:
             "-ov",
             str(output),
         ])
-    run([
+    signing_command = [
         "/usr/bin/codesign",
         "--force",
-        "--timestamp",
+        "--timestamp=none" if preview else "--timestamp",
         "--sign",
         identity,
         str(output),
-    ])
+    ]
+    run(signing_command)
     run(["/usr/bin/codesign", "--verify", "--verbose=2", str(output)])
     run(["/usr/bin/hdiutil", "verify", str(output)])
     if should_notarize:
@@ -148,11 +161,19 @@ def main() -> None:
         action="store_true",
         help="submit with notarytool, staple, and run a Gatekeeper assessment",
     )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="allow an explicitly labeled, non-Developer-ID preview app",
+    )
     args = parser.parse_args()
+    if args.notarize and args.preview:
+        parser.error("--notarize and --preview cannot be combined")
     checksum = create_dmg(
         args.app.resolve(),
         args.output.resolve(),
         should_notarize=args.notarize,
+        preview=args.preview,
     )
     print(args.output.resolve())
     print(checksum)

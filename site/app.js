@@ -1,7 +1,10 @@
 const repository = 'nikhi1g/whisper_hotkey';
-const releasePage = `https://github.com/${repository}/releases/latest`;
+const previewTag = 'v3.0.8-preview.1';
+const previewDownload = `https://github.com/${repository}/releases/download/${previewTag}/whisper_hotkey-preview.dmg`;
 const downloadLinks = [...document.querySelectorAll('.js-download')];
 const releaseDetail = document.querySelector('.js-release-detail');
+const installDetail = document.querySelector('.js-install-detail');
+const releaseTrust = [...document.querySelectorAll('.js-release-trust')];
 const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -25,12 +28,20 @@ const hydrateRelease = async () => {
       link.querySelector('span').textContent = 'Download for macOS';
     });
     releaseDetail.textContent = `${release.tag_name} · Apple Silicon · macOS 14+ · ${readableSize(dmg.size)}`;
+    installDetail.textContent = 'Open the DMG · Drag to Applications · Complete the one-time setup';
+    releaseTrust.forEach(element => {
+      element.textContent = 'Developer ID signed · Apple notarized · SHA-256 published';
+    });
   } catch {
     downloadLinks.forEach(link => {
-      link.href = releasePage;
-      link.querySelector('span').textContent = 'View latest release';
+      link.href = previewDownload;
+      link.querySelector('span').textContent = 'Download preview DMG';
     });
-    releaseDetail.textContent = 'Apple Silicon · macOS 14+';
+    releaseDetail.textContent = `${previewTag} · Apple Silicon · macOS 14+`;
+    installDetail.textContent = 'Open the DMG · Drag to Applications · First launch: use Privacy & Security → Open Anyway';
+    releaseTrust.forEach(element => {
+      element.textContent = 'Preview build · Open Anyway required once · SHA-256 published';
+    });
   }
 };
 
