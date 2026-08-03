@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -25,6 +27,10 @@ LOGIN_LAUNCHER_NAME = "WhisperHotkeyLoginLauncher"
 LOGIN_AGENT_LABEL = f"{BUNDLE_ID}.login-launcher"
 LOGIN_AGENT_PLIST_NAME = f"{LOGIN_AGENT_LABEL}.plist"
 LOGIN_AGENT_BUNDLE_PROGRAM = f"Contents/MacOS/{LOGIN_LAUNCHER_NAME}"
+BASE_MODEL_NAME = "ggml-base.en.bin"
+BASE_MODEL_SHA256 = (
+    "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+)
 
 
 def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
@@ -96,11 +102,48 @@ def bundle(products: Path) -> None:
     write_login_agent_plist()
 
 
+def bundle_verified_base_model() -> None:
+    if os.environ.get("WHISPER_HOTKEY_BUNDLE_MODEL") != "1":
+        return
+    configured_source = os.environ.get(
+        "WHISPER_HOTKEY_BUNDLED_MODEL_PATH",
+        "",
+    ).strip()
+    source = (
+        Path(configured_source).expanduser()
+        if configured_source
+        else Path.home() / ".cache" / "whisper" / BASE_MODEL_NAME
+    )
+    if not source.is_file():
+        raise RuntimeError(
+            f"Release model not found at {source}. Run ./run.sh or set "
+            "WHISPER_HOTKEY_BUNDLED_MODEL_PATH."
+        )
+    digest = hashlib.sha256()
+    with source.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != BASE_MODEL_SHA256:
+        raise RuntimeError(
+            f"Refusing to bundle {source}: pinned SHA-256 verification failed."
+        )
+    destination_directory = RESOURCES / "Models"
+    destination_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination_directory / BASE_MODEL_NAME)
+
+
 def bundled_dynamic_libraries() -> list[Path]:
-    prefix = os.environ.get("WHISPER_CPP_PREFIX", "").strip()
-    if not prefix:
+    configured_prefixes = [
+        os.environ.get("WHISPER_CPP_PREFIX", "").strip(),
+        os.environ.get("GGML_PREFIX", "").strip(),
+    ]
+    prefixes = [Path(value).resolve() for value in configured_prefixes if value]
+    homebrew = os.environ.get("HOMEBREW_PREFIX", "").strip()
+    allowed_roots = [*prefixes]
+    if homebrew:
+        allowed_roots.append(Path(homebrew).resolve())
+    if not prefixes:
         return []
-    prefix_path = Path(prefix).resolve()
     helper = MACOS / "WhisperModelHelper"
     pending = [helper]
     copied: dict[Path, Path] = {}
@@ -115,14 +158,22 @@ def bundled_dynamic_libraries() -> list[Path]:
         for line in result.stdout.splitlines()[1:]:
             dependency_text = line.strip().split(" (", 1)[0]
             if dependency_text.startswith("@rpath/"):
-                dependency = prefix_path / "lib" / Path(dependency_text).name
-                if not dependency.exists():
+                dependency = next(
+                    (
+                        prefix / "lib" / Path(dependency_text).name
+                        for prefix in prefixes
+                        if (prefix / "lib" / Path(dependency_text).name).exists()
+                    ),
+                    None,
+                )
+                if dependency is None:
                     continue
             else:
                 dependency = Path(dependency_text)
-                try:
-                    dependency.resolve().relative_to(prefix_path)
-                except (ValueError, FileNotFoundError):
+                if not any(
+                    dependency.resolve().is_relative_to(prefix)
+                    for prefix in allowed_roots
+                ):
                     continue
             source = dependency.resolve()
             destination = FRAMEWORKS / Path(dependency_text).name
@@ -148,12 +199,77 @@ def bundled_dynamic_libraries() -> list[Path]:
     return list(copied.values())
 
 
+def verify_bundled_dependencies(binaries: list[Path]) -> None:
+    failures = []
+    for binary in binaries:
+        result = subprocess.run(
+            ["/usr/bin/otool", "-L", str(binary)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in result.stdout.splitlines()[1:]:
+            dependency = line.strip().split(" (", 1)[0]
+            if dependency.startswith("@rpath/"):
+                bundled = FRAMEWORKS / Path(dependency).name
+                if not bundled.exists():
+                    failures.append(f"{binary.name} is missing {dependency}")
+            elif dependency.startswith("/") and not dependency.startswith(
+                ("/usr/lib/", "/System/Library/")
+            ):
+                failures.append(f"{binary.name} references {dependency}")
+    if failures:
+        raise RuntimeError(
+            "Application bundle has unresolved dynamic libraries: "
+            + "; ".join(failures)
+        )
+
+
+def minimum_macos_version(binary: Path) -> tuple[int, ...] | None:
+    result = subprocess.run(
+        ["/usr/bin/otool", "-l", str(binary)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    match = re.search(r"^\s+minos\s+([0-9.]+)$", result.stdout, re.MULTILINE)
+    if match is None:
+        match = re.search(
+            r"cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version ([0-9.]+)",
+            result.stdout,
+        )
+    if match is None:
+        return None
+    return tuple(int(component) for component in match.group(1).split("."))
+
+
+def verify_distribution_targets(binaries: list[Path]) -> None:
+    if os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") != "1":
+        return
+    incompatible = []
+    for binary in binaries:
+        minimum = minimum_macos_version(binary)
+        if minimum is not None and minimum > (14, 0):
+            version = ".".join(str(component) for component in minimum)
+            incompatible.append(f"{binary.name} requires macOS {version}")
+    if incompatible:
+        raise RuntimeError(
+            "Distribution contains binaries newer than the declared macOS 14 "
+            "minimum: " + "; ".join(incompatible)
+        )
+
+
 def signing_identity() -> str:
+    distribution = os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
     explicit = os.environ.get("WHISPER_HOTKEY_CODESIGN_IDENTITY", "").strip()
     if explicit:
         if explicit == "-":
             raise RuntimeError(
                 "Ad-hoc signing is not supported. Provide a stable code-signing identity."
+            )
+        if distribution and not explicit.startswith("Developer ID Application:"):
+            raise RuntimeError(
+                "Distribution requires a Developer ID Application identity."
             )
         return explicit
 
@@ -165,7 +281,15 @@ def signing_identity() -> str:
     )
     for line in result.stdout.splitlines():
         if ")" in line and '"' in line:
-            return line.split('"', 2)[1]
+            if distribution and "Developer ID Application:" not in line:
+                continue
+            identity_hash = line.split(")", 1)[1].strip().split(maxsplit=1)[0]
+            if identity_hash:
+                return identity_hash
+    if distribution:
+        raise RuntimeError(
+            "No Developer ID Application identity found for distribution."
+        )
     raise RuntimeError(
         "No stable code-signing identity found. Run ./run.sh to create the local "
         "development identity, install an Apple Development or Developer ID "
@@ -175,6 +299,7 @@ def signing_identity() -> str:
 
 
 def sign(identity: str, libraries: list[Path]) -> None:
+    distribution = os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
     targets = [
         *((library, None) for library in libraries),
         (MACOS / "WhisperModelHelper", None),
@@ -188,8 +313,11 @@ def sign(identity: str, libraries: list[Path]) -> None:
             "--force",
             "--sign",
             identity,
-            "--timestamp=none",
         ]
+        if distribution:
+            command.extend(["--timestamp", "--options", "runtime"])
+        else:
+            command.append("--timestamp=none")
         if identifier:
             command.extend(["--identifier", identifier])
         command.append(str(target))
@@ -209,7 +337,19 @@ def main() -> None:
     products = swift_build()
     DIST.mkdir(parents=True, exist_ok=True)
     bundle(products)
+    bundle_verified_base_model()
     libraries = bundled_dynamic_libraries()
+    verify_bundled_dependencies([
+        *libraries,
+        MACOS / "WhisperModelHelper",
+    ])
+    verify_distribution_targets([
+        *libraries,
+        MACOS / "WhisperHotkeyApp",
+        MACOS / "WhisperModelHelper",
+        MACOS / LOGIN_LAUNCHER_NAME,
+        DIST / "whisper_hotkey",
+    ])
     identity = signing_identity()
     sign(identity, libraries)
     print(APP)

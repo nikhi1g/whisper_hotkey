@@ -1838,8 +1838,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func revealModelLocation() {
+        let activeModel = try? WhisperRuntimeDiscovery.discover(
+            model: selectedModel,
+            engine: selectedEngine
+        ).modelURL
         reveal(
-            WhisperHotkeyPaths.modelURL(for: selectedModel),
+            activeModel ?? WhisperHotkeyPaths.modelURL(for: selectedModel),
             fallback: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/whisper", isDirectory: true)
         )

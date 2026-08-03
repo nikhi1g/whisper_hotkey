@@ -19,5 +19,8 @@ jobs:
         run: |
           echo "WHISPER_CPP_PREFIX=$(brew --prefix whisper-cpp)" >> "$GITHUB_ENV"
           echo "GGML_PREFIX=$(brew --prefix ggml)" >> "$GITHUB_ENV"
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
       - name: Test
         run: swift test
+      - name: Test bootstrap and release scripts
+        run: python3 Tests/BootstrapTests/test_run_sh.py

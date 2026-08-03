@@ -4,7 +4,26 @@
 Hold the selected key, speak, and release to insert text into the field that is
 focused at release time. Audio and transcripts are not sent to a server.
 
-## Install
+## Install the Mac app
+
+The fastest path is the conventional Mac download:
+
+1. **[Download the latest DMG](https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg).**
+2. Open it and drag **whisper_hotkey** into **Applications**.
+3. Open `/Applications/whisper_hotkey.app`. The app has no Dock icon; look for
+   its waveform icon in the menu bar and complete the setup window.
+
+The public DMG is Developer ID signed, Apple notarized, and includes the pinned,
+SHA-256-verified Base English model. No compiler, Homebrew installation, model
+download, or Terminal command is required. macOS still requires you to grant
+Microphone, Accessibility, and Input Monitoring access because those permissions
+cannot be pre-approved by an installer.
+
+Visit the product page at
+[nikhi1g.github.io/whisper_hotkey](https://nikhi1g.github.io/whisper_hotkey/)
+or inspect every part of the build in this repository.
+
+## Build from source
 
 These are the only Terminal commands required:
 
@@ -17,7 +36,7 @@ cd whisper_hotkey
 Do **not** run `run.sh` with `sudo`. The bootstrap installs user-owned models,
 signing state, and the terminal controller for the account that runs it.
 
-The first run may take several minutes. It checks the Mac, installs missing
+The first source build may take several minutes. It checks the Mac, installs missing
 build dependencies, downloads a verified model, builds and signs the app,
 installs it, launches it, and opens the permission window. The script remains
 attached: complete setup, return to Terminal, and press Return when prompted.
@@ -25,7 +44,7 @@ It rechecks every requirement and exits only after the model, helper, Login
 Item, and all three permissions are verified. It is safe to run again after an
 interrupted or completed installation.
 
-## Requirements
+## Requirements for a source build
 
 - An Apple Silicon Mac (`arm64`) running macOS 14 or newer. Intel Macs and
   earlier macOS releases are not supported.
@@ -56,7 +75,8 @@ interrupted or completed installation.
   controller at `~/bin/whisper_hotkey`, launches the app, and verifies that the
   installed executable and signature match the build.
 
-The app bundle is built locally and is not notarized for distribution. The
+The app bundle produced by `run.sh` is built locally and is not notarized for
+distribution; notarization applies to the published DMG. The
 bootstrap-created signing certificate is only for this Mac and its login
 keychain; it is not committed to the repository or copied into the app.
 
@@ -72,19 +92,21 @@ The setup window opens automatically. Complete every row:
 4. Approve its Login Item if macOS asks. You can turn **Open at login** off
    later in the app's Settings.
 
-Return to Terminal and press Return after completing the rows. If anything is
-still missing, `run.sh` prints the current status, reopens Setup, and waits for
-you again. Once every requirement is ready, it prints `Setup verified` and
-finishes installation.
+If you installed from source, return to Terminal and press Return after
+completing the rows. If anything is still missing, `run.sh` prints the current
+status, reopens Setup, and waits for you again. Once every requirement is
+ready, it prints `Setup verified` and finishes installation. A DMG installation
+uses the same setup window without the attached Terminal verification loop.
 
 If macOS asks to quit and reopen the app after a permission change, allow it.
-Reopen the setup window at any time with:
+The menu-bar icon can reopen Setup at any time. A source installation also
+installs a terminal controller, so you can use:
 
 ```sh
 ~/bin/whisper_hotkey setup
 ```
 
-Check that everything is ready:
+Check a source installation from Terminal:
 
 ```sh
 ~/bin/whisper_hotkey status
@@ -100,7 +122,7 @@ it. The default **After Recording** policy loads and transcribes only after
 release, so the first result can take a moment while the model starts. Very
 quick taps are ignored, and ordinary Command shortcuts continue to work.
 
-If `~/bin` is already on your `PATH`, the controller can be called simply as
+For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as
 `whisper_hotkey`. Its commands are:
 
 ```text
@@ -183,4 +205,6 @@ Common recovery commands:
 
 For development, read [purpose.md](purpose.md),
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). Maintainers can find the Pages, Developer
+ID, notarization, and release procedure in
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -94,6 +96,96 @@ class RunScriptTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "Ad-hoc signing is not supported"):
                 build_app.signing_identity()
+
+    def test_distribution_refuses_non_developer_id_identity(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "WHISPER_HOTKEY_CODESIGN_IDENTITY": "Apple Development: Local",
+                "WHISPER_HOTKEY_DISTRIBUTION": "1",
+            },
+            clear=False,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Developer ID Application"):
+                build_app.signing_identity()
+
+    def test_automatic_signing_uses_unique_certificate_hash(self) -> None:
+        identity_output = (
+            '  1) ABCDEF123456 "Apple Development: Duplicate Name"\n'
+            '  2) 0123456789AB "Apple Development: Duplicate Name"\n'
+        )
+        result = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=identity_output,
+            stderr="",
+        )
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(build_app.subprocess, "run", return_value=result),
+        ):
+            self.assertEqual(build_app.signing_identity(), "ABCDEF123456")
+
+    def test_distribution_rejects_binary_newer_than_macos_14(self) -> None:
+        result = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 15.0\n      sdk 15.0\n",
+            stderr="",
+        )
+        with (
+            patch.dict(
+                "os.environ",
+                {"WHISPER_HOTKEY_DISTRIBUTION": "1"},
+                clear=False,
+            ),
+            patch.object(build_app.subprocess, "run", return_value=result),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "requires macOS 15.0"):
+                build_app.verify_distribution_targets([Path("helper")])
+
+    def test_release_build_bundles_only_a_pinned_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / build_app.BASE_MODEL_NAME
+            resources = root / "Resources"
+            source.write_bytes(b"verified model fixture")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            with (
+                patch.object(build_app, "RESOURCES", resources),
+                patch.object(build_app, "BASE_MODEL_SHA256", digest),
+                patch.dict(
+                    "os.environ",
+                    {
+                        "WHISPER_HOTKEY_BUNDLE_MODEL": "1",
+                        "WHISPER_HOTKEY_BUNDLED_MODEL_PATH": str(source),
+                    },
+                    clear=False,
+                ),
+            ):
+                build_app.bundle_verified_base_model()
+
+            bundled = resources / "Models" / build_app.BASE_MODEL_NAME
+            self.assertEqual(bundled.read_bytes(), source.read_bytes())
+
+    def test_release_build_rejects_mismatched_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / build_app.BASE_MODEL_NAME
+            source.write_bytes(b"wrong model")
+            with (
+                patch.object(build_app, "RESOURCES", root / "Resources"),
+                patch.dict(
+                    "os.environ",
+                    {
+                        "WHISPER_HOTKEY_BUNDLE_MODEL": "1",
+                        "WHISPER_HOTKEY_BUNDLED_MODEL_PATH": str(source),
+                    },
+                    clear=False,
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "verification failed"):
+                    build_app.bundle_verified_base_model()
 
 
 if __name__ == "__main__":

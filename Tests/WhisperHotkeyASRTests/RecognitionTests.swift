@@ -242,6 +242,54 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(configuration.modelURL, model)
     }
 
+    func testDiscoveryUsesVerifiedModelBundledWithApplication() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundleRoot = root.appendingPathComponent(
+            "ReleaseFixture.bundle",
+            isDirectory: true
+        )
+        let resources = bundleRoot.appendingPathComponent(
+            "Contents/Resources",
+            isDirectory: true
+        )
+        let model = resources.appendingPathComponent(
+            "Models/ggml-base.en.bin"
+        )
+        try FileManager.default.createDirectory(
+            at: model.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "local.whisperhotkey.test-fixture",
+            "CFBundleName": "ReleaseFixture",
+            "CFBundlePackageType": "BNDL",
+            "CFBundleVersion": "1",
+        ]
+        try (info as NSDictionary).write(
+            to: bundleRoot.appendingPathComponent("Contents/Info.plist")
+        )
+        try Data([0]).write(to: model)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bundle = try XCTUnwrap(Bundle(url: bundleRoot))
+        let configuration = try WhisperRuntimeDiscovery.discover(
+            model: .baseEnglish,
+            environment: [:],
+            bundle: bundle,
+            homeDirectory: root.appendingPathComponent("empty-home")
+        )
+
+        XCTAssertEqual(configuration.modelURL, model.standardizedFileURL)
+        XCTAssertEqual(
+            WhisperRuntimeDiscovery.bundledModelURL(
+                model: .baseEnglish,
+                bundle: bundle
+            ),
+            model.standardizedFileURL
+        )
+    }
+
     func testDiscoveryRequiresCompleteExplicitAcceleratedArtifacts() throws {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

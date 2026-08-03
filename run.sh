@@ -472,7 +472,8 @@ then
     /opt/homebrew/bin/brew install cmake
 fi
 
-export WHISPER_CPP_PREFIX GGML_PREFIX
+export WHISPER_CPP_PREFIX GGML_PREFIX HOMEBREW_PREFIX
+HOMEBREW_PREFIX="$(/opt/homebrew/bin/brew --prefix)"
 WHISPER_CPP_PREFIX="$(/opt/homebrew/bin/brew --prefix whisper-cpp)"
 GGML_PREFIX="$(/opt/homebrew/bin/brew --prefix ggml)"
 

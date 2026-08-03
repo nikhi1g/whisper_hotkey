@@ -76,6 +76,16 @@ public enum WhisperRuntimeDiscovery {
         )
     }
 
+    public static func bundledModelURL(
+        model: DictationModel = DictationModel.selected(),
+        bundle: Bundle = .main
+    ) -> URL? {
+        bundle.resourceURL?
+            .appendingPathComponent("Models", isDirectory: true)
+            .appendingPathComponent(model.fileName)
+            .standardizedFileURL
+    }
+
     public static func discover(
         model: DictationModel = DictationModel.selected(),
         engine: RecognitionEngine = RecognitionEngine.selected(),
@@ -88,10 +98,22 @@ public enum WhisperRuntimeDiscovery {
         let modelURL: URL
         switch engine {
         case .whisperCppMetal:
-            modelURL = Self.modelURL(
+            let installedModelURL = Self.modelURL(
                 model: model,
                 homeDirectory: homeDirectory
             )
+            let bundledModelURL = Self.bundledModelURL(
+                model: model,
+                bundle: bundle
+            )
+            modelURL = [installedModelURL, bundledModelURL].compactMap { $0 }
+                .first {
+                    var isDirectory: ObjCBool = false
+                    return fileManager.fileExists(
+                        atPath: $0.path,
+                        isDirectory: &isDirectory
+                    ) && !isDirectory.boolValue
+                } ?? installedModelURL
         case .whisperCppCoreML:
             guard environment["WHISPER_HOTKEY_COREML"] == "1"
                 || bundle.url(
