@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-3">
-  <script src="./app.js?v=compact-3" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-4">
+  <script src="./app.js?v=compact-4" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -33,14 +33,14 @@
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
         <p class="hero-summary">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</p>
         <div class="hero-actions">
-          <a class="button button-primary js-download" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
+          <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download preview DMG</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
           <a class="button button-secondary" href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">View source <span aria-hidden="true">↗</span></a>
         </div>
         <p class="download-detail">
-          <span><span class="js-release-detail">Preview, Apple Silicon, macOS 14+</span>. Base model included.</span>
+          <span>Preview, Apple Silicon, macOS 14+. Base model included.</span>
         </p>
       </div>
 
@@ -78,7 +78,7 @@
     </section>
 
     <section class="overview" id="how-it-works" aria-labelledby="overview-title">
-      <div class="overview-copy reveal">
+      <div class="overview-copy">
         <h2 id="overview-title">Setup</h2>
         <ol class="compact-steps">
           <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
@@ -87,7 +87,7 @@
         </ol>
       </div>
 
-      <div class="system-graph reveal" id="privacy">
+      <div class="system-graph" id="privacy">
         <svg viewBox="0 0 620 350" role="img" aria-labelledby="graph-title graph-description">
           <title id="graph-title">Local dictation data flow</title>
           <desc id="graph-description">The selected hotkey starts temporary capture. Local Whisper uses the bundled model and inserts text into the focused field. Temporary audio is deleted. Copy Last Dictation provides a clipboard fallback using only the latest successful transcript, kept in memory until the app quits.</desc>
