@@ -3,6 +3,42 @@ import XCTest
 @testable import WhisperHotkeyCore
 
 final class PreferenceTests: XCTestCase {
+    func testAutomaticUpdateChecksDefaultOffAndPersist() {
+        let suite = "whisper_hotkey-updates-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertFalse(
+            AutomaticUpdateCheckPreference.isEnabled(defaults: defaults)
+        )
+        AutomaticUpdateCheckPreference.setEnabled(true, defaults: defaults)
+        XCTAssertTrue(
+            AutomaticUpdateCheckPreference.isEnabled(defaults: defaults)
+        )
+        AutomaticUpdateCheckPreference.setEnabled(false, defaults: defaults)
+        XCTAssertFalse(
+            AutomaticUpdateCheckPreference.isEnabled(defaults: defaults)
+        )
+    }
+
+    func testSemanticVersionsCompareStableTagsNumerically() {
+        XCTAssertEqual(SemanticVersion("v3.1.0"), SemanticVersion("3.1"))
+        XCTAssertLessThan(
+            try! XCTUnwrap(SemanticVersion("3.1.9")),
+            try! XCTUnwrap(SemanticVersion("3.2.0"))
+        )
+        XCTAssertLessThan(
+            try! XCTUnwrap(SemanticVersion("3.9.0")),
+            try! XCTUnwrap(SemanticVersion("10.0.0"))
+        )
+        XCTAssertEqual(
+            SemanticVersion("v3.1.0-preview.2"),
+            SemanticVersion("3.1.0")
+        )
+        XCTAssertNil(SemanticVersion("preview"))
+        XCTAssertNil(SemanticVersion("3..1"))
+    }
+
     func testLastDictationRetentionDefaultsOnAndPersists() {
         let suite = "whisper_hotkey-retention-\(UUID().uuidString)"
         let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))

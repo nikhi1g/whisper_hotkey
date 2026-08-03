@@ -1,27 +1,18 @@
-Version 3.1.0 adds an explicit privacy control for Copy Last Dictation and
-promotes the downloadable Mac app to the stable release path.
+Version 3.1.1 adds explicit, privacy-preserving GitHub update checks to Settings.
 
 Recommended for all users of version 3.0.
 
 ## Highlights
 
-- Add **Keep latest transcript until quit** to Settings. It defaults on for the
-  existing Copy Last Dictation behavior.
-- Turning the setting off immediately clears the retained transcript, hides the
-  menu action, and prevents later transcripts from being retained.
-- Keep Pause Mode context separate so disabling Copy Last Dictation does not
-  reduce pause-aware punctuation or casing within an active session.
-- Retain a transcript only after successful insertion.
-- Publish a Developer ID-signed, Apple-notarized `whisper_hotkey.dmg` with the
-  pinned Base English model through the stable GitHub release path.
-- Refine the product-page demo with direct mode chips, a modern key picker, and
-  a continuous perimeter activity trail.
+- Add a manual **Check for Updates** action with clear checking, current,
+  available, and failure states.
+- Add an off-by-default **Check automatically** preference that performs one
+  stable-release check per launch when enabled.
+- Request only public GitHub release metadata. Never send audio, transcripts,
+  dictionary entries, settings, or device identifiers.
+- Keep update checks event-driven with no polling, background timer, automatic
+  download, or silent installation.
 
-Fastest install:
-
-1. Download `whisper_hotkey.dmg` from this release.
-2. Drag the app to Applications and open it.
-3. Complete the three macOS permissions shown by Setup.
-
-The DMG supports Apple Silicon Macs running macOS 14 or newer. Recognition and
-the optional latest-transcript fallback remain local and in memory only.
+This source-only patch release exists to verify the in-app stable-release check.
+The downloadable DMG remains on the previous release path until signing and
+notarization credentials are configured for the release workflow.

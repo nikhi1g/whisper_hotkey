@@ -12,6 +12,8 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let badgeTheme = "badgeTheme"
     public static let customBadgeThemes = "customBadgeThemes"
     public static let keepLatestDictation = "keepLatestDictation"
+    public static let automaticallyChecksForUpdates =
+        "automaticallyChecksForUpdates"
 }
 
 public enum LastDictationRetentionPreference {

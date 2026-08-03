@@ -17,6 +17,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let availableModels: Set<DictationModel>
     public let availableEngines: Set<RecognitionEngine>
     public let configurationEnabled: Bool
+    public let automaticallyChecksForUpdates: Bool
+    public let softwareUpdateStatus: SoftwareUpdateStatus
 
     public init(
         selectedHotkey: HotkeyKey,
@@ -32,7 +34,9 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         customThemes: [CustomBadgeTheme] = [],
         availableModels: Set<DictationModel>,
         availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
-        configurationEnabled: Bool
+        configurationEnabled: Bool,
+        automaticallyChecksForUpdates: Bool = false,
+        softwareUpdateStatus: SoftwareUpdateStatus = .idle
     ) {
         self.selectedHotkey = selectedHotkey
         self.activationMode = activationMode
@@ -48,6 +52,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.availableModels = availableModels
         self.availableEngines = availableEngines
         self.configurationEnabled = configurationEnabled
+        self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
+        self.softwareUpdateStatus = softwareUpdateStatus
     }
 }
 
@@ -65,6 +71,8 @@ public struct AdvancedSettingsActions {
     public var selectTheme: (BadgeThemeSelection) -> Void
     public var saveCustomTheme: (CustomBadgeTheme) -> Void
     public var loginItemChanged: () -> Void
+    public var setAutomaticallyChecksForUpdates: (Bool) -> Void
+    public var checkForUpdates: () -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -78,7 +86,9 @@ public struct AdvancedSettingsActions {
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeThemeSelection) -> Void = { _ in },
         saveCustomTheme: @escaping (CustomBadgeTheme) -> Void = { _ in },
-        loginItemChanged: @escaping () -> Void = {}
+        loginItemChanged: @escaping () -> Void = {},
+        setAutomaticallyChecksForUpdates: @escaping (Bool) -> Void = { _ in },
+        checkForUpdates: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -92,6 +102,9 @@ public struct AdvancedSettingsActions {
         self.selectTheme = selectTheme
         self.saveCustomTheme = saveCustomTheme
         self.loginItemChanged = loginItemChanged
+        self.setAutomaticallyChecksForUpdates =
+            setAutomaticallyChecksForUpdates
+        self.checkForUpdates = checkForUpdates
     }
 }
 
@@ -161,6 +174,17 @@ public final class AdvancedSettingsWindowController:
         target: nil,
         action: nil
     )
+    private let checkForUpdatesButton = NSButton(
+        title: "Check for Updates",
+        target: nil,
+        action: nil
+    )
+    private let automaticUpdateCheckToggle = NSButton(
+        checkboxWithTitle: "Check automatically",
+        target: nil,
+        action: nil
+    )
+    private let softwareUpdateStatusLabel = NSTextField(labelWithString: "")
     private let versionLabel = NSTextField(labelWithString: "")
     private let githubButton = NSButton()
     private let helpButton = NSButton()
@@ -199,6 +223,7 @@ public final class AdvancedSettingsWindowController:
         configureControls()
         configurePrivacyControls()
         configureLoginItemControls()
+        configureUpdateControls()
         configureProjectMetadata()
         configureHelpButton()
 
@@ -264,6 +289,13 @@ public final class AdvancedSettingsWindowController:
         }
         keepLatestDictationToggle.state =
             state.keepsLatestDictation ? .on : .off
+        automaticUpdateCheckToggle.state =
+            state.automaticallyChecksForUpdates ? .on : .off
+        softwareUpdateStatusLabel.stringValue =
+            state.softwareUpdateStatus.displayText
+        checkForUpdatesButton.isEnabled =
+            state.configurationEnabled
+                && state.softwareUpdateStatus != .checking
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         rebuildThemePopup(using: state)
         select(rawValue: state.selectedTheme.identifier, in: themePopup)
@@ -325,6 +357,7 @@ public final class AdvancedSettingsWindowController:
         loginItemToggle.isEnabled =
             state.configurationEnabled && loginStatus != .unknown
         loginItemSettingsButton.isEnabled = state.configurationEnabled
+        automaticUpdateCheckToggle.isEnabled = state.configurationEnabled
     }
 
     public func windowWillClose(_ notification: Notification) {
@@ -629,6 +662,24 @@ public final class AdvancedSettingsWindowController:
         loginItemManager.openLoginItemsSettings()
     }
 
+    @objc private func toggleAutomaticUpdateChecks(_ sender: NSButton) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setAutomaticallyChecksForUpdates(sender.state == .on)
+        refresh()
+    }
+
+    @objc private func checkForUpdates() {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.checkForUpdates()
+        refresh()
+    }
+
     @objc private func toggleUserGuide() {
         userGuidePopover.toggle(relativeTo: helpButton)
     }
@@ -825,6 +876,29 @@ public final class AdvancedSettingsWindowController:
         ])
     }
 
+    private func configureUpdateControls() {
+        checkForUpdatesButton.target = self
+        checkForUpdatesButton.action = #selector(checkForUpdates)
+        checkForUpdatesButton.bezelStyle = .rounded
+        checkForUpdatesButton.controlSize = .small
+        checkForUpdatesButton.setAccessibilityLabel("Check for Updates")
+        automaticUpdateCheckToggle.target = self
+        automaticUpdateCheckToggle.action =
+            #selector(toggleAutomaticUpdateChecks(_:))
+        automaticUpdateCheckToggle.setAccessibilityLabel(
+            "Check for updates automatically"
+        )
+        softwareUpdateStatusLabel.font = .systemFont(
+            ofSize: 11,
+            weight: .regular
+        )
+        softwareUpdateStatusLabel.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        themedSecondaryLabels.append(softwareUpdateStatusLabel)
+    }
+
     private func configureProjectMetadata() {
         let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -951,6 +1025,8 @@ public final class AdvancedSettingsWindowController:
         themedSectionLabels.forEach { $0.textColor = sectionText }
         loginItemToggle.contentTintColor = palette.waveform
         keepLatestDictationToggle.contentTintColor = palette.waveform
+        automaticUpdateCheckToggle.contentTintColor = palette.waveform
+        checkForUpdatesButton.contentTintColor = palette.waveform
         loginItemSettingsButton.contentTintColor = palette.waveform
         githubButton.contentTintColor = palette.waveform
         helpButton.contentTintColor = palette.waveform
@@ -1130,6 +1206,17 @@ public final class AdvancedSettingsWindowController:
         loginControls.spacing = 10
         let startupGrid = makeGrid()
         addRow(to: startupGrid, title: "Open at login", control: loginControls)
+        let updateControls = NSStackView(
+            views: [
+                checkForUpdatesButton,
+                automaticUpdateCheckToggle,
+                softwareUpdateStatusLabel,
+            ]
+        )
+        updateControls.orientation = .horizontal
+        updateControls.alignment = .centerY
+        updateControls.spacing = 8
+        addRow(to: startupGrid, title: "Updates", control: updateControls)
         sizeColumns(in: startupGrid)
         stack.addArrangedSubview(startupGrid)
 
@@ -1404,6 +1491,8 @@ public final class AdvancedSettingsWindowController:
             ("new theme", newThemeButton),
             ("edit theme", editThemeButton),
             ("login toggle", loginItemToggle),
+            ("check for updates", checkForUpdatesButton),
+            ("automatic update checks", automaticUpdateCheckToggle),
             ("hotkey summary", hotkeySummary),
             ("mode summary", modeSummary),
             ("model summary", modelSummary),
@@ -1476,6 +1565,18 @@ public final class AdvancedSettingsWindowController:
 
     var githubAccessibilityLabelForTesting: String? {
         githubButton.accessibilityLabel()
+    }
+
+    var automaticallyChecksForUpdatesForTesting: Bool {
+        automaticUpdateCheckToggle.state == .on
+    }
+
+    var softwareUpdateStatusForTesting: String {
+        softwareUpdateStatusLabel.stringValue
+    }
+
+    var checkForUpdatesIsEnabledForTesting: Bool {
+        checkForUpdatesButton.isEnabled
     }
 
     var helpButtonFrameForTesting: CGRect {
@@ -1588,6 +1689,15 @@ public final class AdvancedSettingsWindowController:
     func setKeepsLatestDictationForTesting(_ enabled: Bool) {
         keepLatestDictationToggle.state = enabled ? .on : .off
         toggleLatestDictationRetention(keepLatestDictationToggle)
+    }
+
+    func setAutomaticUpdateChecksForTesting(_ enabled: Bool) {
+        automaticUpdateCheckToggle.state = enabled ? .on : .off
+        toggleAutomaticUpdateChecks(automaticUpdateCheckToggle)
+    }
+
+    func checkForUpdatesForTesting() {
+        checkForUpdates()
     }
 
     func openLoginSettingsForTesting() {

@@ -77,6 +77,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var recordingLimit = RecordingLimit.selected()
     private var customThemes = CustomBadgeTheme.load()
     private var selectedTheme = BadgeThemeSelection.selected()
+    private var automaticallyChecksForUpdates =
+        AutomaticUpdateCheckPreference.isEnabled()
+    private var softwareUpdateStatus: SoftwareUpdateStatus = .idle
+    private let softwareUpdateChecker: any SoftwareUpdateChecking =
+        GitHubReleaseUpdateChecker()
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -162,6 +167,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var recognizerCleanupTask: Task<Void, Never>?
     private var modelConfigurationTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
+    private var softwareUpdateTask: Task<Void, Never>?
     private var insertionContext: DictationInsertionContext?
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
@@ -199,6 +205,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         reconcileRuntime(showSetupIfNeeded: true)
         configureModelReadiness()
+        if automaticallyChecksForUpdates {
+            checkForUpdates()
+        }
         logger.info("Agent started")
     }
 
@@ -1402,7 +1411,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             customThemes: customThemes,
             availableModels: availableModels,
             availableEngines: availableEngines,
-            configurationEnabled: !machine.phase.isBusy
+            configurationEnabled: !machine.phase.isBusy,
+            automaticallyChecksForUpdates: automaticallyChecksForUpdates,
+            softwareUpdateStatus: softwareUpdateStatus
         )
     }
 
@@ -1452,6 +1463,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     loginItemChanged: { [weak self] in
                         self?.setupWindowController.refresh()
+                    },
+                    setAutomaticallyChecksForUpdates: { [weak self] enabled in
+                        self?.setAutomaticallyChecksForUpdates(enabled)
+                    },
+                    checkForUpdates: { [weak self] in
+                        self?.checkForUpdates()
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -1472,6 +1489,56 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private var isPauseMode: Bool {
         hotkeyActivationMode == .pause
+    }
+
+    private func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
+        automaticallyChecksForUpdates = enabled
+        AutomaticUpdateCheckPreference.setEnabled(enabled)
+        advancedSettingsWindowController?.refreshIfVisible()
+        if enabled {
+            checkForUpdates()
+        }
+    }
+
+    private func checkForUpdates() {
+        guard softwareUpdateTask == nil else {
+            return
+        }
+        softwareUpdateStatus = .checking
+        advancedSettingsWindowController?.refreshIfVisible()
+        let checker = softwareUpdateChecker
+        let currentVersion = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "0.0.0"
+        softwareUpdateTask = Task { [weak self] in
+            do {
+                let result = try await checker.check(
+                    currentVersion: currentVersion
+                )
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+                switch result {
+                case .current:
+                    softwareUpdateStatus = .current
+                case .available(let latestVersion, _):
+                    softwareUpdateStatus = .available(
+                        version: latestVersion
+                    )
+                }
+                softwareUpdateTask = nil
+                advancedSettingsWindowController?.refreshIfVisible()
+            } catch is CancellationError {
+                self?.softwareUpdateTask = nil
+            } catch {
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+                softwareUpdateStatus = .failed
+                softwareUpdateTask = nil
+                advancedSettingsWindowController?.refreshIfVisible()
+            }
+        }
     }
 
     private func selectDictationMode(_ mode: HotkeyActivationMode) {
@@ -1705,6 +1772,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopSynchronousServices() -> PendingRecognizerWork {
+        softwareUpdateTask?.cancel()
+        softwareUpdateTask = nil
         let pendingWork = PendingRecognizerWork(
             precedingCleanup: recognizerCleanupTask,
             modelConfiguration: modelConfigurationTask,

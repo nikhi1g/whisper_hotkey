@@ -119,6 +119,9 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.githubAccessibilityLabelForTesting,
             "Open whisper_hotkey on GitHub"
         )
+        XCTAssertFalse(controller.automaticallyChecksForUpdatesForTesting)
+        XCTAssertEqual(controller.softwareUpdateStatusForTesting, "")
+        XCTAssertTrue(controller.checkForUpdatesIsEnabledForTesting)
         XCTAssertGreaterThan(
             controller.helpButtonFrameForTesting.midX,
             540
@@ -325,6 +328,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var retentionSelections: [Bool] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeThemeSelection] = []
+        var automaticUpdateSelections: [Bool] = []
+        var updateCheckCount = 0
         let controller = AdvancedSettingsWindowController(
             stateProvider: { box.value },
             actions: AdvancedSettingsActions(
@@ -339,7 +344,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 setInternalDictionary: { dictionarySelections.append($0) },
                 setKeepsLatestDictation: { retentionSelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
-                selectTheme: { selectedThemes.append($0) }
+                selectTheme: { selectedThemes.append($0) },
+                setAutomaticallyChecksForUpdates: {
+                    automaticUpdateSelections.append($0)
+                },
+                checkForUpdates: { updateCheckCount += 1 }
             ),
             loginItemManager: makeLoginItemManager()
         )
@@ -357,6 +366,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.setKeepsLatestDictationForTesting(false)
         controller.selectLimitForTesting(.minutes30)
         controller.selectThemeForTesting(.nord)
+        controller.setAutomaticUpdateChecksForTesting(true)
+        controller.checkForUpdatesForTesting()
 
         XCTAssertEqual(selectedHotkeys, [.leftShift])
         XCTAssertEqual(selectedModes, [.toggle])
@@ -368,6 +379,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(retentionSelections, [false])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.builtIn(.nord)])
+        XCTAssertEqual(automaticUpdateSelections, [true])
+        XCTAssertEqual(updateCheckCount, 1)
 
         box.value = makeAdvancedSettingsState(
             hotkey: .leftShift,
@@ -462,7 +475,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 setKeepsLatestDictation: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },
-                loginItemChanged: { mutationCount += 1 }
+                loginItemChanged: { mutationCount += 1 },
+                setAutomaticallyChecksForUpdates: { _ in
+                    mutationCount += 1
+                },
+                checkForUpdates: { mutationCount += 1 }
             ),
             loginItemManager: makeLoginItemManager(service: service)
         )
@@ -478,10 +495,46 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectLimitForTesting(.seconds30)
         controller.selectThemeForTesting(.dracula)
         controller.setLoginItemForTesting(enabled: true)
+        controller.setAutomaticUpdateChecksForTesting(true)
+        controller.checkForUpdatesForTesting()
 
         XCTAssertEqual(mutationCount, 0)
         XCTAssertEqual(service.registerCallCount, 0)
         XCTAssertEqual(service.unregisterCallCount, 0)
+    }
+
+    @MainActor
+    func testUpdateControlsRenderAutomaticPreferenceAndCheckStatus() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                automaticallyChecksForUpdates: true,
+                softwareUpdateStatus: .available(version: "3.2.0")
+            )
+        )
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+
+        XCTAssertTrue(controller.automaticallyChecksForUpdatesForTesting)
+        XCTAssertEqual(
+            controller.softwareUpdateStatusForTesting,
+            "v3.2.0 available"
+        )
+        XCTAssertTrue(controller.checkForUpdatesIsEnabledForTesting)
+
+        box.value = makeAdvancedSettingsState(
+            automaticallyChecksForUpdates: true,
+            softwareUpdateStatus: .checking
+        )
+        controller.refresh()
+
+        XCTAssertEqual(controller.softwareUpdateStatusForTesting, "Checking...")
+        XCTAssertFalse(controller.checkForUpdatesIsEnabledForTesting)
+        XCTAssertTrue(
+            controller.controlsFitWindowForTesting,
+            controller.controlsOutsideWindowForTesting.joined(separator: ", ")
+        )
     }
 
     @MainActor
@@ -612,7 +665,9 @@ private func makeAdvancedSettingsState(
     customThemes: [CustomBadgeTheme] = [],
     availableModels: Set<DictationModel> = [.baseEnglish],
     availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
-    configurationEnabled: Bool = true
+    configurationEnabled: Bool = true,
+    automaticallyChecksForUpdates: Bool = false,
+    softwareUpdateStatus: SoftwareUpdateStatus = .idle
 ) -> AdvancedSettingsState {
     AdvancedSettingsState(
         selectedHotkey: hotkey,
@@ -628,7 +683,9 @@ private func makeAdvancedSettingsState(
         customThemes: customThemes,
         availableModels: availableModels,
         availableEngines: availableEngines,
-        configurationEnabled: configurationEnabled
+        configurationEnabled: configurationEnabled,
+        automaticallyChecksForUpdates: automaticallyChecksForUpdates,
+        softwareUpdateStatus: softwareUpdateStatus
     )
 }
 
