@@ -1,19 +1,11 @@
-Version 3.1.3 fixes the verified in-app update and restart flow added in 3.1.2.
-
-Recommended for users testing the version 3.1 update path.
+Version 3.1.4 makes hotkey activation feel substantially more responsive.
 
 ## Highlights
 
-- Read the designated signing requirement from either output stream used by
-  `codesign`, matching current macOS behavior.
-- Keep the launcher's private incoming copy named as an `.app` bundle so its
-  post-copy safety verification can complete before replacement.
-- Keep checksum, bundle identity, version, signature, and signing identity
-  verification intact.
-- Show **Update failed** for an installation failure instead of the unrelated
-  **Unable to check** status.
-- Add an opt-in live test that downloads, verifies, mounts, stages, and removes
-  the published 3.1.2 update.
+- Start microphone capture before resolving the exact Accessibility caret
+  position or drawing the listening badge.
+- Present the badge once, in its correct location, after capture is active.
+- Defer model preload scheduling until after microphone capture has started.
+- Remove redundant explanatory copy from Settings.
 
-This test patch uses the existing release packaging path. Public distribution
-still requires Developer ID signing and notarization before general release.
+The verified in-app update and restart flow remains unchanged.

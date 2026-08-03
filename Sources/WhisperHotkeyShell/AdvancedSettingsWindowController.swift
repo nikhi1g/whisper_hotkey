@@ -1137,16 +1137,7 @@ public final class AdvancedSettingsWindowController:
         title.font = .systemFont(ofSize: 22, weight: .semibold)
         themedPrimaryLabels.append(title)
         stack.addArrangedSubview(title)
-
-        let subtitle = NSTextField(
-            wrappingLabelWithString:
-                "Dictation preferences apply immediately and stay on this Mac."
-        )
-        subtitle.textColor = .secondaryLabelColor
-        subtitle.maximumNumberOfLines = 2
-        themedSecondaryLabels.append(subtitle)
-        stack.addArrangedSubview(subtitle)
-        stack.setCustomSpacing(22, after: subtitle)
+        stack.setCustomSpacing(22, after: title)
 
         let inputTitle = makeSectionTitle("INPUT")
         stack.addArrangedSubview(inputTitle)
@@ -1300,7 +1291,6 @@ public final class AdvancedSettingsWindowController:
             stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -32),
             stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 26),
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -24),
-            subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
