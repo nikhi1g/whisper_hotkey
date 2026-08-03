@@ -287,16 +287,14 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
   stroke-dasharray: 3.4 96.6;
   vector-effect: non-scaling-stroke;
 }
-.listening-badge.is-listening .badge-marker,
-.listening-badge.is-transcribing .badge-marker { opacity: 0; }
-.listening-badge.is-listening .activity-trail,
-.listening-badge.is-transcribing .activity-trail { opacity: 1; }
-.listening-badge.is-listening .activity-trail path,
-.listening-badge.is-transcribing .activity-trail path {
+.listening-badge.is-cycle-progress .badge-marker { opacity: 0; }
+.listening-badge.is-cycle-progress .activity-trail { opacity: 1; }
+.listening-badge.is-cycle-progress .activity-trail path {
   animation-name: trail-flow;
-  animation-duration: 920ms;
+  animation-duration: var(--demo-phrase-interval, 4440ms);
   animation-timing-function: linear;
-  animation-iteration-count: infinite;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
 }
 .listening-badge.is-transcribing .hud-control { pointer-events: none; }
 .waveform { width: 68px; height: 20px; display: flex; align-items: center; justify-content: center; gap: 1.05px; transform-origin: center; transition: transform 150ms ease; }
@@ -398,8 +396,9 @@ footer {
 
 @keyframes graph-flow { to { stroke-dashoffset: -20; } }
 @keyframes trail-flow {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -100; }
+  0% { stroke-dashoffset: 0; opacity: 1; }
+  99.8% { opacity: 1; }
+  100% { stroke-dashoffset: -100; opacity: 0; }
 }
 @keyframes waveform-noise {
   0%, 100% { transform: scaleY(var(--wave-a, .3)); }

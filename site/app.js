@@ -15,6 +15,23 @@ const instruction = document.querySelector('[data-demo-instruction]');
 const demoOutput = document.querySelector('[data-demo-output]');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const demoTiming = Object.freeze({
+  speechLead: 1900,
+  speechPause: 650,
+  speechTail: 1250,
+  controlPress: 180,
+  transcription: 320,
+  outgoingText: 140,
+  incomingText: 260
+});
+const demoPhraseInterval = demoTiming.speechLead
+  + demoTiming.speechPause
+  + demoTiming.speechTail
+  + demoTiming.controlPress
+  + demoTiming.transcription
+  + demoTiming.outgoingText;
+badge?.style.setProperty('--demo-phrase-interval', `${demoPhraseInterval}ms`);
+
 document.getElementById('year').textContent = new Date().getFullYear();
 
 const hotkeyChoices = [
@@ -235,7 +252,7 @@ const replaceOutput = async (text, signal) => {
 
   const outgoing = demoOutput.animate(
     [{opacity: 1, transform: 'translateY(0)'}, {opacity: 0, transform: 'translateY(-4px)'}],
-    {duration: 140, easing: 'ease-in', fill: 'forwards'}
+    {duration: demoTiming.outgoingText, easing: 'ease-in', fill: 'forwards'}
   );
   await outgoing.finished;
   if (signal.aborted) return;
@@ -243,7 +260,7 @@ const replaceOutput = async (text, signal) => {
   outgoing.cancel();
   const incoming = demoOutput.animate(
     [{opacity: 0, transform: 'translateY(5px)'}, {opacity: 1, transform: 'translateY(0)'}],
-    {duration: 260, easing: 'cubic-bezier(.22, 1, .36, 1)'}
+    {duration: demoTiming.incomingText, easing: 'cubic-bezier(.22, 1, .36, 1)'}
   );
   await incoming.finished;
 };
@@ -257,18 +274,25 @@ let selectionLocked = false;
 
 const setListeningState = () => {
   phase = 'listening';
-  badge?.classList.remove('is-transcribing', 'is-displaying');
-  badge?.classList.add('is-listening');
+  if (badge) {
+    badge.classList.remove(
+      'is-transcribing',
+      'is-displaying',
+      'is-cycle-progress'
+    );
+    void badge.offsetWidth;
+    badge.classList.add('is-listening', 'is-cycle-progress');
+  }
   waveform?.classList.remove('is-silent');
   badge?.setAttribute('aria-label', 'Listening. Use Stop and Insert or Send.');
 };
 
 const runRecordingPattern = async signal => {
-  await delay(1900, signal);
+  await delay(demoTiming.speechLead, signal);
   waveform?.classList.add('is-silent');
-  await delay(650, signal);
+  await delay(demoTiming.speechPause, signal);
   waveform?.classList.remove('is-silent');
-  await delay(1250, signal);
+  await delay(demoTiming.speechTail, signal);
   return 'send';
 };
 
@@ -305,11 +329,11 @@ const runCycle = async signal => {
   waveform?.classList.remove('is-silent');
   if (completion === 'send') {
     sendButton?.classList.add('is-pressed');
-    await delay(180, signal);
+    await delay(demoTiming.controlPress, signal);
     sendButton?.classList.remove('is-pressed');
   } else {
     stopButton?.classList.add('is-pressed');
-    await delay(180, signal);
+    await delay(demoTiming.controlPress, signal);
     stopButton?.classList.remove('is-pressed');
   }
 
@@ -317,13 +341,14 @@ const runCycle = async signal => {
   badge?.classList.remove('is-listening');
   badge?.classList.add('is-transcribing');
   badge?.setAttribute('aria-label', 'Transcribing locally.');
-  await delay(320, signal);
+  await delay(demoTiming.transcription, signal);
 
   phase = 'inserting';
   badge?.classList.remove('is-transcribing');
   badge?.classList.add('is-displaying');
   badge?.setAttribute('aria-label', 'Dictation inserted.');
   await replaceOutput(demoPhrases[phraseIndex], signal);
+  badge?.classList.remove('is-cycle-progress');
   phraseIndex = (phraseIndex + 1) % demoPhrases.length;
   await delay(1250, signal);
 
@@ -351,6 +376,7 @@ const runDemo = async signal => {
 const restartDemo = () => {
   demoController?.abort();
   completeRecording = undefined;
+  badge?.classList.remove('is-cycle-progress');
   sendButton?.classList.remove('is-pressed');
   stopButton?.classList.remove('is-pressed');
   enforceValidSelection();
