@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-8">
-  <script src="./app.js?v=compact-8" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-9">
+  <script src="./app.js?v=compact-9" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -37,7 +37,7 @@
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
-            <span>Download preview DMG</span>
+            <span>Download DMG</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
           <a class="button button-secondary source-button" data-source-button href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">
@@ -82,11 +82,23 @@
     <section class="overview" id="how-it-works" aria-labelledby="overview-title">
       <div class="overview-copy">
         <h2 id="overview-title">Setup</h2>
-        <ol class="compact-steps">
-          <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
-          <li><span>2</span><p><strong>Allow</strong> Microphone, Accessibility, and Input Monitoring.</p></li>
-          <li><span>3</span><p><strong>Dictate</strong> Use your selected key and behavior.</p></li>
-        </ol>
+        <div class="setup-paths">
+          <ol class="compact-steps">
+            <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
+            <li><span>2</span><p><strong>Allow</strong> Microphone, Accessibility, and Input Monitoring.</p></li>
+            <li><span>3</span><p><strong>Dictate</strong> Use your selected key and behavior.</p></li>
+          </ol>
+          <div class="quick-options" aria-label="Copyable setup options">
+            <button class="copy-option" type="button" data-copy-option>
+              <span class="copy-option-header"><strong>Coding agent</strong><span data-copy-state aria-live="polite">Copy</span></span>
+              <span data-copy-content>Set up whisper_hotkey from https://github.com/nikhi1g/whisper_hotkey. Run ./run.sh and do not finish until the model, permissions, and a dictation test are verified.</span>
+            </button>
+            <button class="copy-option" type="button" data-copy-option>
+              <span class="copy-option-header"><strong>Terminal</strong><span data-copy-state aria-live="polite">Copy</span></span>
+              <code data-copy-content>git clone https://github.com/nikhi1g/whisper_hotkey.git &amp;&amp; cd whisper_hotkey &amp;&amp; ./run.sh</code>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="system-graph" id="privacy">

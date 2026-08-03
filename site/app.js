@@ -2,6 +2,7 @@ const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
 const heroSummary = document.querySelector('[data-dictation-copy]');
 const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
+const copyOptions = document.querySelectorAll('[data-copy-option]');
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -71,6 +72,50 @@ const refreshSourceRevision = async () => {
 refreshSourceRevision();
 window.setInterval(refreshSourceRevision, 30000);
 
+const copyText = async text => {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Use the local selection fallback below.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+
+  if (!copied) throw new Error('Copy failed');
+};
+
+copyOptions.forEach(option => {
+  const content = option.querySelector('[data-copy-content]');
+  const state = option.querySelector('[data-copy-state]');
+  let resetTimer;
+
+  option.addEventListener('click', async () => {
+    window.clearTimeout(resetTimer);
+
+    try {
+      await copyText(content.textContent.trim());
+      state.textContent = 'Copied';
+    } catch {
+      state.textContent = 'Copy failed';
+    }
+
+    resetTimer = window.setTimeout(() => {
+      state.textContent = 'Copy';
+    }, 1600);
+  });
+});
+
 if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
   const keyLabel = hotkeyHint.querySelector('kbd');
   const actionLabel = hotkeyHint.querySelector('span');
@@ -111,7 +156,7 @@ if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: re
   };
 
   const showNextState = async () => {
-    await wait(2600);
+    await wait(6500);
     stateIndex = (stateIndex + 1) % dictationStates.length;
     const state = dictationStates[stateIndex];
 
