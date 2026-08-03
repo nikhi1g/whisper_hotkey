@@ -136,8 +136,8 @@ const refreshSourceRevision = async () => {
 
     const shortCommit = build.commit.slice(0, 7);
     sourceRevision.textContent = `${build.branch}:${shortCommit}`;
-    sourceButton.href = `https://github.com/nikhi1g/whisper_hotkey/tree/${build.commit}`;
-    sourceButton.title = `View ${build.branch} at ${shortCommit}`;
+    sourceButton.href = 'https://github.com/nikhi1g/whisper_hotkey/tree/main';
+    sourceButton.title = `View main. Current site build ${shortCommit}`;
   } catch {
     // Keep the revision stamped into the deployed HTML when metadata is unavailable.
   }
