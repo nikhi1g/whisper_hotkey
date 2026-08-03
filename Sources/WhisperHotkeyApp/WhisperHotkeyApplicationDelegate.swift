@@ -469,9 +469,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .pressed:
             if !machine.phase.isBusy, machine.phase != .failed {
-                let anchor = contextProvider.currentBadgeAnchor()
-                badgeCaretRect = anchor.caretRect
-                badgeFieldRect = anchor.fieldRect
+                badgeCaretRect = nil
+                badgeFieldRect = nil
                 insertionContext = nil
             }
             process(.hotkeyPressed(at: eventTime))
@@ -568,6 +567,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeBoundaryInProgress = false
         predecodeFailed = false
 
+        do {
+            try recorder.start(
+                pauseSegmentation:
+                    isPauseMode || processingMode.decodesWhileSpeaking
+            )
+            process(.captureStarted)
+            startRecordingPresentation(
+                generation: generation,
+                limit: recordingLimit.seconds
+            )
+        } catch {
+            fail(error)
+            return false
+        }
+
         let precedingCleanup = recognizerCleanupTask
         if processingMode.keepsModelReady {
             preloadTask = Task.detached(
@@ -583,21 +597,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             preloadTask = nil
-        }
-
-        do {
-            try recorder.start(
-                pauseSegmentation:
-                    isPauseMode || processingMode.decodesWhileSpeaking
-            )
-            process(.captureStarted)
-            startRecordingPresentation(
-                generation: generation,
-                limit: recordingLimit.seconds
-            )
-        } catch {
-            fail(error)
-            return false
         }
 
         let maximumDuration = Duration.seconds(recordingLimit.seconds)
@@ -1165,6 +1164,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             badgeCaretRect = nil
             badgeFieldRect = nil
             return
+        }
+        if presentation == .listening {
+            let anchor = contextProvider.currentBadgeAnchor()
+            badgeCaretRect = anchor.caretRect
+            badgeFieldRect = anchor.fieldRect
         }
         badge.present(
             presentation,
