@@ -259,14 +259,26 @@ public actor SoftwareUpdateInstaller: SoftwareUpdateInstalling {
             arguments: ["--display", "--requirements", "-", application.path],
             capturesOutput: true
         )
-        let text = String(
-            data: result.standardError,
-            encoding: .utf8
-        ) ?? ""
+        guard let requirement = designatedRequirement(
+            standardOutput: result.standardOutput,
+            standardError: result.standardError
+        ) else {
+            throw SoftwareUpdateInstallError.untrustedApplication
+        }
+        return requirement
+    }
+
+    static func designatedRequirement(
+        standardOutput: Data,
+        standardError: Data
+    ) -> String? {
+        let text = [standardOutput, standardError]
+            .compactMap { String(data: $0, encoding: .utf8) }
+            .joined(separator: "\n")
         guard let line = text.split(separator: "\n").first(where: {
             $0.hasPrefix("designated => ")
         }) else {
-            throw SoftwareUpdateInstallError.untrustedApplication
+            return nil
         }
         return String(line.dropFirst("designated => ".count))
     }

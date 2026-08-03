@@ -542,6 +542,15 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.controlsFitWindowForTesting,
             controller.controlsOutsideWindowForTesting.joined(separator: ", ")
         )
+
+        box.value = makeAdvancedSettingsState(
+            automaticallyChecksForUpdates: true,
+            softwareUpdateStatus: .installationFailed
+        )
+        controller.refresh()
+
+        XCTAssertEqual(controller.softwareUpdateStatusForTesting, "Update failed")
+        XCTAssertTrue(controller.checkForUpdatesIsEnabledForTesting)
     }
 
     @MainActor

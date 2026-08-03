@@ -1600,7 +1600,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 guard let self, !Task.isCancelled else {
                     return
                 }
-                softwareUpdateStatus = .failed
+                softwareUpdateStatus = .installationFailed
                 softwareUpdateInstallationTask = nil
                 advancedSettingsWindowController?.refreshIfVisible()
             }

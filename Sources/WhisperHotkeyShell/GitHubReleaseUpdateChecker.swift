@@ -38,6 +38,7 @@ public enum SoftwareUpdateStatus: Equatable, Sendable {
     case verifying
     case installing
     case failed
+    case installationFailed
 
     public var displayText: String {
         switch self {
@@ -57,6 +58,8 @@ public enum SoftwareUpdateStatus: Equatable, Sendable {
             "Restarting..."
         case .failed:
             "Unable to check"
+        case .installationFailed:
+            "Update failed"
         }
     }
 
@@ -64,7 +67,7 @@ public enum SoftwareUpdateStatus: Equatable, Sendable {
         switch self {
         case .checking, .downloading, .verifying, .installing:
             true
-        case .idle, .current, .available, .failed:
+        case .idle, .current, .available, .failed, .installationFailed:
             false
         }
     }
