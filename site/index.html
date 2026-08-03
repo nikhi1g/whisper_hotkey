@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-13">
-  <script src="./app.js?v=compact-13" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-14">
+  <script src="./app.js?v=compact-14" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -32,7 +32,7 @@
       <div class="hero-copy">
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
+          <a class="button button-primary" href="https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download DMG</span>
             <span class="button-arrow" aria-hidden="true">↓</span>
           </a>
@@ -53,27 +53,30 @@
             <div class="demo-settings" aria-label="Demo settings">
               <label>
                 <span>Key</span>
-                <select data-demo-key aria-label="Dictation key">
-                  <option value="right-command">Right Command</option>
-                  <option value="left-command">Left Command</option>
-                  <option value="right-shift">Right Shift</option>
-                  <option value="left-shift">Left Shift</option>
-                  <option value="right-option">Right Option</option>
-                  <option value="left-option">Left Option</option>
-                  <option value="right-control">Right Control</option>
-                  <option value="left-control">Left Control</option>
-                  <option value="caps-lock">Caps Lock</option>
-                  <option value="fn-globe">Fn / Globe</option>
-                </select>
+                <span class="select-shell">
+                  <select data-demo-key aria-label="Dictation key">
+                    <option value="right-command">Right Command</option>
+                    <option value="left-command">Left Command</option>
+                    <option value="right-shift">Right Shift</option>
+                    <option value="left-shift">Left Shift</option>
+                    <option value="right-option">Right Option</option>
+                    <option value="left-option">Left Option</option>
+                    <option value="right-control">Right Control</option>
+                    <option value="left-control">Left Control</option>
+                    <option value="caps-lock">Caps Lock</option>
+                    <option value="fn-globe">Fn / Globe</option>
+                  </select>
+                  <svg viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5"></path></svg>
+                </span>
               </label>
-              <label>
+              <div class="mode-field">
                 <span>Mode</span>
-                <select data-demo-behavior aria-label="Input behavior">
-                  <option value="hold">Press and Hold</option>
-                  <option value="toggle">Toggle</option>
-                  <option value="pause">Pause Mode</option>
-                </select>
-              </label>
+                <div class="mode-chips" role="radiogroup" aria-label="Input behavior">
+                  <button type="button" data-demo-behavior="hold" role="radio" aria-checked="true">Hold</button>
+                  <button type="button" data-demo-behavior="toggle" role="radio" aria-checked="false">Toggle</button>
+                  <button type="button" data-demo-behavior="pause" role="radio" aria-checked="false">Pause</button>
+                </div>
+              </div>
             </div>
             <p class="demo-instruction" data-demo-instruction>
               Hold Right Command, speak, and release. Your words appear in the field where you are typing.
@@ -133,7 +136,7 @@
       <div class="system-graph" id="privacy">
         <svg viewBox="0 0 620 350" role="img" aria-labelledby="graph-title graph-description">
           <title id="graph-title">Local dictation data flow</title>
-          <desc id="graph-description">The selected hotkey starts temporary capture. Local Whisper uses the bundled model and inserts text into the focused field. Temporary audio is deleted. Copy Last Dictation provides a clipboard fallback using only the latest successful transcript, kept in memory until the app quits.</desc>
+          <desc id="graph-description">The selected hotkey starts temporary capture. Local Whisper uses the bundled model and inserts text into the focused field. Temporary audio is deleted. When enabled in Settings, Copy Last Dictation provides a clipboard fallback using only the latest successful transcript, kept in memory until the app quits.</desc>
           <defs>
             <marker id="graph-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0 0L8 4L0 8Z"></path>
@@ -177,7 +180,7 @@
     <span>© <span id="year"></span> Nikhil Gupta</span>
     <span class="footer-center">
       <em>“The fastest interface is the one that you don’t have to think about.”</em>
-      <small>Copy Last Dictation keeps only the latest successful transcript in memory until quit.</small>
+      <small>Copy Last Dictation keeps only the latest successful transcript in memory until quit. Turn off anytime in Settings.</small>
     </span>
     <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>

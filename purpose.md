@@ -167,9 +167,15 @@ Editing and theme loading happen only through Settings and add no idle worker,
 file watcher, or network request.
 
 The menu also offers **Copy Last Dictation** after the first successful local
-transcription. It copies that latest transcript to the system clipboard as a
-normal permanent copy. Only one transcript is retained in memory, it is replaced
-by the next successful transcription, and it is discarded when the app exits.
+transcription when **Keep latest transcript until quit** is enabled in Settings.
+This privacy setting is enabled by default and persists across launches. Turning
+it off immediately clears the retained transcript, hides the menu action, and
+prevents later dictations from being retained until the setting is enabled
+again. When enabled, Copy Last Dictation copies the latest transcript to the
+system clipboard as a normal permanent copy. Only one transcript is retained in
+memory, it is replaced by the next successful transcription, and it is discarded
+when the app exits. Pause Mode keeps its separate bounded session prompt whether
+or not Copy Last Dictation retention is enabled.
 
 Runtime UI consists of a non-activating badge beside the Accessibility caret
 and the persistent menu-bar state icon. Standard selection ranges and
@@ -251,9 +257,10 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 3.0.8. Beyond the single in-memory last
-dictation, it stores no history, performs no network requests, never downloads
-models, and removes audio state after use. Logs contain state and errors only.
+The app is English-only for version 3.1.0. Beyond the optional single in-memory
+last dictation, it stores no history, performs no network requests, never
+downloads models, and removes audio state after use. Logs contain state and
+errors only.
 The separately invoked `run.sh` bootstrap may download selected documented
 models, but installs them only after pinned SHA-256 verification.
 

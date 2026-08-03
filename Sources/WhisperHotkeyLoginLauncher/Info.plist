@@ -9,8 +9,8 @@
     <key>CFBundleName</key>
     <string>WhisperHotkeyLoginLauncher</string>
     <key>CFBundleShortVersionString</key>
-	<string>3.0.8</string>
+	<string>3.1.0</string>
     <key>CFBundleVersion</key>
-	<string>3.0.8</string>
+	<string>3.1.0</string>
 </dict>
 </plist>

@@ -35,7 +35,7 @@ route automatically; do not create a competing directory with the same name in
    matching file under `docs/releases/`.
 2. Run `swift test` and `python3 build_app.py` locally with a stable development
    identity.
-3. Commit the release, then create and push the matching tag, such as `v3.0.8`.
+3. Commit the release, then create and push the matching tag, such as `v3.1.0`.
 4. The `release.yml` workflow builds pinned whisper.cpp 1.9.1 for the declared
    macOS 14 deployment target, downloads Base English, verifies its pinned
    SHA-256, tests the project, and imports the temporary Developer ID identity.

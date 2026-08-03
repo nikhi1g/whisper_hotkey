@@ -11,6 +11,34 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
     public static let customBadgeThemes = "customBadgeThemes"
+    public static let keepLatestDictation = "keepLatestDictation"
+}
+
+public enum LastDictationRetentionPreference {
+    public static let defaultValue = true
+
+    public static func isEnabled(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard defaults.object(
+            forKey: WhisperHotkeyPreferenceKeys.keepLatestDictation
+        ) != nil else {
+            return defaultValue
+        }
+        return defaults.bool(
+            forKey: WhisperHotkeyPreferenceKeys.keepLatestDictation
+        )
+    }
+
+    public static func setEnabled(
+        _ enabled: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            enabled,
+            forKey: WhisperHotkeyPreferenceKeys.keepLatestDictation
+        )
+    }
 }
 
 public enum DecodingProfile: String, CaseIterable, Codable, Sendable {

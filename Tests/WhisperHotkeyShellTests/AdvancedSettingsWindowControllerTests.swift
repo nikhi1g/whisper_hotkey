@@ -73,6 +73,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             ["Dark", "Light"]
         )
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
+        XCTAssertTrue(controller.keepsLatestDictationForTesting)
         XCTAssertTrue(controller.modeControlEnabledForTesting)
         XCTAssertEqual(controller.modelIsEnabledForTesting(.smallEnglish), true)
         XCTAssertEqual(controller.modelIsEnabledForTesting(.mediumEnglish), false)
@@ -316,6 +317,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedDecodingProfiles: [DecodingProfile] = []
         var processingSelections: [ModelProcessingMode] = []
         var dictionarySelections: [[String]] = []
+        var retentionSelections: [Bool] = []
         var selectedLimits: [RecordingLimit] = []
         var selectedThemes: [BadgeThemeSelection] = []
         let controller = AdvancedSettingsWindowController(
@@ -330,6 +332,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 },
                 selectProcessingMode: { processingSelections.append($0) },
                 setInternalDictionary: { dictionarySelections.append($0) },
+                setKeepsLatestDictation: { retentionSelections.append($0) },
                 selectRecordingLimit: { selectedLimits.append($0) },
                 selectTheme: { selectedThemes.append($0) }
             ),
@@ -346,6 +349,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.setInternalDictionaryForTesting(
             [" Codex ", "Claude Code", "codex"]
         )
+        controller.setKeepsLatestDictationForTesting(false)
         controller.selectLimitForTesting(.minutes30)
         controller.selectThemeForTesting(.nord)
 
@@ -356,6 +360,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
         XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
         XCTAssertEqual(dictionarySelections, [["Codex", "Claude Code"]])
+        XCTAssertEqual(retentionSelections, [false])
         XCTAssertEqual(selectedLimits, [.minutes30])
         XCTAssertEqual(selectedThemes, [.builtIn(.nord)])
 
@@ -449,6 +454,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectModel: { _ in mutationCount += 1 },
                 selectProcessingMode: { _ in mutationCount += 1 },
                 setInternalDictionary: { _ in mutationCount += 1 },
+                setKeepsLatestDictation: { _ in mutationCount += 1 },
                 selectRecordingLimit: { _ in mutationCount += 1 },
                 selectTheme: { _ in mutationCount += 1 },
                 loginItemChanged: { mutationCount += 1 }
@@ -463,6 +469,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectModelForTesting(.smallEnglish)
         controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(["Codex"])
+        controller.setKeepsLatestDictationForTesting(false)
         controller.selectLimitForTesting(.seconds30)
         controller.selectThemeForTesting(.dracula)
         controller.setLoginItemForTesting(enabled: true)
@@ -593,6 +600,7 @@ private func makeAdvancedSettingsState(
     decodingProfile: DecodingProfile = .precision,
     processingMode: ModelProcessingMode = .afterRecording,
     internalDictionaryEntries: [String] = [],
+    keepsLatestDictation: Bool = true,
     limit: RecordingLimit = .minutes10,
     theme: BadgeTheme = .defaultTheme,
     themeSelection: BadgeThemeSelection? = nil,
@@ -609,6 +617,7 @@ private func makeAdvancedSettingsState(
         decodingProfile: decodingProfile,
         processingMode: processingMode,
         internalDictionaryEntries: internalDictionaryEntries,
+        keepsLatestDictation: keepsLatestDictation,
         recordingLimit: limit,
         selectedTheme: themeSelection ?? .builtIn(theme),
         customThemes: customThemes,

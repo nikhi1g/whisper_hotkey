@@ -107,6 +107,15 @@ enum UserGuideContent {
                 detail: dictionaryDetail(state.internalDictionaryEntries)
             ),
             UserGuideRow(
+                key: "last-dictation",
+                title: state.keepsLatestDictation
+                    ? "Copy Last Dictation On"
+                    : "Copy Last Dictation Off",
+                detail: state.keepsLatestDictation
+                    ? "Keeps only the latest successful transcript in memory until quit."
+                    : "Successful transcripts are not retained after insertion."
+            ),
+            UserGuideRow(
                 key: "esc",
                 title: "Discard",
                 detail: "Stops dictation and inserts nothing."
@@ -274,6 +283,17 @@ enum UserGuideContent {
                 detail: loginItemEnabled
                     ? "Disable automatic launch and start the app yourself."
                     : "Start whisper_hotkey automatically after sign-in."
+            )
+        )
+        rows.append(
+            UserGuideRow(
+                key: "last-dictation",
+                title: state.keepsLatestDictation
+                    ? "Disable Copy Last Dictation"
+                    : "Enable Copy Last Dictation",
+                detail: state.keepsLatestDictation
+                    ? "Clear the retained transcript and stop keeping later dictations."
+                    : "Keep only the next latest successful transcript in memory until quit."
             )
         )
         return rows

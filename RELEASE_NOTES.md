@@ -1,20 +1,21 @@
-Version 3.0.8 adds a conventional, self-contained Mac download while preserving
-the source bootstrap and the app's private, on-demand runtime.
+Version 3.1.0 adds an explicit privacy control for Copy Last Dictation and
+promotes the downloadable Mac app to the stable release path.
 
 Recommended for all users of version 3.0.
 
 ## Highlights
 
-- Publish a Developer ID-signed, Apple-notarized `whisper_hotkey.dmg` through
-  GitHub Releases.
-- Include the pinned, SHA-256-verified Base English model in the release app so
-  the DMG needs no follow-up model download or build toolchain.
-- Add the product page at `nikhi1g.github.io/whisper_hotkey/` with direct DMG
-  and source links.
-- Keep the existing `git clone` → `./run.sh` path for source installations,
-  including its human-in-the-loop setup verification.
-- Keep model loading, microphone use, and recognition on demand and entirely
-  local after installation.
+- Add **Keep latest transcript until quit** to Settings. It defaults on for the
+  existing Copy Last Dictation behavior.
+- Turning the setting off immediately clears the retained transcript, hides the
+  menu action, and prevents later transcripts from being retained.
+- Keep Pause Mode context separate so disabling Copy Last Dictation does not
+  reduce pause-aware punctuation or casing within an active session.
+- Retain a transcript only after successful insertion.
+- Publish a Developer ID-signed, Apple-notarized `whisper_hotkey.dmg` with the
+  pinned Base English model through the stable GitHub release path.
+- Refine the product-page demo with direct mode chips, a modern key picker, and
+  a continuous perimeter activity trail.
 
 Fastest install:
 
@@ -22,16 +23,5 @@ Fastest install:
 2. Drag the app to Applications and open it.
 3. Complete the three macOS permissions shown by Setup.
 
-Source install:
-
-```sh
-git clone https://github.com/nikhi1g/whisper_hotkey.git
-cd whisper_hotkey
-./run.sh
-```
-
-The DMG supports Apple Silicon Macs running macOS 14 or newer. Its release
-workflow refuses to publish unless the app is Developer ID signed, notarization
-is accepted and stapled, Gatekeeper assessment succeeds, and the included Base
-English model matches the pinned digest. Source archives and checksums remain
-attached for independent inspection.
+The DMG supports Apple Silicon Macs running macOS 14 or newer. Recognition and
+the optional latest-transcript fallback remain local and in memory only.

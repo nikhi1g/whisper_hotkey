@@ -3,6 +3,46 @@ import XCTest
 @testable import WhisperHotkeyCore
 
 final class PreferenceTests: XCTestCase {
+    func testLastDictationRetentionDefaultsOnAndPersists() {
+        let suite = "whisper_hotkey-retention-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertTrue(
+            LastDictationRetentionPreference.isEnabled(defaults: defaults)
+        )
+        LastDictationRetentionPreference.setEnabled(
+            false,
+            defaults: defaults
+        )
+        XCTAssertFalse(
+            LastDictationRetentionPreference.isEnabled(defaults: defaults)
+        )
+        LastDictationRetentionPreference.setEnabled(
+            true,
+            defaults: defaults
+        )
+        XCTAssertTrue(
+            LastDictationRetentionPreference.isEnabled(defaults: defaults)
+        )
+    }
+
+    func testLastDictationBufferClearsImmediatelyAndRejectsDisabledWrites() {
+        var buffer = LastDictationBuffer(isEnabled: true)
+
+        buffer.retainSuccessful("  first successful dictation  ")
+        XCTAssertEqual(buffer.transcript, "first successful dictation")
+
+        buffer.setEnabled(false)
+        XCTAssertNil(buffer.transcript)
+        buffer.retainSuccessful("must not remain")
+        XCTAssertNil(buffer.transcript)
+
+        buffer.setEnabled(true)
+        buffer.retainSuccessful("next successful dictation")
+        XCTAssertEqual(buffer.transcript, "next successful dictation")
+    }
+
     func testModelChoicesStartAtBaseAndHaveUniqueFiles() {
         XCTAssertEqual(DictationModel.allCases.first, .baseEnglish)
         XCTAssertEqual(

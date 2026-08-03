@@ -18,6 +18,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         decodingProfile: .precision,
         processingMode: .afterRecording,
         internalDictionaryEntries: [],
+        keepsLatestDictation: true,
         recordingLimit: .minutes10,
         availableModels: [],
         availableEngines: [],
@@ -70,6 +71,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var decodingProfile = DecodingProfile.selected()
     private var processingMode = ModelProcessingMode.selected()
     private var internalDictionary = InternalDictionary.selected()
+    private var lastDictation = LastDictationBuffer(
+        isEnabled: LastDictationRetentionPreference.isEnabled()
+    )
     private var recordingLimit = RecordingLimit.selected()
     private var customThemes = CustomBadgeTheme.load()
     private var selectedTheme = BadgeThemeSelection.selected()
@@ -162,7 +166,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
     private var badgeFieldRect: CGRect?
-    private var lastDictation: String?
+    private var pauseSessionTranscript: String?
     private var pauseSessionDidInsert = false
     private var pauseBoundaryInProgress = false
     private var pauseSessionPrompt: String?
@@ -191,7 +195,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             .starting,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
-            hasLastDictation: lastDictation != nil
+            hasLastDictation: lastDictation.transcript != nil
         )
         reconcileRuntime(showSetupIfNeeded: true)
         configureModelReadiness()
@@ -545,6 +549,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionTranscript = nil
         pauseSessionPrompt = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
@@ -992,14 +997,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             )
             if !trimmed.isEmpty {
                 if pauseSessionDidInsert {
-                    lastDictation?.append(" ")
-                    lastDictation?.append(contentsOf: trimmed)
+                    pauseSessionTranscript?.append(" ")
+                    pauseSessionTranscript?.append(contentsOf: trimmed)
                 } else {
-                    lastDictation = trimmed
+                    pauseSessionTranscript = trimmed
                 }
+                lastDictation.retainSuccessful(
+                    pauseSessionTranscript ?? ""
+                )
             }
             pauseSessionDidInsert = true
-            pauseSessionPrompt = lastDictation.flatMap(
+            pauseSessionPrompt = pauseSessionTranscript.flatMap(
                 DictationContextPrompt.boundedTail
             )
             logger.info("Pause-mode chunk inserted")
@@ -1015,9 +1023,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func deliver(_ transcript: String) -> Bool {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            lastDictation = trimmed
-        }
         let result = delivery.deliver(
             transcript: transcript,
             context: insertionContext
@@ -1026,6 +1031,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         switch result {
         case .inserted:
+            lastDictation.retainSuccessful(trimmed)
             logger.info("Dictation inserted")
             if completionBehavior == .insertAndSubmit {
                 completionBehavior = .insert
@@ -1061,6 +1067,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionTranscript = nil
         pauseSessionPrompt = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
@@ -1342,7 +1349,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 .failed,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
-                hasLastDictation: lastDictation != nil
+                hasLastDictation: lastDictation.transcript != nil
             )
             return
         }
@@ -1351,7 +1358,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 .unavailable,
                 toggleDictationEnabled: effectiveToggleDictationEnabled,
                 selectedHotkey: selectedHotkey,
-                hasLastDictation: lastDictation != nil
+                hasLastDictation: lastDictation.transcript != nil
             )
             return
         }
@@ -1376,7 +1383,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             state,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
             selectedHotkey: selectedHotkey,
-            hasLastDictation: lastDictation != nil
+            hasLastDictation: lastDictation.transcript != nil
         )
     }
 
@@ -1389,6 +1396,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             decodingProfile: decodingProfile,
             processingMode: processingMode,
             internalDictionaryEntries: internalDictionary.entries,
+            keepsLatestDictation: lastDictation.isEnabled,
             recordingLimit: recordingLimit,
             selectedTheme: selectedTheme,
             customThemes: customThemes,
@@ -1429,6 +1437,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     setInternalDictionary: { [weak self] entries in
                         self?.setInternalDictionary(entries)
+                    },
+                    setKeepsLatestDictation: { [weak self] enabled in
+                        self?.setKeepsLatestDictation(enabled)
                     },
                     selectRecordingLimit: { [weak self] limit in
                         self?.selectRecordingLimit(limit)
@@ -1583,6 +1594,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         advancedSettingsWindowController?.refreshIfVisible()
     }
 
+    private func setKeepsLatestDictation(_ enabled: Bool) {
+        guard !machine.phase.isBusy,
+              lastDictation.isEnabled != enabled
+        else {
+            return
+        }
+        lastDictation.setEnabled(enabled)
+        LastDictationRetentionPreference.setEnabled(enabled)
+        updateMenuBar()
+    }
+
     private func configureModelReadiness(
         reloadSelectedModel: Bool = false
     ) {
@@ -1655,10 +1677,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func copyLastDictation() {
-        guard let lastDictation else {
+        guard lastDictation.isEnabled,
+              let transcript = lastDictation.transcript
+        else {
             return
         }
-        if !delivery.copyToClipboard(lastDictation) {
+        if !delivery.copyToClipboard(transcript) {
             fail("Clipboard unavailable: try again.")
         }
     }
@@ -1703,6 +1727,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
+        pauseSessionTranscript = nil
         pauseSessionPrompt = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false

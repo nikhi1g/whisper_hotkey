@@ -8,7 +8,7 @@ const timer = document.querySelector('[data-demo-timer]');
 const stopButton = document.querySelector('[data-demo-stop]');
 const sendButton = document.querySelector('[data-demo-send]');
 const keySelect = document.querySelector('[data-demo-key]');
-const behaviorSelect = document.querySelector('[data-demo-behavior]');
+const behaviorButtons = [...document.querySelectorAll('[data-demo-behavior]')];
 const instruction = document.querySelector('[data-demo-instruction]');
 const demoOutput = document.querySelector('[data-demo-output]');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -58,6 +58,8 @@ const validCombinations = hotkeyChoices.flatMap(hotkey =>
     .filter(behavior => hotkey.holdSupported || behavior.id !== 'hold')
     .map(behavior => ({hotkey, behavior}))
 );
+
+let selectedBehaviorID = 'hold';
 
 const delay = (duration, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) {
@@ -173,7 +175,7 @@ if (waveformBars.length > 0) {
 }
 
 const selectedHotkey = () => hotkeyChoices.find(choice => choice.id === keySelect?.value) ?? hotkeyChoices[0];
-const selectedBehavior = () => behaviorChoices.find(choice => choice.id === behaviorSelect?.value) ?? behaviorChoices[0];
+const selectedBehavior = () => behaviorChoices.find(choice => choice.id === selectedBehaviorID) ?? behaviorChoices[0];
 
 const updateInstruction = () => {
   if (!instruction) return;
@@ -181,11 +183,14 @@ const updateInstruction = () => {
 };
 
 const enforceValidSelection = () => {
-  if (!behaviorSelect) return;
-  const holdOption = behaviorSelect.querySelector('option[value="hold"]');
   const supportsHold = selectedHotkey().holdSupported;
-  holdOption.disabled = !supportsHold;
-  if (!supportsHold && behaviorSelect.value === 'hold') behaviorSelect.value = 'toggle';
+  if (!supportsHold && selectedBehaviorID === 'hold') selectedBehaviorID = 'toggle';
+  behaviorButtons.forEach(button => {
+    const isHold = button.dataset.demoBehavior === 'hold';
+    const isSelected = button.dataset.demoBehavior === selectedBehaviorID;
+    button.disabled = isHold && !supportsHold;
+    button.setAttribute('aria-checked', String(isSelected));
+  });
 };
 
 const setTimer = elapsedMilliseconds => {
@@ -297,7 +302,7 @@ const runCycle = async signal => {
     combinationIndex = (combinationIndex + 1) % validCombinations.length;
     const next = validCombinations[combinationIndex];
     keySelect.value = next.hotkey.id;
-    behaviorSelect.value = next.behavior.id;
+    selectedBehaviorID = next.behavior.id;
     enforceValidSelection();
     updateInstruction();
   }
@@ -341,7 +346,13 @@ const handleSelection = () => {
 };
 
 keySelect?.addEventListener('change', handleSelection);
-behaviorSelect?.addEventListener('change', handleSelection);
+behaviorButtons.forEach(button => {
+  button.addEventListener('click', () => {
+    if (button.disabled) return;
+    selectedBehaviorID = button.dataset.demoBehavior;
+    handleSelection();
+  });
+});
 
 sendButton?.addEventListener('click', () => {
   if (prefersReducedMotion) {

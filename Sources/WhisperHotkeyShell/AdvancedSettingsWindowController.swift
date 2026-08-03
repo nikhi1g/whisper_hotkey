@@ -10,6 +10,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let decodingProfile: DecodingProfile
     public let processingMode: ModelProcessingMode
     public let internalDictionaryEntries: [String]
+    public let keepsLatestDictation: Bool
     public let recordingLimit: RecordingLimit
     public let selectedTheme: BadgeThemeSelection
     public let customThemes: [CustomBadgeTheme]
@@ -25,6 +26,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         decodingProfile: DecodingProfile = .defaultProfile,
         processingMode: ModelProcessingMode = .defaultMode,
         internalDictionaryEntries: [String] = [],
+        keepsLatestDictation: Bool = true,
         recordingLimit: RecordingLimit,
         selectedTheme: BadgeThemeSelection = .defaultSelection,
         customThemes: [CustomBadgeTheme] = [],
@@ -39,6 +41,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.decodingProfile = decodingProfile
         self.processingMode = processingMode
         self.internalDictionaryEntries = internalDictionaryEntries
+        self.keepsLatestDictation = keepsLatestDictation
         self.recordingLimit = recordingLimit
         self.selectedTheme = selectedTheme
         self.customThemes = customThemes
@@ -57,6 +60,7 @@ public struct AdvancedSettingsActions {
     public var selectDecodingProfile: (DecodingProfile) -> Void
     public var selectProcessingMode: (ModelProcessingMode) -> Void
     public var setInternalDictionary: ([String]) -> Void
+    public var setKeepsLatestDictation: (Bool) -> Void
     public var selectRecordingLimit: (RecordingLimit) -> Void
     public var selectTheme: (BadgeThemeSelection) -> Void
     public var saveCustomTheme: (CustomBadgeTheme) -> Void
@@ -70,6 +74,7 @@ public struct AdvancedSettingsActions {
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
         setInternalDictionary: @escaping ([String]) -> Void = { _ in },
+        setKeepsLatestDictation: @escaping (Bool) -> Void = { _ in },
         selectRecordingLimit: @escaping (RecordingLimit) -> Void,
         selectTheme: @escaping (BadgeThemeSelection) -> Void = { _ in },
         saveCustomTheme: @escaping (CustomBadgeTheme) -> Void = { _ in },
@@ -82,6 +87,7 @@ public struct AdvancedSettingsActions {
         self.selectDecodingProfile = selectDecodingProfile
         self.selectProcessingMode = selectProcessingMode
         self.setInternalDictionary = setInternalDictionary
+        self.setKeepsLatestDictation = setKeepsLatestDictation
         self.selectRecordingLimit = selectRecordingLimit
         self.selectTheme = selectTheme
         self.saveCustomTheme = saveCustomTheme
@@ -135,6 +141,11 @@ public final class AdvancedSettingsWindowController:
     private let decodingControl = NSSegmentedControl()
     private let processingModeControl = NSSegmentedControl()
     private let internalDictionaryField = NSTokenField()
+    private let keepLatestDictationToggle = NSButton(
+        checkboxWithTitle: "Keep latest transcript until quit",
+        target: nil,
+        action: nil
+    )
     private let recordingLimitPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
     private let newThemeButton = NSButton(title: "New", target: nil, action: nil)
@@ -184,6 +195,7 @@ public final class AdvancedSettingsWindowController:
         super.init(window: nil)
 
         configureControls()
+        configurePrivacyControls()
         configureLoginItemControls()
         configureHelpButton()
 
@@ -247,6 +259,8 @@ public final class AdvancedSettingsWindowController:
             internalDictionaryField.objectValue =
                 state.internalDictionaryEntries
         }
+        keepLatestDictationToggle.state =
+            state.keepsLatestDictation ? .on : .off
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         rebuildThemePopup(using: state)
         select(rawValue: state.selectedTheme.identifier, in: themePopup)
@@ -260,6 +274,7 @@ public final class AdvancedSettingsWindowController:
                 && state.selectedEngine != .whisperKitCoreML
         processingModeControl.isEnabled = state.configurationEnabled
         internalDictionaryField.isEnabled = state.configurationEnabled
+        keepLatestDictationToggle.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
         newThemeButton.isEnabled = state.configurationEnabled
@@ -440,6 +455,15 @@ public final class AdvancedSettingsWindowController:
 
     @objc private func updateInternalDictionary(_ sender: NSTokenField) {
         commitInternalDictionary()
+    }
+
+    @objc private func toggleLatestDictationRetention(_ sender: NSButton) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setKeepsLatestDictation(sender.state == .on)
+        refresh()
     }
 
     public func controlTextDidEndEditing(_ notification: Notification) {
@@ -696,6 +720,17 @@ public final class AdvancedSettingsWindowController:
         editThemeButton.controlSize = .small
     }
 
+    private func configurePrivacyControls() {
+        keepLatestDictationToggle.target = self
+        keepLatestDictationToggle.action =
+            #selector(toggleLatestDictationRetention(_:))
+        keepLatestDictationToggle.toolTip =
+            "Turn off to clear the retained transcript immediately and hide Copy Last Dictation."
+        keepLatestDictationToggle.setAccessibilityLabel(
+            "Keep latest transcript until quit"
+        )
+    }
+
     private func rebuildThemePopup(using state: AdvancedSettingsState) {
         themePopup.removeAllItems()
         for (modeIndex, mode) in BadgeThemeMode.allCases.enumerated() {
@@ -883,6 +918,7 @@ public final class AdvancedSettingsWindowController:
         themedSecondaryLabels.forEach { $0.textColor = secondaryText }
         themedSectionLabels.forEach { $0.textColor = sectionText }
         loginItemToggle.contentTintColor = palette.waveform
+        keepLatestDictationToggle.contentTintColor = palette.waveform
         loginItemSettingsButton.contentTintColor = palette.waveform
         helpButton.contentTintColor = palette.waveform
         [
@@ -1025,6 +1061,18 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionGrid)
         stack.setCustomSpacing(20, after: recognitionGrid)
 
+        let privacyTitle = makeSectionTitle("PRIVACY")
+        stack.addArrangedSubview(privacyTitle)
+        let privacyGrid = makeGrid()
+        addRow(
+            to: privacyGrid,
+            title: "Copy Last Dictation",
+            control: keepLatestDictationToggle
+        )
+        sizeColumns(in: privacyGrid)
+        stack.addArrangedSubview(privacyGrid)
+        stack.setCustomSpacing(20, after: privacyGrid)
+
         let appearanceTitle = makeSectionTitle("APPEARANCE")
         stack.addArrangedSubview(appearanceTitle)
         let appearanceGrid = makeGrid()
@@ -1113,6 +1161,7 @@ public final class AdvancedSettingsWindowController:
             subtitle.widthAnchor.constraint(equalTo: stack.widthAnchor),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            privacyGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -1314,6 +1363,7 @@ public final class AdvancedSettingsWindowController:
             ("decoding", decodingControl),
             ("processing", processingModeControl),
             ("internal dictionary", internalDictionaryField),
+            ("last dictation retention", keepLatestDictationToggle),
             ("limit", recordingLimitPopup),
             ("theme", themePopup),
             ("new theme", newThemeButton),
@@ -1365,6 +1415,10 @@ public final class AdvancedSettingsWindowController:
 
     var loginItemIsOnForTesting: Bool {
         loginItemToggle.state == .on
+    }
+
+    var keepsLatestDictationForTesting: Bool {
+        keepLatestDictationToggle.state == .on
     }
 
     var loginStatusTextForTesting: String {
@@ -1484,6 +1538,11 @@ public final class AdvancedSettingsWindowController:
     func setLoginItemForTesting(enabled: Bool) {
         loginItemToggle.state = enabled ? .on : .off
         toggleLoginItem(loginItemToggle)
+    }
+
+    func setKeepsLatestDictationForTesting(_ enabled: Bool) {
+        keepLatestDictationToggle.state = enabled ? .on : .off
+        toggleLatestDictationRetention(keepLatestDictationToggle)
     }
 
     func openLoginSettingsForTesting() {
