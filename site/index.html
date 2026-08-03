@@ -12,8 +12,8 @@
   <meta property="og:image" content="https://nikhi1g.github.io/whisper_hotkey/assets/icon.png">
   <title>whisper_hotkey: private local dictation for macOS</title>
   <link rel="icon" href="./assets/icon.png">
-  <link rel="stylesheet" href="./styles.css?v=compact-2">
-  <script src="./app.js?v=compact-2" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=compact-3">
+  <script src="./app.js?v=compact-3" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -23,15 +23,15 @@
       <span>whisper_hotkey</span>
     </a>
     <nav>
-      <a href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/nikhi1g/whisper_hotkey/blob/main/purpose.md" target="_blank" rel="noopener noreferrer">Privacy</a>
     </nav>
   </header>
 
-  <main id="main">
+  <main class="page-shell" id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">Your voice.<br>Any text field.<br><span>Only on your Mac.</span></h1>
-        <p class="hero-summary">Hold Right Command, speak, and release. Your words appear wherever you are typing, with local Whisper recognition and no cloud account.</p>
+        <p class="hero-summary">Hold Right Command, speak, and release. Your words appear in the field where you are typing.</p>
         <div class="hero-actions">
           <a class="button button-primary js-download" href="https://github.com/nikhi1g/whisper_hotkey/releases/download/v3.0.8-preview.2/whisper_hotkey-preview.dmg" target="_blank" rel="noopener noreferrer">
             <span>Download preview DMG</span>
@@ -41,7 +41,6 @@
         </div>
         <p class="download-detail">
           <span><span class="js-release-detail">Preview, Apple Silicon, macOS 14+</span>. Base model included.</span>
-          <span class="js-install-detail">Drag to Applications. Use Privacy &amp; Security → Open Anyway once.</span>
         </p>
       </div>
 
@@ -80,16 +79,12 @@
 
     <section class="overview" id="how-it-works" aria-labelledby="overview-title">
       <div class="overview-copy reveal">
-        <h2 id="overview-title">Set up once.<br>Dictate anywhere.</h2>
+        <h2 id="overview-title">Setup</h2>
         <ol class="compact-steps">
           <li><span>1</span><p><strong>Install</strong> Drag the app to Applications.</p></li>
-          <li><span>2</span><p><strong>Allow</strong> Complete the three macOS permissions.</p></li>
-          <li><span>3</span><p><strong>Dictate</strong> Hold your key, speak, and release.</p></li>
+          <li><span>2</span><p><strong>Allow</strong> Microphone, Accessibility, and Input Monitoring.</p></li>
+          <li><span>3</span><p><strong>Dictate</strong> Release to insert.</p></li>
         </ol>
-        <div class="overview-links">
-          <a class="text-link" href="https://github.com/nikhi1g/whisper_hotkey/blob/main/purpose.md" target="_blank" rel="noopener noreferrer">Privacy contract <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="https://github.com/nikhi1g/whisper_hotkey" target="_blank" rel="noopener noreferrer">Source <span aria-hidden="true">↗</span></a>
-        </div>
       </div>
 
       <div class="system-graph reveal" id="privacy">
@@ -138,7 +133,6 @@
 
   <footer>
     <span>© <span id="year"></span> Nikhil Gupta</span>
-    <span>English dictation · Apple Silicon · macOS 14+</span>
     <a href="https://github.com/nikhi1g/whisper_hotkey/releases" target="_blank" rel="noopener noreferrer">All releases</a>
   </footer>
 </body>

@@ -3,7 +3,6 @@ const previewTag = 'v3.0.8-preview.2';
 const previewDownload = `https://github.com/${repository}/releases/download/${previewTag}/whisper_hotkey-preview.dmg`;
 const downloadLinks = [...document.querySelectorAll('.js-download')];
 const releaseDetail = document.querySelector('.js-release-detail');
-const installDetail = document.querySelector('.js-install-detail');
 const hotkeyHint = document.querySelector('[data-hotkey-cycle]');
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -27,14 +26,12 @@ const hydrateRelease = async () => {
       link.querySelector('span').textContent = 'Download for macOS';
     });
     releaseDetail.textContent = `${release.tag_name}, Apple Silicon, macOS 14+, ${readableSize(dmg.size)}`;
-    installDetail.textContent = 'Drag to Applications. Complete the one-time setup.';
   } catch {
     downloadLinks.forEach(link => {
       link.href = previewDownload;
       link.querySelector('span').textContent = 'Download preview DMG';
     });
     releaseDetail.textContent = `${previewTag}, Apple Silicon, macOS 14+`;
-    installDetail.textContent = 'Drag to Applications. Use Privacy & Security → Open Anyway once.';
   }
 };
 
