@@ -3,7 +3,9 @@ const heroSummary = document.querySelector('[data-dictation-copy]');
 const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
+const waveform = document.querySelector('.waveform');
 const waveformBars = document.querySelectorAll('.waveform b');
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -32,6 +34,31 @@ if (waveformBars.length > 0) {
     bar.style.setProperty('--wave-duration', `${Math.round(520 + nextNoise() * 680)}ms`);
     bar.style.setProperty('--wave-delay', `${Math.round(-nextNoise() * 1200)}ms`);
   });
+}
+
+const randomUnit = () => {
+  if (!window.crypto?.getRandomValues) return Math.random();
+  const sample = new Uint32Array(1);
+  window.crypto.getRandomValues(sample);
+  return sample[0] / 0xffffffff;
+};
+
+if (waveform && !prefersReducedMotion) {
+  const scheduleDeadSpace = () => {
+    const speechDuration = 2200 + randomUnit() * 4800;
+
+    window.setTimeout(() => {
+      waveform.classList.add('is-silent');
+      const silenceDuration = 320 + randomUnit() * 1000;
+
+      window.setTimeout(() => {
+        waveform.classList.remove('is-silent');
+        scheduleDeadSpace();
+      }, silenceDuration);
+    }, speechDuration);
+  };
+
+  scheduleDeadSpace();
 }
 
 const hotkeyChoices = [
@@ -144,7 +171,7 @@ copyOptions.forEach(option => {
   });
 });
 
-if (hotkeyHint && heroSummary && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+if (hotkeyHint && heroSummary && !prefersReducedMotion) {
   const keyLabel = hotkeyHint.querySelector('kbd');
   const actionLabel = hotkeyHint.querySelector('span');
   const visibleCopy = heroSummary.querySelector('[data-visible-copy]');
