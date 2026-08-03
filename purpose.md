@@ -19,7 +19,15 @@ it is not constructed until opened and has no polling task. Its Updates row
 offers an explicit stable-release check and an off-by-default automatic check
 that runs once per app launch when enabled. Both request only the latest stable
 release metadata from the project's GitHub repository. They never download or
-install an update. Its lower-right
+install an update without an explicit click. When a newer stable release
+contains both the expected DMG and SHA-256 asset, **Update and Restart**
+downloads into a private temporary directory, verifies the published checksum,
+bundle identifier, newer version, complete code signature, and either the
+installed app's designated requirement or macOS trust assessment. A bundled
+one-shot launcher waits for the old process to finish, replaces the installed
+bundle with rollback protection, removes the temporary update, and reopens the
+app. No update is installed from a source archive or an incomplete release. Its
+lower-right
 help button opens a transient, scrollable user guide. Its first table reports
 the user's complete active path, explains the meaning of every selected
 configuration value, and includes the actions available during that workflow.
@@ -170,9 +178,10 @@ Custom themes appear under a separate Custom heading.
 Editing and theme loading happen only through Settings and add no idle worker,
 file watcher, or network request. The app makes no network request by default.
 Only an explicit manual update check or the opt-in once-per-launch update check
-requests GitHub stable-release metadata. Update checks never include audio,
+requests GitHub stable-release metadata. An update download occurs only after
+the user clicks Update and Restart. Update traffic never includes audio,
 transcripts, dictionary entries, settings, or device identifiers, and never
-poll in the background.
+polls in the background.
 
 The menu also offers **Copy Last Dictation** after the first successful local
 transcription when **Keep latest transcript until quit** is enabled in Settings.
@@ -265,10 +274,11 @@ target validation, or alternate delivery path. Pasting into a non-text control
 may do nothing or invoke that application's normal paste behavior. The
 pasteboard transaction restores prior clipboard contents when possible.
 
-The app is English-only for version 3.1.1. Beyond the optional single in-memory
+The app is English-only for version 3.1.2. Beyond the optional single in-memory
 last dictation, it stores no history, performs no network requests by default,
 never downloads models, and removes audio state after use. An explicit or
-opt-in update check requests only stable-release metadata as described above.
+opt-in update check requests only stable-release metadata as described above;
+an explicit Update and Restart click may download the verified release DMG.
 Logs contain state and errors only.
 The separately invoked `run.sh` bootstrap may download selected documented
 models, but installs them only after pinned SHA-256 verification.

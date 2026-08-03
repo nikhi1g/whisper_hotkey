@@ -1,8 +1,10 @@
 import Foundation
+import WhisperHotkeyCore
 
 public enum ApplicationRelaunchError: Error, Equatable {
     case missingBundledLauncher
     case invalidProcessIdentifier
+    case invalidPreparedUpdate
 }
 
 @MainActor
@@ -44,6 +46,35 @@ public struct ApplicationRelauncher {
         try launch(
             launcherURL,
             ["--wait-for-pid", String(processIdentifier)]
+        )
+    }
+
+    public func scheduleUpdate(
+        _ update: PreparedSoftwareUpdate,
+        version: String
+    ) throws {
+        guard let launcherURL else {
+            throw ApplicationRelaunchError.missingBundledLauncher
+        }
+        guard processIdentifier > 0 else {
+            throw ApplicationRelaunchError.invalidProcessIdentifier
+        }
+        guard update.applicationURL.pathExtension == "app",
+              update.applicationURL.deletingLastPathComponent()
+                .standardizedFileURL
+                == update.cleanupDirectoryURL.standardizedFileURL,
+              SemanticVersion(version) != nil
+        else {
+            throw ApplicationRelaunchError.invalidPreparedUpdate
+        }
+        try launch(
+            launcherURL,
+            [
+                "--install-update", update.applicationURL.path,
+                "--cleanup-directory", update.cleanupDirectoryURL.path,
+                "--version", version,
+                "--wait-for-pid", String(processIdentifier),
+            ]
         )
     }
 

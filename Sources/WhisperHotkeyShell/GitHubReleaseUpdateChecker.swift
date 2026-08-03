@@ -1,16 +1,42 @@
 import Foundation
 import WhisperHotkeyCore
 
+public struct SoftwareUpdateRelease: Equatable, Sendable {
+    public let version: String
+    public let releaseURL: URL
+    public let diskImageURL: URL?
+    public let checksumURL: URL?
+
+    public init(
+        version: String,
+        releaseURL: URL,
+        diskImageURL: URL?,
+        checksumURL: URL?
+    ) {
+        self.version = version
+        self.releaseURL = releaseURL
+        self.diskImageURL = diskImageURL
+        self.checksumURL = checksumURL
+    }
+
+    public var isInstallable: Bool {
+        diskImageURL != nil && checksumURL != nil
+    }
+}
+
 public enum SoftwareUpdateCheckResult: Equatable, Sendable {
     case current(latestVersion: String)
-    case available(latestVersion: String, releaseURL: URL)
+    case available(SoftwareUpdateRelease)
 }
 
 public enum SoftwareUpdateStatus: Equatable, Sendable {
     case idle
     case checking
     case current
-    case available(version: String)
+    case available(version: String, installable: Bool)
+    case downloading
+    case verifying
+    case installing
     case failed
 
     public var displayText: String {
@@ -21,10 +47,25 @@ public enum SoftwareUpdateStatus: Equatable, Sendable {
             "Checking..."
         case .current:
             "Up to date"
-        case .available(let version):
+        case .available(let version, _):
             "v\(version) available"
+        case .downloading:
+            "Downloading..."
+        case .verifying:
+            "Verifying..."
+        case .installing:
+            "Restarting..."
         case .failed:
             "Unable to check"
+        }
+    }
+
+    public var isBusy: Bool {
+        switch self {
+        case .checking, .downloading, .verifying, .installing:
+            true
+        case .idle, .current, .available, .failed:
+            false
         }
     }
 }
@@ -73,12 +114,24 @@ public actor GitHubReleaseUpdateChecker: SoftwareUpdateChecking {
         currentVersion: String
     ) throws -> SoftwareUpdateCheckResult {
         struct Release: Decodable {
+            struct Asset: Decodable {
+                let name: String
+                let browserDownloadURL: URL
+
+                enum CodingKeys: String, CodingKey {
+                    case name
+                    case browserDownloadURL = "browser_download_url"
+                }
+            }
+
             let tagName: String
             let htmlURL: URL
+            let assets: [Asset]
 
             enum CodingKeys: String, CodingKey {
                 case tagName = "tag_name"
                 case htmlURL = "html_url"
+                case assets
             }
         }
 
@@ -92,9 +145,19 @@ public actor GitHubReleaseUpdateChecker: SoftwareUpdateChecking {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .drop(while: { $0.lowercased() == "v" })
         if installed < latest {
+            let diskImageURL = release.assets.first {
+                $0.name == "whisper_hotkey.dmg"
+            }?.browserDownloadURL
+            let checksumURL = release.assets.first {
+                $0.name == "whisper_hotkey.dmg.sha256"
+            }?.browserDownloadURL
             return .available(
-                latestVersion: String(normalizedLatest),
-                releaseURL: release.htmlURL
+                SoftwareUpdateRelease(
+                    version: String(normalizedLatest),
+                    releaseURL: release.htmlURL,
+                    diskImageURL: diskImageURL,
+                    checksumURL: checksumURL
+                )
             )
         }
         return .current(latestVersion: String(normalizedLatest))

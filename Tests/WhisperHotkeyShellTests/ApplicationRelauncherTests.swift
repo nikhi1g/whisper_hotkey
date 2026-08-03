@@ -57,4 +57,39 @@ final class ApplicationRelauncherTests: XCTestCase {
             )
         }
     }
+
+    @MainActor
+    func testSchedulesVerifiedUpdateBeforeRelaunch() throws {
+        let launcherURL = URL(fileURLWithPath: "/Applications/Test.app/launcher")
+        let cleanupURL = URL(
+            fileURLWithPath: "/private/tmp/update-1",
+            isDirectory: true
+        )
+        let update = PreparedSoftwareUpdate(
+            applicationURL: cleanupURL.appendingPathComponent(
+                "whisper_hotkey.app",
+                isDirectory: true
+            ),
+            cleanupDirectoryURL: cleanupURL
+        )
+        var launchedArguments: [String] = []
+        let relauncher = ApplicationRelauncher(
+            launcherURL: launcherURL,
+            processIdentifier: 42
+        ) { _, arguments in
+            launchedArguments = arguments
+        }
+
+        try relauncher.scheduleUpdate(update, version: "3.2.0")
+
+        XCTAssertEqual(
+            launchedArguments,
+            [
+                "--install-update", update.applicationURL.path,
+                "--cleanup-directory", cleanupURL.path,
+                "--version", "3.2.0",
+                "--wait-for-pid", "42",
+            ]
+        )
+    }
 }

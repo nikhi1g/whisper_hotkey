@@ -508,7 +508,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
                 automaticallyChecksForUpdates: true,
-                softwareUpdateStatus: .available(version: "3.2.0")
+                softwareUpdateStatus: .available(
+                    version: "3.2.0",
+                    installable: true
+                )
             )
         )
         let controller = makeController(
@@ -522,6 +525,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             "v3.2.0 available"
         )
         XCTAssertTrue(controller.checkForUpdatesIsEnabledForTesting)
+        XCTAssertEqual(
+            controller.checkForUpdatesTitleForTesting,
+            "Update and Restart"
+        )
 
         box.value = makeAdvancedSettingsState(
             automaticallyChecksForUpdates: true,
@@ -535,6 +542,37 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.controlsFitWindowForTesting,
             controller.controlsOutsideWindowForTesting.joined(separator: ", ")
         )
+    }
+
+    @MainActor
+    func testAvailableInstallableUpdateRoutesUpdateAndRestart() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                softwareUpdateStatus: .available(
+                    version: "3.2.0",
+                    installable: true
+                )
+            )
+        )
+        var checkCount = 0
+        var installCount = 0
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: { box.value },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                checkForUpdates: { checkCount += 1 },
+                installUpdate: { installCount += 1 }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        controller.checkForUpdatesForTesting()
+
+        XCTAssertEqual(checkCount, 0)
+        XCTAssertEqual(installCount, 1)
     }
 
     @MainActor

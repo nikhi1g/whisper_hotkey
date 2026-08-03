@@ -73,6 +73,7 @@ public struct AdvancedSettingsActions {
     public var loginItemChanged: () -> Void
     public var setAutomaticallyChecksForUpdates: (Bool) -> Void
     public var checkForUpdates: () -> Void
+    public var installUpdate: () -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -88,7 +89,8 @@ public struct AdvancedSettingsActions {
         saveCustomTheme: @escaping (CustomBadgeTheme) -> Void = { _ in },
         loginItemChanged: @escaping () -> Void = {},
         setAutomaticallyChecksForUpdates: @escaping (Bool) -> Void = { _ in },
-        checkForUpdates: @escaping () -> Void = {}
+        checkForUpdates: @escaping () -> Void = {},
+        installUpdate: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -105,6 +107,7 @@ public struct AdvancedSettingsActions {
         self.setAutomaticallyChecksForUpdates =
             setAutomaticallyChecksForUpdates
         self.checkForUpdates = checkForUpdates
+        self.installUpdate = installUpdate
     }
 }
 
@@ -293,9 +296,21 @@ public final class AdvancedSettingsWindowController:
             state.automaticallyChecksForUpdates ? .on : .off
         softwareUpdateStatusLabel.stringValue =
             state.softwareUpdateStatus.displayText
+        switch state.softwareUpdateStatus {
+        case .available(_, true):
+            checkForUpdatesButton.title = "Update and Restart"
+            checkForUpdatesButton.setAccessibilityLabel(
+                "Update and Restart"
+            )
+        default:
+            checkForUpdatesButton.title = "Check for Updates"
+            checkForUpdatesButton.setAccessibilityLabel(
+                "Check for Updates"
+            )
+        }
         checkForUpdatesButton.isEnabled =
             state.configurationEnabled
-                && state.softwareUpdateStatus != .checking
+                && !state.softwareUpdateStatus.isBusy
         select(rawValue: state.recordingLimit.rawValue, in: recordingLimitPopup)
         rebuildThemePopup(using: state)
         select(rawValue: state.selectedTheme.identifier, in: themePopup)
@@ -676,7 +691,11 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
-        actions.checkForUpdates()
+        if case .available(_, true) = stateProvider().softwareUpdateStatus {
+            actions.installUpdate()
+        } else {
+            actions.checkForUpdates()
+        }
         refresh()
     }
 
@@ -1577,6 +1596,10 @@ public final class AdvancedSettingsWindowController:
 
     var checkForUpdatesIsEnabledForTesting: Bool {
         checkForUpdatesButton.isEnabled
+    }
+
+    var checkForUpdatesTitleForTesting: String {
+        checkForUpdatesButton.title
     }
 
     var helpButtonFrameForTesting: CGRect {

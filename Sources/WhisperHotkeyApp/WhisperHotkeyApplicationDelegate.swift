@@ -82,6 +82,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var softwareUpdateStatus: SoftwareUpdateStatus = .idle
     private let softwareUpdateChecker: any SoftwareUpdateChecking =
         GitHubReleaseUpdateChecker()
+    private let softwareUpdateInstaller: any SoftwareUpdateInstalling =
+        SoftwareUpdateInstaller()
+    private var availableSoftwareUpdate: SoftwareUpdateRelease?
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -168,6 +171,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var modelConfigurationTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
     private var softwareUpdateTask: Task<Void, Never>?
+    private var softwareUpdateInstallationTask: Task<Void, Never>?
     private var insertionContext: DictationInsertionContext?
     private var completionBehavior = CompletionBehavior.insert
     private var badgeCaretRect: CGRect?
@@ -1469,6 +1473,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     checkForUpdates: { [weak self] in
                         self?.checkForUpdates()
+                    },
+                    installUpdate: { [weak self] in
+                        self?.installAvailableUpdate()
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -1505,6 +1512,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return
         }
         softwareUpdateStatus = .checking
+        availableSoftwareUpdate = nil
         advancedSettingsWindowController?.refreshIfVisible()
         let checker = softwareUpdateChecker
         let currentVersion = Bundle.main.object(
@@ -1521,9 +1529,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 switch result {
                 case .current:
                     softwareUpdateStatus = .current
-                case .available(let latestVersion, _):
+                case .available(let release):
+                    availableSoftwareUpdate = release
                     softwareUpdateStatus = .available(
-                        version: latestVersion
+                        version: release.version,
+                        installable: release.isInstallable
                     )
                 }
                 softwareUpdateTask = nil
@@ -1536,6 +1546,62 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 }
                 softwareUpdateStatus = .failed
                 softwareUpdateTask = nil
+                advancedSettingsWindowController?.refreshIfVisible()
+            }
+        }
+    }
+
+    private func installAvailableUpdate() {
+        guard softwareUpdateInstallationTask == nil,
+              !machine.phase.isBusy,
+              let release = availableSoftwareUpdate,
+              release.isInstallable
+        else {
+            return
+        }
+        softwareUpdateStatus = .downloading
+        advancedSettingsWindowController?.refreshIfVisible()
+        let installer = softwareUpdateInstaller
+        let applicationURL = Bundle.main.bundleURL
+        let installedVersion = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "0.0.0"
+        softwareUpdateInstallationTask = Task { [weak self] in
+            do {
+                let update = try await installer.prepare(
+                    release: release,
+                    installedApplicationURL: applicationURL,
+                    installedVersion: installedVersion
+                )
+                guard let self, !Task.isCancelled else {
+                    try? FileManager.default.removeItem(
+                        at: update.cleanupDirectoryURL
+                    )
+                    return
+                }
+                softwareUpdateStatus = .installing
+                advancedSettingsWindowController?.refreshIfVisible()
+                do {
+                    try ApplicationRelauncher().scheduleUpdate(
+                        update,
+                        version: release.version
+                    )
+                } catch {
+                    try? FileManager.default.removeItem(
+                        at: update.cleanupDirectoryURL
+                    )
+                    throw error
+                }
+                softwareUpdateInstallationTask = nil
+                NSApp.terminate(nil)
+            } catch is CancellationError {
+                self?.softwareUpdateInstallationTask = nil
+            } catch {
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+                softwareUpdateStatus = .failed
+                softwareUpdateInstallationTask = nil
                 advancedSettingsWindowController?.refreshIfVisible()
             }
         }
@@ -1774,6 +1840,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func stopSynchronousServices() -> PendingRecognizerWork {
         softwareUpdateTask?.cancel()
         softwareUpdateTask = nil
+        softwareUpdateInstallationTask?.cancel()
+        softwareUpdateInstallationTask = nil
         let pendingWork = PendingRecognizerWork(
             precedingCleanup: recognizerCleanupTask,
             modelConfiguration: modelConfigurationTask,

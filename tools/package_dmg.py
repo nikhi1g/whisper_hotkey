@@ -69,9 +69,24 @@ def verify_release_app(app: Path, *, require_developer_id: bool) -> str:
     ):
         raise RuntimeError(
             "The public DMG requires a Developer ID Application-signed app."
-        )
+    )
     run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
-    return authority.group(1)
+    with tempfile.TemporaryDirectory(
+        prefix="whisper-hotkey-signing-certificate-"
+    ) as temporary:
+        certificate_prefix = Path(temporary) / "certificate"
+        run([
+            "/usr/bin/codesign",
+            "--display",
+            f"--extract-certificates={certificate_prefix}",
+            str(app),
+        ])
+        leaf_certificate = Path(f"{certificate_prefix}0")
+        if not leaf_certificate.is_file():
+            raise RuntimeError(
+                "Could not resolve the app's exact signing certificate."
+            )
+        return hashlib.sha1(leaf_certificate.read_bytes()).hexdigest()
 
 
 def notarize(dmg: Path) -> None:
