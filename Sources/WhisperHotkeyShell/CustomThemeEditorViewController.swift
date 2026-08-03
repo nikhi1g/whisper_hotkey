@@ -347,24 +347,9 @@ final class CustomThemeEditorViewController:
         layoutWindow.contentViewController = self
         view.frame = frame
         view.layoutSubtreeIfNeeded()
-        let containmentBounds = view.bounds.insetBy(dx: -0.5, dy: -0.5)
-        let controlsFit = [
-            nameField,
-            modeControl,
-            backgroundWell,
-            backgroundHex,
-            textWell,
-            textHex,
-            accentWell,
-            accentHex,
-            preview,
-            saveButton,
-        ].allSatisfy { view in
-            let frame = view.convert(view.bounds, to: self.view)
-            return frame.width > 0
-                && frame.height > 0
-                && containmentBounds.contains(frame)
-        }
+        let fittingSize = view.fittingSize
+        let controlsFit = fittingSize.width <= frame.width + 0.5
+            && fittingSize.height <= frame.height + 0.5
         return withExtendedLifetime(layoutWindow) { controlsFit }
     }
 
