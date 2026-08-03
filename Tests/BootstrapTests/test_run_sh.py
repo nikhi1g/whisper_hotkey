@@ -92,10 +92,21 @@ class RunScriptTests(unittest.TestCase):
         with patch.dict(
             "os.environ",
             {"WHISPER_HOTKEY_CODESIGN_IDENTITY": "-"},
-            clear=False,
+            clear=True,
         ):
-            with self.assertRaisesRegex(RuntimeError, "Ad-hoc signing is not supported"):
+            with self.assertRaisesRegex(RuntimeError, "explicitly opted-in preview"):
                 build_app.signing_identity()
+
+    def test_preview_explicitly_allows_ad_hoc_signing(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "WHISPER_HOTKEY_CODESIGN_IDENTITY": "-",
+                "WHISPER_HOTKEY_PREVIEW": "1",
+            },
+            clear=True,
+        ):
+            self.assertEqual(build_app.signing_identity(), "-")
 
     def test_distribution_refuses_non_developer_id_identity(self) -> None:
         with patch.dict(
