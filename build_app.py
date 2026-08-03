@@ -261,11 +261,15 @@ def verify_distribution_targets(binaries: list[Path]) -> None:
 
 def signing_identity() -> str:
     distribution = os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
+    preview = os.environ.get("WHISPER_HOTKEY_PREVIEW") == "1"
     explicit = os.environ.get("WHISPER_HOTKEY_CODESIGN_IDENTITY", "").strip()
     if explicit:
         if explicit == "-":
+            if preview and not distribution:
+                return explicit
             raise RuntimeError(
-                "Ad-hoc signing is not supported. Provide a stable code-signing identity."
+                "Ad-hoc signing is supported only for an explicitly opted-in "
+                "preview build. Provide a stable code-signing identity."
             )
         if distribution and not explicit.startswith("Developer ID Application:"):
             raise RuntimeError(

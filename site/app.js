@@ -1,5 +1,5 @@
 const repository = 'nikhi1g/whisper_hotkey';
-const previewTag = 'v3.0.8-preview.1';
+const previewTag = 'v3.0.8-preview.2';
 const previewDownload = `https://github.com/${repository}/releases/download/${previewTag}/whisper_hotkey-preview.dmg`;
 const downloadLinks = [...document.querySelectorAll('.js-download')];
 const releaseDetail = document.querySelector('.js-release-detail');

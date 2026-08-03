@@ -56,6 +56,11 @@ def verify_release_app(app: Path, *, require_developer_id: bool) -> str:
     details = f"{result.stdout}\n{result.stderr}"
     authority = re.search(r"^Authority=(.+)$", details, re.M)
     if authority is None:
+        if not require_developer_id and re.search(
+            r"^Signature=adhoc$", details, re.M
+        ):
+            run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
+            return "-"
         raise RuntimeError(
             "The DMG requires a signed app with a named code-signing authority."
         )

@@ -49,37 +49,6 @@ jobs:
           echo "GGML_PREFIX=${WHISPER_PREFIX}" >> "${GITHUB_ENV}"
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "${GITHUB_ENV}"
 
-      - name: Create isolated preview signing identity
-        run: |
-          KEYCHAIN_PATH="${RUNNER_TEMP}/whisper-hotkey-preview.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
-          IDENTITY_NAME="whisper_hotkey Preview ${GITHUB_RUN_ID}"
-          CERTIFICATE_PATH="${RUNNER_TEMP}/preview.crt"
-          PRIVATE_KEY_PATH="${RUNNER_TEMP}/preview.key"
-          P12_PATH="${RUNNER_TEMP}/preview.p12"
-          P12_PASSWORD="$(uuidgen)$(uuidgen)"
-          openssl req -new -newkey rsa:2048 -x509 -sha256 -days 365 -nodes \
-            -subj "/CN=${IDENTITY_NAME}/O=whisper_hotkey Preview/" \
-            -addext "basicConstraints=critical,CA:true" \
-            -addext "keyUsage=critical,digitalSignature,keyCertSign" \
-            -addext "extendedKeyUsage=critical,codeSigning" \
-            -keyout "${PRIVATE_KEY_PATH}" -out "${CERTIFICATE_PATH}"
-          openssl pkcs12 -export -inkey "${PRIVATE_KEY_PATH}" \
-            -in "${CERTIFICATE_PATH}" -name "${IDENTITY_NAME}" \
-            -passout "pass:${P12_PASSWORD}" -out "${P12_PATH}"
-          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
-          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security import "${P12_PATH}" -k "${KEYCHAIN_PATH}" \
-            -P "${P12_PASSWORD}" -A -t cert -f pkcs12
-          security add-trusted-cert -r trustRoot -p codeSign \
-            -k "${KEYCHAIN_PATH}" "${CERTIFICATE_PATH}"
-          security set-key-partition-list -S apple-tool:,apple: -s \
-            -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security list-keychains -d user -s "${KEYCHAIN_PATH}"
-          echo "WHISPER_HOTKEY_CODESIGN_IDENTITY=${IDENTITY_NAME}" >> "${GITHUB_ENV}"
-          echo "PREVIEW_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
-
       - name: Download and verify bundled Base English model
         run: |
           MODEL_PATH="${RUNNER_TEMP}/ggml-base.en.bin"
@@ -94,6 +63,8 @@ jobs:
       - name: Build self-contained preview app
         env:
           WHISPER_HOTKEY_BUNDLE_MODEL: "1"
+          WHISPER_HOTKEY_PREVIEW: "1"
+          WHISPER_HOTKEY_CODESIGN_IDENTITY: "-"
         run: python3 build_app.py
 
       - name: Create preview DMG
@@ -107,14 +78,7 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" --prerelease \
             --title "whisper_hotkey $(cat VERSION) preview" \
-            --notes "Non-Developer-ID testing preview. Includes the verified Base English model. macOS requires Privacy & Security > Open Anyway on first launch."
+            --notes "Ad-hoc-signed testing preview. Includes the verified Base English model. macOS requires Privacy & Security > Open Anyway on first launch."
           gh release upload "${GITHUB_REF_NAME}" --clobber \
             dist/release/whisper_hotkey-preview.dmg \
             dist/release/whisper_hotkey-preview.dmg.sha256
-
-      - name: Remove temporary preview signing keychain
-        if: always()
-        run: |
-          if test -n "${PREVIEW_KEYCHAIN_PATH:-}" && test -f "${PREVIEW_KEYCHAIN_PATH}"; then
-            security delete-keychain "${PREVIEW_KEYCHAIN_PATH}"
-          fi
