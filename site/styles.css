@@ -290,10 +290,12 @@ h2 { margin: 0; font-size: clamp(38px, 4.2vw, 58px); font-weight: 690; line-heig
 .system-graph svg { width: 100%; height: auto; display: block; }
 .graph-edges path { fill: none; stroke: var(--accent); stroke-width: 1.5; marker-end: url(#graph-arrow); stroke-dasharray: 5 5; animation: graph-flow 1.8s linear infinite; }
 .graph-edges .graph-edge-muted { stroke: var(--line); }
+.graph-edges .graph-edge-fallback { stroke: var(--accent-strong); }
 #graph-arrow path { fill: var(--accent); }
 .graph-node circle { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
 .graph-node-primary circle { fill: var(--surface-strong); stroke: var(--accent); }
 .graph-node-muted circle { stroke-dasharray: 3 3; }
+.graph-node-fallback circle { stroke: var(--accent-strong); }
 .graph-node text { fill: var(--text); font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
 .graph-node-small text { fill: var(--muted); font-size: 10px; }
 .system-graph > p { margin: -5px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
