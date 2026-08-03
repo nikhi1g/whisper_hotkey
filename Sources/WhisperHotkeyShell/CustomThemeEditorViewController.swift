@@ -333,6 +333,7 @@ final class CustomThemeEditorViewController:
         loadViewIfNeeded()
         view.frame = CGRect(x: 0, y: 0, width: 556, height: 430)
         view.layoutSubtreeIfNeeded()
+        let containmentBounds = view.bounds.insetBy(dx: -0.5, dy: -0.5)
         return [
             nameField,
             modeControl,
@@ -348,7 +349,7 @@ final class CustomThemeEditorViewController:
             let frame = view.convert(view.bounds, to: self.view)
             return frame.width > 0
                 && frame.height > 0
-                && self.view.bounds.contains(frame)
+                && containmentBounds.contains(frame)
         }
     }
 
