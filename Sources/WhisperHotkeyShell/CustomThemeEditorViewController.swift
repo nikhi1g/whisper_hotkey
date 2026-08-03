@@ -332,15 +332,23 @@ final class CustomThemeEditorViewController:
 
     var controlsFitWindowForTesting: Bool {
         loadViewIfNeeded()
-        view.frame = CGRect(
+        let frame = CGRect(
             x: 0,
             y: 0,
             width: 556,
             height: Self.contentHeight
         )
+        let layoutWindow = NSWindow(
+            contentRect: frame,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        layoutWindow.contentViewController = self
+        view.frame = frame
         view.layoutSubtreeIfNeeded()
         let containmentBounds = view.bounds.insetBy(dx: -0.5, dy: -0.5)
-        return [
+        let controlsFit = [
             nameField,
             modeControl,
             backgroundWell,
@@ -357,6 +365,7 @@ final class CustomThemeEditorViewController:
                 && frame.height > 0
                 && containmentBounds.contains(frame)
         }
+        return withExtendedLifetime(layoutWindow) { controlsFit }
     }
 
     func setValuesForTesting(
