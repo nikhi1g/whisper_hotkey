@@ -30,7 +30,8 @@ const demoPhraseInterval = demoTiming.speechLead
   + demoTiming.controlPress
   + demoTiming.transcription
   + demoTiming.outgoingText;
-badge?.style.setProperty('--demo-phrase-interval', `${demoPhraseInterval}ms`);
+const demoTrailDuration = demoPhraseInterval / 4;
+badge?.style.setProperty('--demo-trail-duration', `${demoTrailDuration}ms`);
 
 document.getElementById('year').textContent = new Date().getFullYear();
 

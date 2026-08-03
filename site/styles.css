@@ -291,7 +291,7 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .listening-badge.is-cycle-progress .activity-trail { opacity: 1; }
 .listening-badge.is-cycle-progress .activity-trail path {
   animation-name: trail-flow;
-  animation-duration: var(--demo-phrase-interval, 4440ms);
+  animation-duration: var(--demo-trail-duration, 1110ms);
   animation-timing-function: linear;
   animation-iteration-count: 1;
   animation-fill-mode: forwards;
