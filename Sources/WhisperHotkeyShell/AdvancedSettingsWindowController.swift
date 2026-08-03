@@ -1177,8 +1177,8 @@ public final class AdvancedSettingsWindowController:
     }
 
     private func sizeColumns(in grid: NSGridView) {
-        grid.column(at: 0).width = 112
-        grid.column(at: 1).width = 426
+        grid.column(at: 0).width = 128
+        grid.column(at: 1).width = 410
     }
 
     private func addRow(
