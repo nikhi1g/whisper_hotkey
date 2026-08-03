@@ -114,6 +114,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.helpAccessibilityLabelForTesting,
             "Open User Guide"
         )
+        XCTAssertTrue(controller.versionTextForTesting.hasPrefix("Version "))
+        XCTAssertEqual(
+            controller.githubAccessibilityLabelForTesting,
+            "Open whisper_hotkey on GitHub"
+        )
         XCTAssertGreaterThan(
             controller.helpButtonFrameForTesting.midX,
             540

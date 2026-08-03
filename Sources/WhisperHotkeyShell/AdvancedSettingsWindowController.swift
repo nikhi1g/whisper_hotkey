@@ -161,6 +161,8 @@ public final class AdvancedSettingsWindowController:
         target: nil,
         action: nil
     )
+    private let versionLabel = NSTextField(labelWithString: "")
+    private let githubButton = NSButton()
     private let helpButton = NSButton()
     private let hotkeySummary = SettingsSummaryChip()
     private let modeSummary = SettingsSummaryChip()
@@ -197,6 +199,7 @@ public final class AdvancedSettingsWindowController:
         configureControls()
         configurePrivacyControls()
         configureLoginItemControls()
+        configureProjectMetadata()
         configureHelpButton()
 
         let window = SettingsWindow(
@@ -822,6 +825,37 @@ public final class AdvancedSettingsWindowController:
         ])
     }
 
+    private func configureProjectMetadata() {
+        let version = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "Development"
+        versionLabel.stringValue = "Version \(version)"
+        versionLabel.font = .monospacedSystemFont(
+            ofSize: 10,
+            weight: .regular
+        )
+        versionLabel.setAccessibilityLabel("whisper_hotkey version \(version)")
+        themedSecondaryLabels.append(versionLabel)
+
+        githubButton.title = "GitHub ↗"
+        githubButton.font = .systemFont(ofSize: 11, weight: .medium)
+        githubButton.bezelStyle = .inline
+        githubButton.isBordered = false
+        githubButton.target = self
+        githubButton.action = #selector(openRepository)
+        githubButton.toolTip = "Open the whisper_hotkey repository"
+        githubButton.setAccessibilityLabel("Open whisper_hotkey on GitHub")
+    }
+
+    @objc private func openRepository() {
+        guard let url = URL(
+            string: "https://github.com/nikhi1g/whisper_hotkey"
+        ) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     private func updateLoginItemControls(_ status: LoginItemStatus) {
         switch status {
         case .enabled:
@@ -918,6 +952,7 @@ public final class AdvancedSettingsWindowController:
         loginItemToggle.contentTintColor = palette.waveform
         keepLatestDictationToggle.contentTintColor = palette.waveform
         loginItemSettingsButton.contentTintColor = palette.waveform
+        githubButton.contentTintColor = palette.waveform
         helpButton.contentTintColor = palette.waveform
         [
             hotkeySummary,
@@ -1133,7 +1168,17 @@ public final class AdvancedSettingsWindowController:
             .required,
             for: .horizontal
         )
-        let footer = NSStackView(views: [summary, footerSpacer, helpButton])
+        let projectMetadata = NSStackView(views: [versionLabel, githubButton])
+        projectMetadata.orientation = .vertical
+        projectMetadata.alignment = .leading
+        projectMetadata.spacing = 0
+        projectMetadata.setContentCompressionResistancePriority(
+            .required,
+            for: .horizontal
+        )
+        let footer = NSStackView(
+            views: [summary, footerSpacer, projectMetadata, helpButton]
+        )
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 10
@@ -1365,6 +1410,8 @@ public final class AdvancedSettingsWindowController:
             ("limit summary", limitSummary),
             ("theme summary", themeSummary),
             ("login summary", loginSummary),
+            ("version", versionLabel),
+            ("github", githubButton),
             ("help", helpButton),
         ]
         return controls.compactMap { name, view in
@@ -1421,6 +1468,14 @@ public final class AdvancedSettingsWindowController:
 
     var helpAccessibilityLabelForTesting: String? {
         helpButton.accessibilityLabel()
+    }
+
+    var versionTextForTesting: String {
+        versionLabel.stringValue
+    }
+
+    var githubAccessibilityLabelForTesting: String? {
+        githubButton.accessibilityLabel()
     }
 
     var helpButtonFrameForTesting: CGRect {
