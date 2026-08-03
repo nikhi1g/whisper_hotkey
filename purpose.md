@@ -46,7 +46,7 @@ the available window height.
 
 The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
-Right Command is the default. A selected modifier remains usable in ordinary
+Right Option is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
 arms capture without polling, after which the microphone starts. Releasing
@@ -60,10 +60,10 @@ choices appear as one-click segmented chips, avoiding an extra menu interaction.
 Toggle changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
-and remains between 300 and 750 milliseconds. An accepted start orders and
-synchronously displays the listening badge before
-potentially blocking microphone hardware initialization, so visible feedback is
-immediate without keeping an audio worker active at idle. One uninterrupted
+and remains between 300 and 750 milliseconds. An accepted start prioritizes
+microphone capture before querying Accessibility geometry or constructing the
+listening badge. The badge appears once at the exact resolved location while
+the already-active audio callback continues capture. One uninterrupted
 private WAV retains the complete session while the same converted samples feed
 a small current inference segment. A phrase boundary rotates only that segment: the
 microphone and full recording remain uninterrupted while phrases are transcribed
@@ -83,7 +83,7 @@ Its normal lock state is otherwise left to macOS. Escape is reserved as an
 unambiguous abort action: during active dictation it stops capture, cancels
 queued or active recognition, deletes the private audio, and inserts nothing.
 It cannot be selected as the dictation trigger; a legacy stored Escape choice
-migrates to Right Command. Return and keypad Enter act exactly like Send: they
+migrates to Right Option. Return and keypad Enter act exactly like Send: they
 capture the release-time destination immediately, then finalize, insert, and
 post one unmodified Return. When confirmed speech reaches the completion
 gesture with less than 180 milliseconds of trailing silence, capture remains
@@ -98,8 +98,13 @@ a choice from 30 seconds through one hour; ten minutes is the default, and
 reaching the chosen limit finalizes automatically. Bare gestures are ignored
 while a previous dictation is finishing.
 
-The **Whisper model** picker persists Base English (default), Small English,
-Medium English, or Large-v3 Turbo Q5. Its adjacent **Engine** selector offers
+The **Whisper model** picker persists Base English, Small English, Medium
+English, or Large-v3 Turbo Q5. On a genuinely fresh first launch, the app
+selects only from models that are already verified and available: Base below
+8 GB, Small at 8 GB or more, and Large-v3 Turbo Q5 at 16 GB or more, with the
+next available lower tier as fallback. The downloadable DMG includes Base, so
+Base remains the normal clean-download selection without a runtime network
+request. Existing preferences are never replaced. Its adjacent **Engine** selector offers
 the default whisper.cpp Metal path, an optional whisper.cpp Core ML encoder
 path, and an optional native WhisperKit Core ML and Neural Engine path. Only
 the selected engine is loaded. The two Core ML choices require their verified
@@ -132,8 +137,11 @@ no idle task, process, model, or network work. The prompt remains local, travels
 only through the owned helper's stdin, and is never logged or placed in process
 arguments.
 The persistent **Processing** selector sits directly below the model picker.
-**After Recording** is the default: it loads and decodes only after capture
-finishes for the lowest idle memory. **Model Ready** keeps the selected helper
+On a fresh first launch, Macs with at least 8 GB select **Decode While
+Speaking** for the shortest completion latency; lower-memory Macs select
+**After Recording**. Existing preferences are never replaced. **After
+Recording** loads and decodes only after capture finishes for the lowest idle
+memory. **Model Ready** keeps the selected helper
 and model loaded between dictations. **Decode While Speaking** also keeps one
 model loaded, then privately decodes bounded inference segments concurrently
 with ongoing capture. It prefers a detected pause after five seconds and rotates

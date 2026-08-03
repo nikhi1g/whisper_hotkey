@@ -1,11 +1,19 @@
-Version 3.1.4 makes hotkey activation feel substantially more responsive.
+Version 3.2.0 gives a clean installation responsive, hardware-aware defaults.
 
 ## Highlights
 
-- Start microphone capture before resolving the exact Accessibility caret
-  position or drawing the listening badge.
-- Present the badge once, in its correct location, after capture is active.
-- Defer model preload scheduling until after microphone capture has started.
-- Remove redundant explanatory copy from Settings.
+- Default a clean installation to Right Option while preserving every existing
+  user's selected key.
+- Select the strongest verified model already available within the Mac's
+  memory tier without downloading anything at runtime.
+- Use Metal and Precision for predictable local quality.
+- Select Decode While Speaking on Macs with at least 8 GB for the shortest
+  completion latency; lower-memory Macs retain After Recording.
+- Keep all first-run recommendations strictly one-time and preserve every
+  existing preference during an update.
 
 The verified in-app update and restart flow remains unchanged.
+
+The repository now documents a fresh-user and virtual-machine download test so
+local preferences, permissions, model caches, and developer tools cannot mask
+first-run issues.

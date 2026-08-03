@@ -3,6 +3,90 @@ import XCTest
 @testable import WhisperHotkeyCore
 
 final class PreferenceTests: XCTestCase {
+    func testFirstRunPerformanceProfileRespectsMemoryAndAvailability() {
+        let allModels = Set(DictationModel.allCases)
+        let constrained = FirstRunPerformanceProfile.recommended(
+            physicalMemory: 4 * 1_024 * 1_024 * 1_024,
+            availableModels: allModels
+        )
+        XCTAssertEqual(constrained.model, .baseEnglish)
+        XCTAssertEqual(constrained.engine, .whisperCppMetal)
+        XCTAssertEqual(constrained.decodingProfile, .precision)
+        XCTAssertEqual(constrained.processingMode, .afterRecording)
+
+        let responsive = FirstRunPerformanceProfile.recommended(
+            physicalMemory: 8 * 1_024 * 1_024 * 1_024,
+            availableModels: allModels
+        )
+        XCTAssertEqual(responsive.model, .smallEnglish)
+        XCTAssertEqual(responsive.processingMode, .decodeWhileSpeaking)
+
+        let highQuality = FirstRunPerformanceProfile.recommended(
+            physicalMemory: 16 * 1_024 * 1_024 * 1_024,
+            availableModels: allModels
+        )
+        XCTAssertEqual(highQuality.model, .largeV3TurboQ5)
+        XCTAssertEqual(highQuality.processingMode, .decodeWhileSpeaking)
+
+        let bundledOnly = FirstRunPerformanceProfile.recommended(
+            physicalMemory: 64 * 1_024 * 1_024 * 1_024,
+            availableModels: [.baseEnglish]
+        )
+        XCTAssertEqual(bundledOnly.model, .baseEnglish)
+    }
+
+    func testFirstRunBootstrapAppliesOnlyToAnEmptyPreferenceDomain() {
+        let freshSuite = "whisper-hotkey-first-run-\(UUID().uuidString)"
+        let freshDefaults = try! XCTUnwrap(
+            UserDefaults(suiteName: freshSuite)
+        )
+        defer { freshDefaults.removePersistentDomain(forName: freshSuite) }
+        var freshApplyCount = 0
+
+        FirstRunPreferenceBootstrap.applyIfNeeded(
+            defaults: freshDefaults,
+            bundleIdentifier: freshSuite,
+            version: 1
+        ) {
+            freshApplyCount += 1
+            freshDefaults.set("recommended", forKey: "profile")
+        }
+        FirstRunPreferenceBootstrap.applyIfNeeded(
+            defaults: freshDefaults,
+            bundleIdentifier: freshSuite,
+            version: 1
+        ) {
+            freshApplyCount += 1
+        }
+        XCTAssertEqual(freshApplyCount, 1)
+        XCTAssertEqual(freshDefaults.string(forKey: "profile"), "recommended")
+
+        let existingSuite = "whisper-hotkey-existing-\(UUID().uuidString)"
+        let existingDefaults = try! XCTUnwrap(
+            UserDefaults(suiteName: existingSuite)
+        )
+        defer { existingDefaults.removePersistentDomain(forName: existingSuite) }
+        existingDefaults.set("user choice", forKey: "profile")
+        var existingApplyCount = 0
+
+        FirstRunPreferenceBootstrap.applyIfNeeded(
+            defaults: existingDefaults,
+            bundleIdentifier: existingSuite,
+            version: 1
+        ) {
+            existingApplyCount += 1
+            existingDefaults.set("replacement", forKey: "profile")
+        }
+        XCTAssertEqual(existingApplyCount, 0)
+        XCTAssertEqual(existingDefaults.string(forKey: "profile"), "user choice")
+        XCTAssertEqual(
+            existingDefaults.integer(
+                forKey: WhisperHotkeyPreferenceKeys.firstRunDefaultsVersion
+            ),
+            1
+        )
+    }
+
     func testAutomaticUpdateChecksDefaultOffAndPersist() {
         let suite = "whisper_hotkey-updates-\(UUID().uuidString)"
         let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))

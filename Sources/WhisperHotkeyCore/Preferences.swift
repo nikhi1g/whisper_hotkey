@@ -14,6 +14,74 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let keepLatestDictation = "keepLatestDictation"
     public static let automaticallyChecksForUpdates =
         "automaticallyChecksForUpdates"
+    public static let firstRunDefaultsVersion = "firstRunDefaultsVersion"
+}
+
+public struct FirstRunPerformanceProfile: Equatable, Sendable {
+    public static let responsiveMemoryThreshold: UInt64 = 8 * 1_024 * 1_024 * 1_024
+    public static let highQualityMemoryThreshold: UInt64 = 16 * 1_024 * 1_024 * 1_024
+
+    public let model: DictationModel
+    public let engine: RecognitionEngine
+    public let decodingProfile: DecodingProfile
+    public let processingMode: ModelProcessingMode
+
+    public static func recommended(
+        physicalMemory: UInt64,
+        availableModels: Set<DictationModel>
+    ) -> Self {
+        let preferredModels: [DictationModel]
+        if physicalMemory >= highQualityMemoryThreshold {
+            preferredModels = [
+                .largeV3TurboQ5,
+                .mediumEnglish,
+                .smallEnglish,
+                .baseEnglish,
+            ]
+        } else if physicalMemory >= responsiveMemoryThreshold {
+            preferredModels = [.smallEnglish, .baseEnglish]
+        } else {
+            preferredModels = [.baseEnglish]
+        }
+        let model = preferredModels.first(where: availableModels.contains)
+            ?? DictationModel.allCases.first(where: availableModels.contains)
+            ?? .baseEnglish
+        let processingMode: ModelProcessingMode =
+            physicalMemory >= responsiveMemoryThreshold
+                ? .decodeWhileSpeaking
+                : .afterRecording
+        return Self(
+            model: model,
+            engine: .whisperCppMetal,
+            decodingProfile: .precision,
+            processingMode: processingMode
+        )
+    }
+}
+
+public enum FirstRunPreferenceBootstrap {
+    public static func applyIfNeeded(
+        defaults: UserDefaults = .standard,
+        bundleIdentifier: String = WhisperHotkeyPaths.bundleIdentifier,
+        version: Int,
+        apply: () -> Void
+    ) {
+        guard defaults.object(
+            forKey: WhisperHotkeyPreferenceKeys.firstRunDefaultsVersion
+        ) == nil else {
+            return
+        }
+        let existingDomain = defaults.persistentDomain(
+            forName: bundleIdentifier
+        ) ?? [:]
+        if existingDomain.isEmpty {
+            apply()
+        }
+        defaults.set(
+            version,
+            forKey: WhisperHotkeyPreferenceKeys.firstRunDefaultsVersion
+        )
+    }
 }
 
 public enum LastDictationRetentionPreference {

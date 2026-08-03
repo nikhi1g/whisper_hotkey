@@ -117,10 +117,11 @@ The status should report Microphone, Accessibility, and Input Monitoring as
 
 ## Dictate
 
-Click into any editable text field, hold **Right Command**, speak, then release
-it. The default **After Recording** policy loads and transcribes only after
-release, so the first result can take a moment while the model starts. Very
-quick taps are ignored, and ordinary Command shortcuts continue to work.
+Click into any editable text field, hold **Right Option**, speak, then release
+it. A fresh install on a Mac with at least 8 GB selects **Decode While
+Speaking** for the shortest completion latency. Lower-memory Macs select
+**After Recording** to preserve memory. Very quick taps are ignored, and
+ordinary Option shortcuts continue to work.
 
 For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as
 `whisper_hotkey`. Its commands are:
@@ -136,8 +137,10 @@ human-in-the-loop verification gate.
 
 ## Models and recognition engines
 
-The default Base English model is the best first install. Other local models
-trade disk space and speed for accuracy:
+The DMG includes Base English as the best compact first install. On a genuinely
+fresh launch, whisper_hotkey chooses the strongest verified model already
+available within the Mac's memory tier. It never downloads another model at
+runtime. Other local models trade disk space and speed for accuracy:
 
 | Option | Model | Download | Typical reason to choose it |
 | --- | --- | ---: | --- |

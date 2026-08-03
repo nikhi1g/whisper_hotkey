@@ -35,11 +35,11 @@ badge?.style.setProperty('--demo-phrase-interval', `${demoPhraseInterval}ms`);
 document.getElementById('year').textContent = new Date().getFullYear();
 
 const hotkeyChoices = [
+  {id: 'right-option', spoken: 'Right Option', holdSupported: true},
   {id: 'right-command', spoken: 'Right Command', holdSupported: true},
   {id: 'left-command', spoken: 'Left Command', holdSupported: true},
   {id: 'right-shift', spoken: 'Right Shift', holdSupported: true},
   {id: 'left-shift', spoken: 'Left Shift', holdSupported: true},
-  {id: 'right-option', spoken: 'Right Option', holdSupported: true},
   {id: 'left-option', spoken: 'Left Option', holdSupported: true},
   {id: 'right-control', spoken: 'Right Control', holdSupported: true},
   {id: 'left-control', spoken: 'Left Control', holdSupported: true},

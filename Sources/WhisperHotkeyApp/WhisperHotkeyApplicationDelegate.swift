@@ -10,8 +10,51 @@ import WhisperHotkeySystem
 @MainActor
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
+    private static let firstRunDefaultsVersion = 1
+    private static let preparedDefaults: UserDefaults = {
+        let defaults = UserDefaults.standard
+        FirstRunPreferenceBootstrap.applyIfNeeded(
+            defaults: defaults,
+            version: firstRunDefaultsVersion
+        ) {
+            let availableModels = Set(DictationModel.allCases.filter { model in
+                (try? WhisperRuntimeDiscovery.discover(
+                    model: model,
+                    engine: .whisperCppMetal,
+                    decodingProfile: .precision
+                )) != nil
+            })
+            let profile = FirstRunPerformanceProfile.recommended(
+                physicalMemory: ProcessInfo.processInfo.physicalMemory,
+                availableModels: availableModels
+            )
+            defaults.set(
+                HotkeyKey.rightOption.rawValue,
+                forKey: "dictationHotkey"
+            )
+            defaults.set(
+                HotkeyActivationMode.hold.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.dictationMode
+            )
+            defaults.set(false, forKey: "toggleDictationEnabled")
+            defaults.set(
+                profile.model.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.dictationModel
+            )
+            defaults.set(
+                profile.engine.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+            )
+            defaults.set(
+                profile.decodingProfile.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.decodingProfile
+            )
+            profile.processingMode.persist(defaults: defaults)
+        }
+        return defaults
+    }()
     private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
-        selectedHotkey: .rightCommand,
+        selectedHotkey: .rightOption,
         activationMode: .hold,
         selectedModel: .baseEnglish,
         selectedEngine: .whisperCppMetal,
@@ -62,15 +105,29 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         theme: selectedTheme
     )
     private var selectedHotkey = HotkeyKey(
-        rawValue: UserDefaults.standard.string(forKey: "dictationHotkey") ?? ""
-    ) ?? .rightCommand
+        rawValue: WhisperHotkeyApplicationDelegate.preparedDefaults.string(
+            forKey: "dictationHotkey"
+        ) ?? ""
+    ) ?? .rightOption
     private var selectedDictationMode =
-        WhisperHotkeyApplicationDelegate.loadDictationMode()
-    private var selectedModel = DictationModel.selected()
-    private var selectedEngine = RecognitionEngine.selected()
-    private var decodingProfile = DecodingProfile.selected()
-    private var processingMode = ModelProcessingMode.selected()
-    private var internalDictionary = InternalDictionary.selected()
+        WhisperHotkeyApplicationDelegate.loadDictationMode(
+            defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+        )
+    private var selectedModel = DictationModel.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
+    private var selectedEngine = RecognitionEngine.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
+    private var decodingProfile = DecodingProfile.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
+    private var processingMode = ModelProcessingMode.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
+    private var internalDictionary = InternalDictionary.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
     private var lastDictation = LastDictationBuffer(
         isEnabled: LastDictationRetentionPreference.isEnabled()
     )
