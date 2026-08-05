@@ -2047,10 +2047,19 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func selectEngine(_ engine: RecognitionEngine) {
         guard !machine.phase.isBusy,
-              engineAvailable(engine, model: selectedModel),
-              selectedEngine != engine
+              selectedEngine != engine,
+              let model = resolvedModel(for: engine)
         else {
             return
+        }
+        // Carry the engine to a model it can actually run rather than refusing
+        // the switch, which would strand the user on the current engine.
+        if model != selectedModel {
+            selectedModel = model
+            UserDefaults.standard.set(
+                model.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.dictationModel
+            )
         }
         if engine == .parakeetCoreML,
            !ParakeetModelInstaller.isInstalled(selectedParakeetVariant) {
@@ -2330,10 +2339,31 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         engineAvailable(selectedEngine, model: model)
     }
 
+    /// An engine counts as available when it can run with some installed
+    /// model, not only with the one currently selected. Gating on the selected
+    /// model alone created a dead end: with an uninstalled whisper model
+    /// selected, every whisper engine greyed out, and because the Model row
+    /// shows Parakeet's own checkpoints while Parakeet is active there was no
+    /// way left in the window to choose an installed whisper model again.
     private var availableEngines: Set<RecognitionEngine> {
-        Set(RecognitionEngine.allCases.filter {
-            engineAvailable($0, model: selectedModel)
+        Set(RecognitionEngine.allCases.filter { engine in
+            DictationModel.allCases.contains {
+                engineAvailable(engine, model: $0)
+            }
         })
+    }
+
+    /// The selected model when the engine can run it, otherwise the first
+    /// installed one. Returns nil when the engine has no usable model at all.
+    private func resolvedModel(
+        for engine: RecognitionEngine
+    ) -> DictationModel? {
+        if engineAvailable(engine, model: selectedModel) {
+            return selectedModel
+        }
+        return DictationModel.allCases.first {
+            engineAvailable(engine, model: $0)
+        }
     }
 
     private func engineAvailable(
