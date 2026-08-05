@@ -15,6 +15,8 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let automaticallyChecksForUpdates =
         "automaticallyChecksForUpdates"
     public static let firstRunDefaultsVersion = "firstRunDefaultsVersion"
+    public static let hasPresentedFirstRunSettings =
+        "hasPresentedFirstRunSettings"
 }
 
 public struct FirstRunPerformanceProfile: Equatable, Sendable {

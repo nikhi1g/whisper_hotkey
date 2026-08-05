@@ -249,6 +249,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var terminationCleanupStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Offer the Applications install before anything claims the control
+        // socket or starts the runtime, because accepting relaunches the app
+        // from its new location and terminates this instance.
+        guard !InstallLocationPromptController().runIfNeeded() else {
+            return
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationDidBecomeActive),
@@ -267,6 +274,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         reconcileRuntime(showSetupIfNeeded: true)
         configureModelReadiness()
+        showFirstRunSettingsIfNeeded()
         if automaticallyChecksForUpdates {
             checkForUpdates()
         }
@@ -1519,6 +1527,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             automaticallyChecksForUpdates: automaticallyChecksForUpdates,
             softwareUpdateStatus: softwareUpdateStatus
         )
+    }
+
+    /// Opens Settings once, on a genuinely new installation, so the hotkey,
+    /// model, and behavior chosen by the first-run profile are visible instead
+    /// of having to be discovered through the menu bar icon.
+    private func showFirstRunSettingsIfNeeded() {
+        let defaults = Self.preparedDefaults
+        guard !defaults.bool(
+            forKey: WhisperHotkeyPreferenceKeys.hasPresentedFirstRunSettings
+        ) else {
+            return
+        }
+        defaults.set(
+            true,
+            forKey: WhisperHotkeyPreferenceKeys.hasPresentedFirstRunSettings
+        )
+        showAdvancedSettings()
     }
 
     private func showAdvancedSettings() {
