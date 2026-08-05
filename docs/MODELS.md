@@ -1,6 +1,6 @@
 # Local models
 
-Version 3.3.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.3.6 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, whisper.cpp with a Core ML encoder, native
 WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
 Recognition is English-only and entirely local.
@@ -73,9 +73,11 @@ with two of its own:
 | Fast | `parakeet-tdt-ctc-110m` | 219 MB |
 | Accurate | `parakeet-tdt-0.6b-v2` | 443 MB |
 
-Switching engines never overwrites the other engine's model choice. Checkpoints
-download on first use into `~/Library/Application Support/FluidAudio/Models/`,
-so `run.sh` installs nothing for this engine.
+Switching engines never overwrites the other engine's model choice. Selecting
+Parakeet or one of its checkpoints for the first time offers the download,
+shows progress, and can be cancelled; nothing is fetched during a dictation.
+Checkpoints live in `~/Library/Application Support/FluidAudio/Models/`, so
+`run.sh` installs nothing for this engine.
 
 Measured on the repository's own LibriSpeech benchmark (100 utterances across
 test-clean and test-other, Apple M5 Pro, warm model):

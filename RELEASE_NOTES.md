@@ -1,44 +1,47 @@
-Version 3.3.0 adds Parakeet, a recognition engine that is both more accurate
-and several times faster than every whisper option the app already shipped, and
-reorganizes the Recognition settings so they describe what is actually running.
+Version 3.3.6 fixes the interface bugs that shipped alongside Parakeet in
+3.3.0. Every one of them is the same defect in a different place: a surface
+reporting something other than what the app was actually doing.
 
 ## Highlights
 
-- Add Parakeet, running NVIDIA Parakeet on the Neural Engine through FluidAudio
-  instead of whisper. Measured on this repository's own LibriSpeech benchmark
-  (100 utterances across test-clean and test-other, Apple M5 Pro, warm model),
-  it wins on both axes at once rather than trading one for the other.
-- Reorganize the Recognition section. Engine now comes first, because it
-  decides which models exist and whether Decoding applies. The Model row swaps
-  to whichever family the engine belongs to, and the Decoding row is hidden on
-  engines that have no beam search rather than greyed out while still painting
-  a selected profile.
-- Keep Parakeet's model choice separate from whisper's, so switching engines
-  never overwrites the other engine's selection.
+- **Settings no longer wedges when you switch engines.** Going from Parakeet
+  back to a whisper engine applied the model selection before the Model row was
+  rebuilt, so a two-segment control was asked for its third segment. AppKit
+  raised an exception from inside the click handler, the refresh was abandoned
+  half-done, and every later click hit the same wall. Nothing crashed, which is
+  exactly why it looked like a freeze.
+- **Parakeet checkpoints install before they are selected.** Choosing Parakeet
+  used to succeed instantly and defer the real cost to your first dictation,
+  which then downloaded several hundred megabytes behind a Transcribing badge
+  with no progress, no cancel, and no timeout. It is now an explicit step with
+  a size confirmation, a progress panel, and a Cancel that leaves your previous
+  engine in place.
+- **Cancelling an install is no longer reported as a failure**, and a Parakeet
+  problem is no longer described as a whisper helper failure.
 
-## Measured
+## Surfaces that now describe what is running
 
-| Engine | Word error rate | Mean latency | Speed |
-| --- | ---: | ---: | ---: |
-| Large-v3 Turbo Q5 + Metal, Precision | 4.32% | 321 ms | 21.5x realtime |
-| Large-v3 Turbo Q5 + Metal, Smart Decode | 4.04% | 305 ms | 22.7x realtime |
-| Parakeet Fast | 3.88% | 34 ms | 206x realtime |
-| Parakeet Accurate | 2.62% | 56 ms | 123x realtime |
+- The **User Guide** named the whisper model and offered Precision and Smart
+  Decode even on Parakeet, which is a transducer with no beam search.
+- The **internal dictionary** stayed fully interactive on Parakeet, saving
+  entries that never reached the recognizer because a transducer accepts no
+  prompt. The row now says so. Entries are kept, not cleared, because they
+  still apply on every whisper engine.
+- The **Setup window** reported a ready whisper model and a ready whisper
+  helper for an engine that uses neither.
+- The **engine picker** could strand you: engine availability was computed
+  against the selected whisper model, so one uninstalled model greyed out every
+  whisper engine at once, with no way back from Parakeet.
 
-Parakeet Fast is a 110M model and still more accurate than every whisper model
-in the app. Reproduce these numbers with the harness in `Benchmarks/Parakeet/`,
-which scores with the same word error math as the whisper benchmark.
+## Also
 
-## Two things Parakeet does not do
+- An app already running from ~/Applications is no longer offered a reinstall
+  it does not need.
 
-- **No decoding profiles.** It is a transducer, so there is no beam search for
-  Precision or Smart Decode to select. The row is hidden on that engine.
-- **No prompt.** The internal dictionary and the Pause Mode context tail cannot
-  bias a Parakeet decode. Both still apply on every whisper engine, which is
-  one reason all of them remain available and unchanged.
-
-Parakeet checkpoints download on first use into Application Support, so the
-first dictation after selecting the engine waits on a 219 MB or 443 MB fetch.
+Nothing about recognition itself changed. The measured numbers from 3.3.0 still
+stand: Parakeet Accurate at 2.62% word error rate and 56 ms per utterance
+against Large-v3 Turbo Q5's 4.32% at 321 ms, on the benchmark in
+`Benchmarks/Parakeet/`.
 
 The app is signed with a stable Apple Development identity and is not
 notarized, so the first launch still needs one approval through System

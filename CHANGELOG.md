@@ -1,12 +1,30 @@
 # Changelog
 
-## Unreleased
+## 3.3.6: 2026-08-05
+
+An Honest Interface release. Every fix here is a surface that reported
+something other than what the app was doing.
 
 - Fixed the Settings window wedging when the Engine chip was switched back and
   forth. Returning from Parakeet applied the whisper model selection before the
   Model row was rebuilt, so a two-segment control was asked for segment three
   and AppKit raised NSRangeException from inside the click handler, abandoning
-  the rest of the refresh
+  the rest of the refresh and ignoring every later click
+- Made Parakeet checkpoints install as an explicit step at selection time, with
+  a size confirmation, a progress panel, and a working Cancel. The first
+  dictation on a new checkpoint previously downloaded several hundred megabytes
+  behind a Transcribing badge with no progress and no timeout
+- Stopped a cancelled install reporting itself as a failure, and stopped a
+  Parakeet problem being described as a whisper helper failure
+- Made the User Guide describe the engine that is running. It named the whisper
+  model and offered whisper decoding profiles even on Parakeet, which has
+  neither
+- Marked the internal dictionary inapplicable while Parakeet is selected, where
+  entries saved but never reached the recognizer. Entries are kept, not cleared
+- Named the running engine in the Setup window, which reported a ready whisper
+  model and whisper helper for an engine that uses neither
+- Stopped an uninstalled whisper model stranding the engine picker, where every
+  whisper engine greyed out at once with no way back from Parakeet
 - Stopped offering to reinstall an app already running from ~/Applications
 
 ## 3.3.0: 2026-08-05
