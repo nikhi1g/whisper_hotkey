@@ -36,11 +36,20 @@ BASE_MODEL_SHA256 = (
 # automatically, and all four together exceed the 2 GB release-asset limit.
 BUNDLED_MODELS: dict[str, str] = {
     BASE_MODEL_NAME: BASE_MODEL_SHA256,
-    "ggml-small.en.bin":
-        "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
     "ggml-large-v3-turbo-q5_0.bin":
         "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
 }
+
+# Parakeet checkpoints ship inside the app as of 3.4.0, so the best engine is
+# available on a fresh install with no download. Copied from FluidAudio's cache
+# directory, which is where run.sh and the app both put them.
+PARAKEET_CACHE = (
+    Path.home() / "Library" / "Application Support" / "FluidAudio" / "Models"
+)
+BUNDLED_PARAKEET_MODELS: tuple[str, ...] = (
+    "parakeet-tdt-ctc-110m",
+    "parakeet-tdt-0.6b-v2",
+)
 
 
 def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
@@ -147,6 +156,29 @@ def bundle_verified_models() -> None:
                 "failed."
             )
         shutil.copy2(source, destination_directory / name)
+    bundle_parakeet_models()
+
+
+def bundle_parakeet_models() -> None:
+    """Copy the Parakeet checkpoints into the app bundle.
+
+    These are directories of compiled Core ML models rather than single files,
+    and FluidAudio owns their layout, so they are copied wholesale and verified
+    by presence rather than by a digest we do not control.
+    """
+    destination_directory = RESOURCES / "ParakeetModels"
+    destination_directory.mkdir(parents=True, exist_ok=True)
+    for name in BUNDLED_PARAKEET_MODELS:
+        source = PARAKEET_CACHE / name
+        if not source.is_dir():
+            raise RuntimeError(
+                f"Parakeet checkpoint not found at {source}. Run ./run.sh to "
+                "download every bundled model."
+            )
+        target = destination_directory / name
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
 
 
 def dependency_prefix(environment_key: str, formula: str) -> Path | None:

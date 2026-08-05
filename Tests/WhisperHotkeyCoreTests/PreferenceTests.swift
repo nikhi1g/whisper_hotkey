@@ -18,7 +18,7 @@ final class PreferenceTests: XCTestCase {
             physicalMemory: 8 * 1_024 * 1_024 * 1_024,
             availableModels: allModels
         )
-        XCTAssertEqual(responsive.model, .smallEnglish)
+        XCTAssertEqual(responsive.model, .largeV3TurboQ5)
         XCTAssertEqual(responsive.processingMode, .decodeWhileSpeaking)
 
         let highQuality = FirstRunPerformanceProfile.recommended(
@@ -185,7 +185,7 @@ final class PreferenceTests: XCTestCase {
         XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .githubDarkDimmed)
 
         defaults.set(
-            DictationModel.smallEnglish.rawValue,
+            DictationModel.largeV3TurboQ5.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.dictationModel
         )
         defaults.set(
@@ -196,7 +196,10 @@ final class PreferenceTests: XCTestCase {
             BadgeTheme.rosePine.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.badgeTheme
         )
-        XCTAssertEqual(DictationModel.selected(defaults: defaults), .smallEnglish)
+        XCTAssertEqual(
+            DictationModel.selected(defaults: defaults),
+            .largeV3TurboQ5
+        )
         XCTAssertEqual(RecordingLimit.selected(defaults: defaults), .minutes30)
         XCTAssertEqual(BadgeTheme.selected(defaults: defaults), .rosePine)
 
@@ -248,6 +251,34 @@ final class PreferenceTests: XCTestCase {
         XCTAssertEqual(
             ModelProcessingMode.allCases.map(\.displayName),
             ["After Recording", "Model Ready", "Decode While Speaking"]
+        )
+    }
+
+    func testRetiredModelSelectionsMigrateToTurbo() {
+        // Small and Medium were retired in 3.4.0. A saved selection must land
+        // on Turbo, which is more accurate than either and is bundled, rather
+        // than silently dropping the user to the default.
+        let defaults = UserDefaults(
+            suiteName: "retired-models-\(UUID().uuidString)"
+        )!
+        for retired in ["smallEnglish", "mediumEnglish"] {
+            defaults.set(
+                retired,
+                forKey: WhisperHotkeyPreferenceKeys.dictationModel
+            )
+            XCTAssertEqual(
+                DictationModel.selected(defaults: defaults),
+                .largeV3TurboQ5,
+                "\(retired) did not migrate"
+            )
+        }
+        defaults.set(
+            "somethingElse",
+            forKey: WhisperHotkeyPreferenceKeys.dictationModel
+        )
+        XCTAssertEqual(
+            DictationModel.selected(defaults: defaults),
+            .defaultModel
         )
     }
 

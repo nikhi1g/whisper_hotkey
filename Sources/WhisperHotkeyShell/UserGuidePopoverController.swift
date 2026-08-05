@@ -371,10 +371,6 @@ enum UserGuideContent {
         switch model {
         case .baseEnglish:
             "Fastest and smallest: 141 MB."
-        case .smallEnglish:
-            "More accurate with moderate cost: 465 MB."
-        case .mediumEnglish:
-            "High accuracy with the largest memory cost: 1.5 GB."
         case .largeV3TurboQ5:
             "Best speed and accuracy balance: 547 MB."
         }

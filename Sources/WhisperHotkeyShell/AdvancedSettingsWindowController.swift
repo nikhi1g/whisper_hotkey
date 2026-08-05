@@ -140,10 +140,6 @@ enum DictationModelPresentation {
         switch model {
         case .baseEnglish:
             "Base"
-        case .smallEnglish:
-            "Small"
-        case .mediumEnglish:
-            "Medium"
         case .largeV3TurboQ5:
             "Turbo"
         }

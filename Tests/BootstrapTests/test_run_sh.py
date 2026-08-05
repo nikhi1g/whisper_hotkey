@@ -66,7 +66,7 @@ class RunScriptTests(unittest.TestCase):
 
     def test_model_and_engine_options_match_swift_preference_values(self) -> None:
         models = self.evaluate_bootstrap_function(
-            "for value in base small medium turbo; do model_preference \"$value\"; done"
+            "for value in base turbo; do model_preference \"$value\"; done"
         )
         engines = self.evaluate_bootstrap_function(
             "for value in metal coreml whisperkit parakeet; do engine_preference \"$value\"; done"
@@ -74,7 +74,7 @@ class RunScriptTests(unittest.TestCase):
 
         self.assertEqual(
             models.splitlines(),
-            ["baseEnglish", "smallEnglish", "mediumEnglish", "largeV3TurboQ5"],
+            ["baseEnglish", "largeV3TurboQ5"],
         )
         self.assertEqual(
             engines.splitlines(),

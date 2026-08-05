@@ -37,15 +37,8 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
         availableModels: Set<DictationModel>
     ) -> Self {
         let preferredModels: [DictationModel]
-        if physicalMemory >= highQualityMemoryThreshold {
-            preferredModels = [
-                .largeV3TurboQ5,
-                .mediumEnglish,
-                .smallEnglish,
-                .baseEnglish,
-            ]
-        } else if physicalMemory >= responsiveMemoryThreshold {
-            preferredModels = [.smallEnglish, .baseEnglish]
+        if physicalMemory >= responsiveMemoryThreshold {
+            preferredModels = [.largeV3TurboQ5, .baseEnglish]
         } else {
             preferredModels = [.baseEnglish]
         }
@@ -943,20 +936,24 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
 
 public enum DictationModel: String, CaseIterable, Codable, Sendable {
     case baseEnglish
-    case smallEnglish
-    case mediumEnglish
     case largeV3TurboQ5
 
     public static let defaultModel: Self = .baseEnglish
+
+    /// Models retired in 3.4.0, kept only so a saved preference can be read
+    /// and migrated. Small sat 82 MB below Turbo while being far less
+    /// accurate, and Parakeet Fast beats it on size, speed, and accuracy at
+    /// once. Medium was the largest and slowest model in the app and was not
+    /// more accurate than Turbo.
+    static let retiredRawValues: [String: Self] = [
+        "smallEnglish": .largeV3TurboQ5,
+        "mediumEnglish": .largeV3TurboQ5,
+    ]
 
     public var displayName: String {
         switch self {
         case .baseEnglish:
             "Base English"
-        case .smallEnglish:
-            "Small English"
-        case .mediumEnglish:
-            "Medium English"
         case .largeV3TurboQ5:
             "Large-v3 Turbo Q5"
         }
@@ -966,10 +963,6 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
         switch self {
         case .baseEnglish:
             "Base English (Fast, 141 MB)"
-        case .smallEnglish:
-            "Small English (More Accurate, 465 MB)"
-        case .mediumEnglish:
-            "Medium English (High Accuracy, 1.5 GB)"
         case .largeV3TurboQ5:
             "Large-v3 Turbo Q5 (Best Balance, 547 MB)"
         }
@@ -979,10 +972,6 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
         switch self {
         case .baseEnglish:
             "ggml-base.en.bin"
-        case .smallEnglish:
-            "ggml-small.en.bin"
-        case .mediumEnglish:
-            "ggml-medium.en.bin"
         case .largeV3TurboQ5:
             "ggml-large-v3-turbo-q5_0.bin"
         }
@@ -992,10 +981,6 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
         switch self {
         case .baseEnglish:
             "openai_whisper-base.en"
-        case .smallEnglish:
-            "openai_whisper-small.en"
-        case .mediumEnglish:
-            "openai_whisper-medium.en"
         case .largeV3TurboQ5:
             "openai_whisper-large-v3-v20240930_626MB"
         }
@@ -1009,7 +994,13 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
         ) else {
             return .defaultModel
         }
-        return Self(rawValue: rawValue) ?? .defaultModel
+        if let model = Self(rawValue: rawValue) {
+            return model
+        }
+        // A saved Small or Medium selection resolves to Turbo, which is more
+        // accurate than either and is bundled, rather than silently dropping
+        // the user to the default.
+        return retiredRawValues[rawValue] ?? .defaultModel
     }
 }
 

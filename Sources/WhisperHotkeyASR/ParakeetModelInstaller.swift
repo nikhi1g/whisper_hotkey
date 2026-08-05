@@ -18,13 +18,47 @@ public enum ParakeetModelInstaller {
         case compiling
     }
 
-    public static func cacheDirectory(for variant: ParakeetVariant) -> URL {
-        AsrModels.defaultCacheDirectory(for: version(for: variant))
+    /// Where the checkpoint is read from. The copy bundled with the app wins,
+    /// so a fresh install has Parakeet ready with no download at all. The
+    /// writable cache is the fallback for a variant that is not bundled.
+    public static func cacheDirectory(
+        for variant: ParakeetVariant,
+        bundle: Bundle = .main
+    ) -> URL {
+        if let bundled = bundledDirectory(for: variant, bundle: bundle) {
+            return bundled
+        }
+        return AsrModels.defaultCacheDirectory(for: version(for: variant))
     }
 
-    public static func isInstalled(_ variant: ParakeetVariant) -> Bool {
+    /// The bundled checkpoint, when the app shipped with this variant and the
+    /// files actually survived packaging.
+    public static func bundledDirectory(
+        for variant: ParakeetVariant,
+        bundle: Bundle = .main
+    ) -> URL? {
+        guard let resources = bundle.resourceURL else { return nil }
+        let candidate = resources
+            .appendingPathComponent("ParakeetModels", isDirectory: true)
+            .appendingPathComponent(
+                variant.cacheFolderName,
+                isDirectory: true
+            )
+        guard AsrModels.modelsExist(
+            at: candidate,
+            version: version(for: variant)
+        ) else {
+            return nil
+        }
+        return candidate
+    }
+
+    public static func isInstalled(
+        _ variant: ParakeetVariant,
+        bundle: Bundle = .main
+    ) -> Bool {
         AsrModels.modelsExist(
-            at: cacheDirectory(for: variant),
+            at: cacheDirectory(for: variant, bundle: bundle),
             version: version(for: variant)
         )
     }

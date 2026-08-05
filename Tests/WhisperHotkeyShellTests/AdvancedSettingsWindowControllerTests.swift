@@ -23,7 +23,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     func testModelChipTitlesStayCompact() {
         XCTAssertEqual(
             DictationModel.allCases.map(DictationModelPresentation.chipTitle),
-            ["Base", "Small", "Medium", "Turbo"]
+            ["Base", "Turbo"]
         )
     }
 
@@ -200,7 +200,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             )
             XCTAssertEqual(
                 controller.modelChipLabelsForTesting,
-                ["Base", "Small", "Medium", "Turbo"],
+                ["Base", "Turbo"],
                 "whisper chips wrong on iteration \(iteration)"
             )
             XCTAssertEqual(
@@ -218,12 +218,12 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             makeAdvancedSettingsState(
                 hotkey: .rightOption,
                 mode: .toggle,
-                model: .smallEnglish,
+                model: .largeV3TurboQ5,
                 decodingProfile: .adaptive,
                 processingMode: .decodeWhileSpeaking,
                 internalDictionaryEntries: ["Codex", "Claude Code"],
                 limit: .minutes5,
-                availableModels: [.baseEnglish, .smallEnglish]
+                availableModels: [.baseEnglish, .largeV3TurboQ5]
             )
         )
         let service = AdvancedSettingsFakeLoginItemService(state: .enabled)
@@ -231,7 +231,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.selectedHotkeyForTesting, .rightOption)
         XCTAssertEqual(controller.selectedModeForTesting, .toggle)
-        XCTAssertEqual(controller.selectedModelForTesting, .smallEnglish)
+        XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
         XCTAssertEqual(
             controller.selectedDecodingProfileForTesting,
             .adaptive
@@ -260,11 +260,11 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
         XCTAssertTrue(controller.keepsLatestDictationForTesting)
         XCTAssertTrue(controller.modeControlEnabledForTesting)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.smallEnglish), true)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.mediumEnglish), false)
+        XCTAssertEqual(controller.modelIsEnabledForTesting(.largeV3TurboQ5), true)
+        XCTAssertEqual(controller.modelIsEnabledForTesting(.baseEnglish), true)
         XCTAssertEqual(
-            controller.modelTitleForTesting(.mediumEnglish),
-            "\(DictationModel.mediumEnglish.menuTitle): Not Installed"
+            controller.modelTitleForTesting(.baseEnglish),
+            DictationModel.baseEnglish.menuTitle
         )
         XCTAssertTrue(controller.usesChipSelectionForTesting)
         XCTAssertEqual(
@@ -279,7 +279,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.summaryValuesForTesting,
             [
                 "Right Option", "Toggle",
-                "Small Metal Smart Decode Decode While Speaking", "5 Minutes",
+                "Turbo Metal Smart Decode Decode While Speaking", "5 Minutes",
                 "Dimmed", "Login On",
             ]
         )
@@ -388,7 +388,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertTrue(
             [
-                "Press and Hold", "Pause Mode", "Base", "Small", "Medium",
+                "Press and Hold", "Pause Mode", "Base",
                 "After Recording", "Decode While Speaking",
             ].allSatisfy { title in
                 alternativeRows.contains(where: { $0.title == title })
@@ -754,7 +754,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertFalse(controller.modeControlEnabledForTesting)
         controller.selectHotkeyForTesting(.leftControl)
         controller.selectModeForTesting(.toggle)
-        controller.selectModelForTesting(.smallEnglish)
+        controller.selectModelForTesting(.largeV3TurboQ5)
         controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(["Codex"])
         controller.setKeepsLatestDictationForTesting(false)
@@ -854,7 +854,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     func testSelectedMissingModelCanRecoverToAnInstalledModel() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
-                model: .mediumEnglish,
+                model: .largeV3TurboQ5,
                 availableModels: [.baseEnglish]
             )
         )
@@ -870,8 +870,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             loginItemManager: makeLoginItemManager()
         )
 
-        XCTAssertEqual(controller.selectedModelForTesting, .mediumEnglish)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.mediumEnglish), false)
+        XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
+        XCTAssertEqual(controller.modelIsEnabledForTesting(.baseEnglish), true)
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
 
         controller.selectModelForTesting(.baseEnglish)

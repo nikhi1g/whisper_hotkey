@@ -24,7 +24,7 @@ Usage: ./run.sh [options]
 
 Build, install, launch, and open setup for whisper_hotkey.
 
-  --model base|small|medium|turbo   Install and select one model (default: base)
+  --model base|turbo                Install and select one model (default: base)
   --engine metal|coreml|whisperkit|parakeet
                                     Install and select an engine (default: metal)
                                     parakeet fetches its model on first use
@@ -89,8 +89,6 @@ model_sha256() {
 model_preference() {
     case "$1" in
         base) echo "baseEnglish" ;;
-        small) echo "smallEnglish" ;;
-        medium) echo "mediumEnglish" ;;
         turbo) echo "largeV3TurboQ5" ;;
         *) die "unknown model: $1" ;;
     esac
@@ -428,7 +426,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --all-models)
-            REQUESTED_MODELS=("base" "small" "medium" "turbo")
+            REQUESTED_MODELS=("base" "turbo")
             SELECTION_WAS_REQUESTED=1
             shift
             ;;

@@ -224,7 +224,7 @@ final class RecognitionTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let model = WhisperRuntimeDiscovery.modelURL(
-            model: .smallEnglish,
+            model: .largeV3TurboQ5,
             homeDirectory: root
         )
         try FileManager.default.createDirectory(
@@ -235,7 +235,7 @@ final class RecognitionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let configuration = try WhisperRuntimeDiscovery.discover(
-            model: .smallEnglish,
+            model: .largeV3TurboQ5,
             environment: [:],
             homeDirectory: root
         )

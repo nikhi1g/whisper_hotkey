@@ -110,6 +110,32 @@ final class ParakeetRecognitionTests: XCTestCase {
         )
     }
 
+    /// Proves the checkpoints bundled into the app are loadable, without any
+    /// FluidAudio cache present. Gated on an installed app because the test
+    /// bundle is not the app bundle.
+    func testBundledCheckpointsLoadFromTheApplicationBundle() async throws {
+        let appPath = ProcessInfo.processInfo
+            .environment["WHISPER_HOTKEY_APP_BUNDLE"]
+            ?? "/Applications/whisper_hotkey.app"
+        guard let bundle = Bundle(url: URL(fileURLWithPath: appPath)) else {
+            throw XCTSkip("no app bundle at \(appPath)")
+        }
+        for variant in ParakeetVariant.allCases {
+            let directory = ParakeetModelInstaller.bundledDirectory(
+                for: variant,
+                bundle: bundle
+            )
+            XCTAssertNotNil(
+                directory,
+                "\(variant) is not bundled or its files are incomplete"
+            )
+            XCTAssertTrue(
+                ParakeetModelInstaller.isInstalled(variant, bundle: bundle),
+                "\(variant) should report installed from the bundle alone"
+            )
+        }
+    }
+
     /// End-to-end recognition against a real checkpoint. Skipped unless
     /// `WHISPER_HOTKEY_PARAKEET_FIXTURE` points at a 16 kHz mono PCM16 WAV,
     /// because it downloads ~220 MB on a cold cache.

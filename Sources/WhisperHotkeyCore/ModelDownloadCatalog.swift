@@ -23,24 +23,15 @@ public enum ModelDownloadError: Error, Equatable {
 
 /// Models the app can fetch after installation.
 ///
-/// Base, Small, and Large-v3 Turbo Q5 ship inside the app, so only Medium is
-/// listed: all four together exceed GitHub's 2 GB release-asset limit. The
-/// source and pinned digests are the same ones `run.sh` and the release
-/// workflow already trust, so a download is verified to the same standard as a
-/// bundled model before anything is installed.
+/// Empty since 3.4.0: every model the app can select now ships inside it, so
+/// nothing is fetched at runtime. The mechanism is kept because it is the only
+/// verified install path, and a future model too large to bundle would use it
+/// again unchanged.
 public enum ModelDownloadCatalog {
     static let baseURL =
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 
-    public static let downloadable: [DownloadableModel] = [
-        DownloadableModel(
-            model: .mediumEnglish,
-            url: URL(string: "\(baseURL)/ggml-medium.en.bin")!,
-            sha256:
-                "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
-            byteCount: 1_533_774_781
-        ),
-    ]
+    public static let downloadable: [DownloadableModel] = []
 
     public static func entry(for model: DictationModel) -> DownloadableModel? {
         downloadable.first { $0.model == model }
