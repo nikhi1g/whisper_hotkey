@@ -6,6 +6,9 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedHotkey: HotkeyKey
     public let activationMode: HotkeyActivationMode
     public let selectedModel: DictationModel
+    /// Parakeet's own selection, kept beside the whisper one so switching
+    /// engines never overwrites the other engine's choice.
+    public let selectedParakeetVariant: ParakeetVariant
     public let selectedEngine: RecognitionEngine
     public let decodingProfile: DecodingProfile
     public let processingMode: ModelProcessingMode
@@ -24,6 +27,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         selectedHotkey: HotkeyKey,
         activationMode: HotkeyActivationMode,
         selectedModel: DictationModel,
+        selectedParakeetVariant: ParakeetVariant = .defaultVariant,
         selectedEngine: RecognitionEngine = .defaultEngine,
         decodingProfile: DecodingProfile = .defaultProfile,
         processingMode: ModelProcessingMode = .defaultMode,
@@ -41,6 +45,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.selectedHotkey = selectedHotkey
         self.activationMode = activationMode
         self.selectedModel = selectedModel
+        self.selectedParakeetVariant = selectedParakeetVariant
         self.selectedEngine = selectedEngine
         self.decodingProfile = decodingProfile
         self.processingMode = processingMode
@@ -62,6 +67,7 @@ public struct AdvancedSettingsActions {
     public var selectDictationMode: (HotkeyActivationMode) -> Void
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
+    public var selectParakeetVariant: (ParakeetVariant) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
     public var selectDecodingProfile: (DecodingProfile) -> Void
     public var selectProcessingMode: (ModelProcessingMode) -> Void
@@ -80,6 +86,7 @@ public struct AdvancedSettingsActions {
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
+        selectParakeetVariant: @escaping (ParakeetVariant) -> Void = { _ in },
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
@@ -97,6 +104,7 @@ public struct AdvancedSettingsActions {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
+        self.selectParakeetVariant = selectParakeetVariant
         self.selectEngine = selectEngine
         self.selectDecodingProfile = selectDecodingProfile
         self.selectProcessingMode = selectProcessingMode
@@ -158,6 +166,25 @@ public final class AdvancedSettingsWindowController:
     private let modelControl = NSSegmentedControl()
     private let engineControl = NSSegmentedControl()
     private let decodingControl = NSSegmentedControl()
+    /// Held so the Decoding row can be hidden outright on engines that have no
+    /// beam search. A disabled segmented control still paints its selection,
+    /// which reads as "this is on".
+    private var decodingRow: NSGridRow?
+    /// Which chip set the Model row currently shows, so `refresh` only rebuilds
+    /// the control when the engine actually changes what belongs there.
+    private var modelRowKind: ModelRowKind?
+    /// Row order of the RECOGNITION section, recorded as the grid is built so
+    /// a test can assert the section reads in dependency order.
+    private var recognitionRowTitles: [String] = []
+
+    private enum ModelRowKind: Equatable {
+        case whisper
+        case parakeet
+
+        init(engine: RecognitionEngine) {
+            self = engine == .parakeetCoreML ? .parakeet : .whisper
+        }
+    }
     private let processingModeControl = NSSegmentedControl()
     private let internalDictionaryDraftField = NSTextField()
     private let internalDictionaryPreviewLabel = NSTextField(labelWithString: "")
@@ -316,7 +343,12 @@ public final class AdvancedSettingsWindowController:
         let state = stateProvider()
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
         select(mode: state.activationMode)
-        select(model: state.selectedModel)
+        switch ModelRowKind(engine: state.selectedEngine) {
+        case .whisper:
+            select(model: state.selectedModel)
+        case .parakeet:
+            select(parakeetVariant: state.selectedParakeetVariant)
+        }
         select(engine: state.selectedEngine)
         select(decodingProfile: state.decodingProfile)
         select(processingMode: state.processingMode)
@@ -351,9 +383,10 @@ public final class AdvancedSettingsWindowController:
         modeControl.isEnabled = state.configurationEnabled
         modelControl.isEnabled = state.configurationEnabled
         engineControl.isEnabled = state.configurationEnabled
-        decodingControl.isEnabled =
-            state.configurationEnabled
-                && state.selectedEngine != .whisperKitCoreML
+        decodingControl.isEnabled = state.configurationEnabled
+        // Hidden rather than greyed: an engine with no beam search has no
+        // decoding profile, so showing one selected would be a lie.
+        decodingRow?.isHidden = !state.selectedEngine.usesWhisperDecoding
         processingModeControl.isEnabled = state.configurationEnabled
         internalDictionaryDraftField.isEnabled = state.configurationEnabled
         internalDictionaryAddButton.isEnabled = state.configurationEnabled
@@ -369,16 +402,32 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled
                 && state.selectedTheme.customTheme != nil
 
-        for (index, model) in DictationModel.allCases.enumerated() {
-            let installed = state.availableModels.contains(model)
-            modelControl.setEnabled(
-                state.configurationEnabled && installed,
-                forSegment: index
-            )
-            modelControl.setToolTip(
-                installed ? model.menuTitle : "\(model.menuTitle): Not Installed",
-                forSegment: index
-            )
+        rebuildModelRowIfNeeded(for: state)
+        switch ModelRowKind(engine: state.selectedEngine) {
+        case .whisper:
+            for (index, model) in DictationModel.allCases.enumerated() {
+                let installed = state.availableModels.contains(model)
+                modelControl.setEnabled(
+                    state.configurationEnabled && installed,
+                    forSegment: index
+                )
+                modelControl.setToolTip(
+                    installed
+                        ? model.menuTitle
+                        : "\(model.menuTitle): Not Installed",
+                    forSegment: index
+                )
+            }
+        case .parakeet:
+            // Both checkpoints download on demand, so neither is ever
+            // unavailable the way a missing whisper file is.
+            for (index, variant) in ParakeetVariant.allCases.enumerated() {
+                modelControl.setEnabled(
+                    state.configurationEnabled,
+                    forSegment: index
+                )
+                modelControl.setToolTip(variant.menuTitle, forSegment: index)
+            }
         }
         for (index, engine) in RecognitionEngine.allCases.enumerated() {
             let installed = state.availableEngines.contains(engine)
@@ -458,20 +507,37 @@ public final class AdvancedSettingsWindowController:
 
     @objc private func selectModel(_ sender: NSSegmentedControl) {
         let state = stateProvider()
-        guard state.configurationEnabled,
-              DictationModel.allCases.indices.contains(sender.selectedSegment)
-        else {
+        guard state.configurationEnabled else {
             refresh()
             return
         }
-        let model = DictationModel.allCases[sender.selectedSegment]
-        guard
-              state.availableModels.contains(model)
-        else {
-            refresh()
-            return
+        // The Model row carries whichever family the selected engine belongs
+        // to, so the click resolves against that family's cases.
+        switch ModelRowKind(engine: state.selectedEngine) {
+        case .whisper:
+            guard
+                DictationModel.allCases.indices.contains(sender.selectedSegment)
+            else {
+                refresh()
+                return
+            }
+            let model = DictationModel.allCases[sender.selectedSegment]
+            guard state.availableModels.contains(model) else {
+                refresh()
+                return
+            }
+            actions.selectModel(model)
+        case .parakeet:
+            guard ParakeetVariant.allCases.indices.contains(
+                sender.selectedSegment
+            ) else {
+                refresh()
+                return
+            }
+            actions.selectParakeetVariant(
+                ParakeetVariant.allCases[sender.selectedSegment]
+            )
         }
-        actions.selectModel(model)
         refresh()
     }
 
@@ -499,7 +565,7 @@ public final class AdvancedSettingsWindowController:
     ) {
         let state = stateProvider()
         guard state.configurationEnabled,
-              state.selectedEngine != .whisperKitCoreML,
+              state.selectedEngine.usesWhisperDecoding,
               DecodingProfile.allCases.indices.contains(
                 sender.selectedSegment
               )
@@ -1121,14 +1187,25 @@ public final class AdvancedSettingsWindowController:
         modeSummary.stringValue = DictationModePresentation.optionTitle(
             for: state.activationMode
         )
-        let decodingSummary = state.selectedEngine == .whisperKitCoreML
-            ? "Native"
-            : state.decodingProfile.displayName
-        modelSummary.stringValue =
-            "\(DictationModelPresentation.chipTitle(for: state.selectedModel)) "
-            + "\(state.selectedEngine.displayName) "
-            + "\(decodingSummary) "
-            + state.processingMode.displayName
+        // Only name a decoding profile on engines that have one, rather than
+        // printing a placeholder word where a real setting would go.
+        let parts: [String]
+        switch ModelRowKind(engine: state.selectedEngine) {
+        case .whisper:
+            parts = [
+                DictationModelPresentation.chipTitle(for: state.selectedModel),
+                state.selectedEngine.displayName,
+                state.decodingProfile.displayName,
+                state.processingMode.displayName,
+            ]
+        case .parakeet:
+            parts = [
+                state.selectedEngine.displayName,
+                state.selectedParakeetVariant.displayName,
+                state.processingMode.displayName,
+            ]
+        }
+        modelSummary.stringValue = parts.joined(separator: " ")
         limitSummary.stringValue = state.recordingLimit.displayName
         themeSummary.stringValue = state.selectedTheme.summaryName
         switch loginStatus {
@@ -1191,8 +1268,43 @@ public final class AdvancedSettingsWindowController:
         modeControl.selectedSegment = index
     }
 
+    /// Swaps the Model row between whisper's four sizes and Parakeet's two.
+    /// Parakeet is a different model family, not a fourth way to run whisper,
+    /// so reusing whisper's names for its checkpoints would misreport what is
+    /// selected.
+    private func rebuildModelRowIfNeeded(for state: AdvancedSettingsState) {
+        let kind = ModelRowKind(engine: state.selectedEngine)
+        guard modelRowKind != kind else { return }
+        modelRowKind = kind
+        switch kind {
+        case .whisper:
+            configure(
+                modelControl,
+                labels: DictationModel.allCases.map(
+                    DictationModelPresentation.chipTitle
+                ),
+                action: #selector(selectModel(_:))
+            )
+        case .parakeet:
+            configure(
+                modelControl,
+                labels: ParakeetVariant.allCases.map(\.displayName),
+                action: #selector(selectModel(_:))
+            )
+        }
+    }
+
     private func select(model: DictationModel) {
         guard let index = DictationModel.allCases.firstIndex(of: model) else {
+            return
+        }
+        modelControl.selectedSegment = index
+    }
+
+    private func select(parakeetVariant: ParakeetVariant) {
+        guard let index = ParakeetVariant.allCases.firstIndex(
+            of: parakeetVariant
+        ) else {
             return
         }
         modelControl.selectedSegment = index
@@ -1349,17 +1461,24 @@ public final class AdvancedSettingsWindowController:
         let recognitionTitle = makeSectionTitle("RECOGNITION")
         stack.addArrangedSubview(recognitionTitle)
         let recognitionGrid = makeGrid()
+        // Engine leads because it decides which models exist and whether
+        // Decoding applies at all. Reading top to bottom now follows the
+        // dependency rather than cutting across it.
+        recognitionRowTitles = [
+            "Engine", "Model", "Decoding", "Processing",
+            "Internal dictionary", "Recording limit",
+        ]
+        addRow(to: recognitionGrid, title: "Engine", control: engineControl)
         addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        decodingRow = addRow(
+            to: recognitionGrid,
+            title: "Decoding",
+            control: decodingControl
+        )
         addRow(
             to: recognitionGrid,
             title: "Processing",
             control: processingModeControl
-        )
-        addRow(to: recognitionGrid, title: "Engine", control: engineControl)
-        addRow(
-            to: recognitionGrid,
-            title: "Decoding",
-            control: decodingControl
         )
         addRow(
             to: recognitionGrid,
@@ -1512,15 +1631,16 @@ public final class AdvancedSettingsWindowController:
         grid.column(at: 1).width = 410
     }
 
+    @discardableResult
     private func addRow(
         to grid: NSGridView,
         title: String,
         control: NSView
-    ) {
+    ) -> NSGridRow {
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 13, weight: .medium)
         themedPrimaryLabels.append(label)
-        grid.addRow(with: [label, control])
+        return grid.addRow(with: [label, control])
     }
 
     var selectedHotkeyForTesting: HotkeyKey? {
@@ -1648,6 +1768,20 @@ public final class AdvancedSettingsWindowController:
 
     var modeControlEnabledForTesting: Bool {
         modeControl.isEnabled
+    }
+
+    var decodingRowVisibleForTesting: Bool {
+        decodingRow.map { !$0.isHidden } ?? false
+    }
+
+    var modelChipLabelsForTesting: [String] {
+        (0..<modelControl.segmentCount).compactMap {
+            modelControl.label(forSegment: $0)
+        }
+    }
+
+    var recognitionRowTitlesForTesting: [String] {
+        recognitionRowTitles
     }
 
     var decodingControlEnabledForTesting: Bool {

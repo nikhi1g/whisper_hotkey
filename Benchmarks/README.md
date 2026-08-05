@@ -20,6 +20,33 @@ python3 Benchmarks/Scripts/benchmark_predecode.py \
   --wav-root Benchmarks/Data/WAV
 ```
 
+## Parakeet
+
+The Parakeet engine is measured with a separate harness, kept in its own
+package under `Parakeet/` so FluidAudio never links into a shipped bundle. It
+transcribes the same WAVs the whisper benchmark uses, and `score_parakeet.py`
+applies the same tokenizer and edit-distance math, so the two are comparable.
+
+```sh
+python3 - <<'EOF' > /tmp/wavlist.txt
+import json, os
+cases = json.load(open("Benchmarks/Results/latest.json"))["profiles"]["accuracy"]["cases"]
+root = os.path.abspath("Benchmarks/Data/WAV")
+print("\n".join(os.path.join(root, c["split"], c["id"] + ".wav") for c in cases))
+EOF
+swift build --package-path Benchmarks/Parakeet -c release
+./Benchmarks/Parakeet/.build/release/parakeet-benchmark v2 /tmp/wavlist.txt \
+  > /tmp/parakeet-v2.jsonl
+python3 Benchmarks/Scripts/score_parakeet.py /tmp/parakeet-v2.jsonl
+```
+
+The variant argument is `v2` (the 0.6B model behind the Small, Medium, and
+Turbo chips), `tdtCtc110m` (the 110M model behind the Base chip), or `v3` (the
+multilingual 0.6B model the app does not select, since recognition is
+English-only). The first run downloads the checkpoint. Two warm-up passes run
+before timing so the measurement reflects a resident model, matching how the
+whisper benchmark drives an already-loaded helper.
+
 The downloader pins the checksums published by OpenSLR. Results contain
 aggregate and per-utterance timing, word-error counts, and numeric confidence
 measurements, but never audio or transcript text. `--wav-root` must mirror the

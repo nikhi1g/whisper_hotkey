@@ -187,6 +187,22 @@ public enum WhisperHotkeyPaths {
             .standardizedFileURL
     }
 
+    /// Where FluidAudio caches a Parakeet checkpoint. This is reported for
+    /// display and diagnostics only: FluidAudio owns the directory and creates
+    /// it on first download, so nothing here should treat it as a precondition.
+    public static func parakeetModelURL(
+        for variant: ParakeetVariant,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        homeDirectory
+            .appendingPathComponent(
+                "Library/Application Support/FluidAudio/Models",
+                isDirectory: true
+            )
+            .appendingPathComponent(variant.cacheFolderName, isDirectory: true)
+            .standardizedFileURL
+    }
+
     public static var modelPath: String {
         modelURL(for: DictationModel.selected()).path
     }

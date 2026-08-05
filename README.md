@@ -196,7 +196,18 @@ selected explicitly:
 ```sh
 ./run.sh --model turbo --engine coreml
 ./run.sh --model turbo --engine whisperkit
+./run.sh --engine parakeet
 ```
+
+Parakeet runs NVIDIA Parakeet on the Neural Engine instead of whisper, and on
+this repository's LibriSpeech benchmark it is both more accurate and several
+times faster than every whisper option: 2.62% WER at 56 ms per utterance
+against Large-v3 Turbo Q5's 4.32% at 321 ms. It is its own model family, so
+selecting it swaps the four whisper chips for its own two, Fast and Accurate,
+and keeps that choice separately from the whisper one. Both download on first
+use rather than through the bootstrap. Because it is a transducer it has no beam search, so the
+Decoding chips do not apply, and it accepts no prompt, so the internal
+dictionary and Pause Mode context do not bias it.
 
 `--all-models` selects Base after installing all four. Any explicit `--model`
 or `--engine` choice is persisted before the newly built app launches. Missing

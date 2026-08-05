@@ -28,6 +28,10 @@ let package = Package(
             url: "https://github.com/argmaxinc/argmax-oss-swift.git",
             revision: "8fcbfed028415b0b90f0f10ee7b0303c53b600a0"
         ),
+        .package(
+            url: "https://github.com/FluidInference/FluidAudio.git",
+            exact: "0.15.5"
+        ),
     ],
     targets: [
         .target(name: "WhisperHotkeyCore"),
@@ -36,6 +40,7 @@ let package = Package(
             dependencies: [
                 "WhisperHotkeyCore",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ]
         ),
         .target(

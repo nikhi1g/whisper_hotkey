@@ -15,19 +15,24 @@ public struct WhisperRuntimeConfiguration: Equatable, Sendable {
     public let modelURL: URL
     public let engine: RecognitionEngine
     public let decodingProfile: DecodingProfile
+    /// Which Parakeet checkpoint the selected model slot maps to. Only read
+    /// when `engine` is `.parakeetCoreML`.
+    public let parakeetVariant: ParakeetVariant
 
     public init(
         helperExecutableURL: URL?,
         commandLineExecutableURL: URL?,
         modelURL: URL,
         engine: RecognitionEngine = .whisperCppMetal,
-        decodingProfile: DecodingProfile = .defaultProfile
+        decodingProfile: DecodingProfile = .defaultProfile,
+        parakeetVariant: ParakeetVariant = .accurate
     ) {
         self.helperExecutableURL = helperExecutableURL
         self.commandLineExecutableURL = commandLineExecutableURL
         self.modelURL = modelURL
         self.engine = engine
         self.decodingProfile = decodingProfile
+        self.parakeetVariant = parakeetVariant
     }
 }
 
@@ -90,11 +95,29 @@ public enum WhisperRuntimeDiscovery {
         model: DictationModel = DictationModel.selected(),
         engine: RecognitionEngine = RecognitionEngine.selected(),
         decodingProfile: DecodingProfile = DecodingProfile.selected(),
+        parakeetVariant: ParakeetVariant = ParakeetVariant.selected(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundle: Bundle = .main,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
     ) throws -> WhisperRuntimeConfiguration {
+        // Parakeet checkpoints live in FluidAudio's Application Support cache
+        // and are fetched on first use, so there is no path to validate and no
+        // helper to locate. Parakeet also keeps its own selection, so the
+        // whisper model argument is not consulted here.
+        if engine == .parakeetCoreML {
+            return WhisperRuntimeConfiguration(
+                helperExecutableURL: nil,
+                commandLineExecutableURL: nil,
+                modelURL: WhisperHotkeyPaths.parakeetModelURL(
+                    for: parakeetVariant,
+                    homeDirectory: homeDirectory
+                ),
+                engine: engine,
+                decodingProfile: decodingProfile,
+                parakeetVariant: parakeetVariant
+            )
+        }
         let modelURL: URL
         switch engine {
         case .whisperCppMetal:
@@ -132,6 +155,8 @@ public enum WhisperRuntimeDiscovery {
                 for: model,
                 homeDirectory: homeDirectory
             )
+        case .parakeetCoreML:
+            preconditionFailure("Parakeet returns before this switch")
         }
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(
@@ -333,6 +358,7 @@ public actor WhisperRecognizer {
     private var preloadTask: Task<WhisperHelperSession, Error>?
     private var helperSession: WhisperHelperSession?
     private var whisperKitRuntime: WhisperKit?
+    private var parakeetRuntime: ParakeetRuntime?
     private var cachedHelperFailure: CachedHelperFailure?
     private var generation = UUID()
     private var keepsModelReady = false
@@ -359,9 +385,12 @@ public actor WhisperRecognizer {
 
     public func preload() async throws {
         let configuration = try resolvedConfiguration()
-        if configuration.engine == .whisperKitCoreML {
+        switch configuration.engine {
+        case .whisperKitCoreML:
             _ = try await preparedWhisperKit(configuration: configuration)
-        } else {
+        case .parakeetCoreML:
+            _ = try await preparedParakeet(configuration: configuration)
+        case .whisperCppMetal, .whisperCppCoreML:
             _ = try ensureLease()
             _ = try await preparedHelper()
         }
@@ -429,6 +458,12 @@ public actor WhisperRecognizer {
     }
 
     public func finishContinuousSession() async {
+        if let parakeetRuntime {
+            if !keepsModelReady {
+                await releaseParakeet(parakeetRuntime)
+            }
+            return
+        }
         if let whisperKitRuntime {
             if !keepsModelReady {
                 await whisperKitRuntime.unloadModels()
@@ -459,6 +494,13 @@ public actor WhisperRecognizer {
                 configuration: configuration,
                 keepLoaded: keepHelperLoaded || keepsModelReady,
                 prompt: prompt
+            )
+        }
+        if configuration.engine == .parakeetCoreML {
+            return try await transcribeWithParakeet(
+                audio,
+                configuration: configuration,
+                keepLoaded: keepHelperLoaded || keepsModelReady
             )
         }
         let lease = try ensureLease()
@@ -706,6 +748,80 @@ public actor WhisperRecognizer {
         }
     }
 
+    private func preparedParakeet(
+        configuration: WhisperRuntimeConfiguration
+    ) async throws -> ParakeetRuntime {
+        if let parakeetRuntime, readiness == .ready {
+            return parakeetRuntime
+        }
+        readiness = .loading
+        let runtime = parakeetRuntime ?? ParakeetRuntime(
+            variant: configuration.parakeetVariant
+        )
+        do {
+            try await runtime.load()
+            try Task.checkCancellation()
+            parakeetRuntime = runtime
+            readiness = .ready
+            return runtime
+        } catch is CancellationError {
+            readiness = .idle
+            throw CancellationError()
+        } catch {
+            readiness = .failed
+            throw WhisperASRError.helperFailed("Parakeet model load failed")
+        }
+    }
+
+    private func transcribeWithParakeet(
+        _ audio: WhisperAudioFile,
+        configuration: WhisperRuntimeConfiguration,
+        keepLoaded: Bool
+    ) async throws -> String {
+        guard audio.speechPresence != .absent else {
+            throw WhisperASRError.noSpeech
+        }
+        let runtime = try await preparedParakeet(configuration: configuration)
+        do {
+            // Parakeet takes no prompt, so the internal dictionary and the
+            // Pause Mode context tail are deliberately not passed here.
+            let transcript = try await runtime.transcribe(
+                audioURL: audio.url
+            )
+            try Task.checkCancellation()
+            let cleaned = try cleanedTranscript(transcript)
+            if !keepLoaded {
+                await releaseParakeet(runtime)
+            }
+            return cleaned
+        } catch is CancellationError {
+            if !keepLoaded {
+                await releaseParakeet(runtime)
+            }
+            throw CancellationError()
+        } catch let error as WhisperASRError {
+            if !keepLoaded, error != .noSpeech {
+                await releaseParakeet(runtime)
+            }
+            throw error
+        } catch {
+            if !keepLoaded {
+                await releaseParakeet(runtime)
+            }
+            readiness = .failed
+            throw WhisperASRError.helperFailed("Parakeet transcription failed")
+        }
+    }
+
+    private func releaseParakeet(_ runtime: ParakeetRuntime) async {
+        await runtime.release()
+        if parakeetRuntime === runtime {
+            parakeetRuntime = nil
+            activeConfiguration = nil
+            readiness = .idle
+        }
+    }
+
     private func releaseWhisperKit(_ runtime: WhisperKit) async {
         await runtime.unloadModels()
         if whisperKitRuntime === runtime {
@@ -775,6 +891,9 @@ public actor WhisperRecognizer {
         if let whisperKitRuntime {
             await whisperKitRuntime.unloadModels()
         }
+        if let parakeetRuntime {
+            await parakeetRuntime.release()
+        }
         if let pendingPreload,
            let lateSession = try? await pendingPreload.value {
             lateSession.terminate(wait: true)
@@ -783,6 +902,7 @@ public actor WhisperRecognizer {
         preloadTask = nil
         helperSession = nil
         whisperKitRuntime = nil
+        parakeetRuntime = nil
         cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle

@@ -2,6 +2,10 @@ import Foundation
 
 public enum WhisperHotkeyPreferenceKeys {
     public static let dictationModel = "dictationModel"
+    /// Parakeet ships its own checkpoints, so it keeps its own selection rather
+    /// than borrowing a whisper model slot. Switching engines then never
+    /// overwrites the other engine's choice.
+    public static let parakeetModel = "parakeetModel"
     public static let recognitionEngine = "recognitionEngine"
     public static let decodingProfile = "decodingProfile"
     public static let modelProcessingMode = "modelProcessingMode"
@@ -450,6 +454,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     case whisperCppMetal
     case whisperCppCoreML
     case whisperKitCoreML
+    case parakeetCoreML
 
     public static let defaultEngine: Self = .whisperCppMetal
 
@@ -461,6 +466,8 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "Core ML Encoder"
         case .whisperKitCoreML:
             "WhisperKit"
+        case .parakeetCoreML:
+            "Parakeet"
         }
     }
 
@@ -472,7 +479,38 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "whisper.cpp Core ML Encoder"
         case .whisperKitCoreML:
             "WhisperKit Core ML and Neural Engine"
+        case .parakeetCoreML:
+            "Parakeet Neural Engine"
         }
+    }
+
+    /// Whether the engine decodes with whisper.cpp's beam/greedy machinery.
+    /// The Decoding row only has meaning for these engines: WhisperKit owns its
+    /// own decoder, and Parakeet is a transducer with no beam search at all.
+    public var usesWhisperDecoding: Bool {
+        switch self {
+        case .whisperCppMetal, .whisperCppCoreML:
+            true
+        case .whisperKitCoreML, .parakeetCoreML:
+            false
+        }
+    }
+
+    /// Whether recognition runs in the owned helper subprocess. In-process
+    /// engines skip helper discovery, leases, and the command-line fallback.
+    public var usesLocalHelper: Bool {
+        switch self {
+        case .whisperCppMetal, .whisperCppCoreML:
+            true
+        case .whisperKitCoreML, .parakeetCoreML:
+            false
+        }
+    }
+
+    /// Whether a text prompt can bias the decode. Parakeet transducers accept
+    /// no prompt, so the dictionary and Pause Mode context are dropped.
+    public var supportsPromptConditioning: Bool {
+        self != .parakeetCoreML
     }
 
     public static func selected(
@@ -833,6 +871,62 @@ public enum BadgeThemeSelection: Equatable, Sendable {
             identifier,
             forKey: WhisperHotkeyPreferenceKeys.badgeTheme
         )
+    }
+}
+
+/// The two Parakeet checkpoints the app can run, both English and both served
+/// from the Neural Engine. Measured on LibriSpeech test-clean plus test-other
+/// (100 utterances, Apple M5 Pro): `.fast` 3.88% WER at 34 ms mean latency,
+/// `.accurate` 2.62% WER at 56 ms. The whisper Large-v3 Turbo Q5 baseline on
+/// the same set is 4.32% WER at 321 ms.
+public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
+    /// `parakeet-tdt-ctc-110m` — 219 MB on disk.
+    case fast
+    /// `parakeet-tdt-0.6b-v2` — 443 MB on disk.
+    case accurate
+
+    public static let defaultVariant: Self = .accurate
+
+    /// Chip label. These are the only two Parakeet offers, so they describe the
+    /// tradeoff directly instead of borrowing whisper's size names.
+    public var displayName: String {
+        switch self {
+        case .fast:
+            "Fast"
+        case .accurate:
+            "Accurate"
+        }
+    }
+
+    /// Long form used in the settings summary and the guide.
+    public var menuTitle: String {
+        switch self {
+        case .fast:
+            "Fast (110M, 219 MB, lowest latency)"
+        case .accurate:
+            "Accurate (0.6B, 443 MB, lowest error rate)"
+        }
+    }
+
+    /// Directory FluidAudio caches this checkpoint under.
+    public var cacheFolderName: String {
+        switch self {
+        case .fast:
+            "parakeet-tdt-ctc-110m"
+        case .accurate:
+            "parakeet-tdt-0.6b-v2"
+        }
+    }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        guard let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.parakeetModel
+        ) else {
+            return .defaultVariant
+        }
+        return Self(rawValue: rawValue) ?? .defaultVariant
     }
 }
 

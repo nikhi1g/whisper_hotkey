@@ -262,7 +262,12 @@ final class PreferenceTests: XCTestCase {
         )
         XCTAssertEqual(
             RecognitionEngine.allCases,
-            [.whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML]
+            [
+                .whisperCppMetal,
+                .whisperCppCoreML,
+                .whisperKitCoreML,
+                .parakeetCoreML,
+            ]
         )
         defaults.set(
             RecognitionEngine.whisperKitCoreML.rawValue,

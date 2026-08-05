@@ -28,6 +28,56 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testParakeetOffersAFourthEngineAndDisablesDecoding() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                model: .largeV3TurboQ5,
+                selectedParakeetVariant: .accurate,
+                engine: .parakeetCoreML,
+                decodingProfile: .adaptive,
+                availableModels: Set(DictationModel.allCases),
+                availableEngines: Set(RecognitionEngine.allCases)
+            )
+        )
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+        controller.showWindow(nil)
+
+        XCTAssertEqual(
+            controller.optionCountsForTesting[3],
+            RecognitionEngine.allCases.count
+        )
+        XCTAssertEqual(controller.selectedEngineForTesting, .parakeetCoreML)
+        // A transducer has no beam search, so the row is gone, not greyed.
+        XCTAssertFalse(controller.decodingRowVisibleForTesting)
+        // The Model row carries Parakeet's own two checkpoints. Reusing
+        // whisper's size names here would misreport what is selected.
+        XCTAssertEqual(
+            controller.modelChipLabelsForTesting,
+            ["Fast", "Accurate"]
+        )
+        // Engine leads the section, because it decides what the rest means.
+        XCTAssertEqual(
+            controller.recognitionRowTitlesForTesting,
+            [
+                "Engine", "Model", "Decoding", "Processing",
+                "Internal dictionary", "Recording limit",
+            ]
+        )
+        XCTAssertEqual(
+            controller.summaryValuesForTesting[2],
+            "Parakeet Accurate After Recording"
+        )
+        XCTAssertTrue(
+            controller.controlsFitWindowForTesting,
+            controller.controlsOutsideWindowForTesting.joined(separator: ", ")
+        )
+        controller.close()
+    }
+
+    @MainActor
     func testPopulatesSelectionsAndMarksUnavailableModels() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
@@ -247,7 +297,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testWhisperKitUsesNativeDecodingAndDisablesProfileChoice() {
+    func testWhisperKitUsesNativeDecodingAndHidesTheProfileRow() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
                 engine: .whisperKitCoreML,
@@ -259,15 +309,21 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             box: box,
             service: AdvancedSettingsFakeLoginItemService()
         )
+        controller.showWindow(nil)
 
-        XCTAssertFalse(controller.decodingControlEnabledForTesting)
+        // The row is hidden rather than greyed. A disabled segmented control
+        // still paints its selection, which reads as an active setting.
+        XCTAssertFalse(controller.decodingRowVisibleForTesting)
+        // The stored profile survives, so switching back to a whisper.cpp
+        // engine restores the choice instead of resetting it.
         XCTAssertEqual(
             controller.selectedDecodingProfileForTesting,
             .adaptive
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             controller.summaryValuesForTesting[2].contains("Native")
         )
+        controller.close()
     }
 
     @MainActor
@@ -776,6 +832,7 @@ private func makeAdvancedSettingsState(
     hotkey: HotkeyKey = .rightCommand,
     mode: HotkeyActivationMode = .hold,
     model: DictationModel = .baseEnglish,
+    selectedParakeetVariant: ParakeetVariant = .defaultVariant,
     engine: RecognitionEngine = .whisperCppMetal,
     decodingProfile: DecodingProfile = .precision,
     processingMode: ModelProcessingMode = .afterRecording,
@@ -795,6 +852,7 @@ private func makeAdvancedSettingsState(
         selectedHotkey: hotkey,
         activationMode: mode,
         selectedModel: model,
+        selectedParakeetVariant: selectedParakeetVariant,
         selectedEngine: engine,
         decodingProfile: decodingProfile,
         processingMode: processingMode,

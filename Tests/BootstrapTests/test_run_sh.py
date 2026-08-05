@@ -69,7 +69,7 @@ class RunScriptTests(unittest.TestCase):
             "for value in base small medium turbo; do model_preference \"$value\"; done"
         )
         engines = self.evaluate_bootstrap_function(
-            "for value in metal coreml whisperkit; do engine_preference \"$value\"; done"
+            "for value in metal coreml whisperkit parakeet; do engine_preference \"$value\"; done"
         )
 
         self.assertEqual(
@@ -78,7 +78,12 @@ class RunScriptTests(unittest.TestCase):
         )
         self.assertEqual(
             engines.splitlines(),
-            ["whisperCppMetal", "whisperCppCoreML", "whisperKitCoreML"],
+            [
+                "whisperCppMetal",
+                "whisperCppCoreML",
+                "whisperKitCoreML",
+                "parakeetCoreML",
+            ],
         )
 
     def test_default_selection_persistence_is_a_successful_no_op(self) -> None:
@@ -165,6 +170,13 @@ class RunScriptTests(unittest.TestCase):
             with (
                 patch.object(build_app, "RESOURCES", resources),
                 patch.object(build_app, "BASE_MODEL_SHA256", digest),
+                # Only the fixture is on disk, so restrict the bundle set to it
+                # rather than requiring a populated model cache.
+                patch.object(
+                    build_app,
+                    "BUNDLED_MODELS",
+                    {build_app.BASE_MODEL_NAME: digest},
+                ),
                 patch.dict(
                     "os.environ",
                     {
@@ -174,7 +186,7 @@ class RunScriptTests(unittest.TestCase):
                     clear=False,
                 ),
             ):
-                build_app.bundle_verified_base_model()
+                build_app.bundle_verified_models()
 
             bundled = resources / "Models" / build_app.BASE_MODEL_NAME
             self.assertEqual(bundled.read_bytes(), source.read_bytes())
@@ -186,6 +198,11 @@ class RunScriptTests(unittest.TestCase):
             source.write_bytes(b"wrong model")
             with (
                 patch.object(build_app, "RESOURCES", root / "Resources"),
+                patch.object(
+                    build_app,
+                    "BUNDLED_MODELS",
+                    {build_app.BASE_MODEL_NAME: build_app.BASE_MODEL_SHA256},
+                ),
                 patch.dict(
                     "os.environ",
                     {
@@ -196,7 +213,7 @@ class RunScriptTests(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(RuntimeError, "verification failed"):
-                    build_app.bundle_verified_base_model()
+                    build_app.bundle_verified_models()
 
 
 if __name__ == "__main__":

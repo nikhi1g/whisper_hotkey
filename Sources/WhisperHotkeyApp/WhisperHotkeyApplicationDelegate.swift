@@ -116,6 +116,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedModel = DictationModel.selected(
         defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
     )
+    private var selectedParakeetVariant = ParakeetVariant.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
     private var selectedEngine = RecognitionEngine.selected(
         defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
     )
@@ -1513,6 +1516,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             selectedHotkey: selectedHotkey,
             activationMode: hotkeyActivationMode,
             selectedModel: selectedModel,
+            selectedParakeetVariant: selectedParakeetVariant,
             selectedEngine: selectedEngine,
             decodingProfile: decodingProfile,
             processingMode: processingMode,
@@ -1565,6 +1569,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectModel: { [weak self] model in
                         self?.selectModel(model)
+                    },
+                    selectParakeetVariant: { [weak self] variant in
+                        self?.selectParakeetVariant(variant)
                     },
                     selectEngine: { [weak self] engine in
                         self?.selectEngine(engine)
@@ -1852,6 +1859,30 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         setupWindowController.refresh()
     }
 
+    private func selectParakeetVariant(_ variant: ParakeetVariant) {
+        guard !machine.phase.isBusy, selectedParakeetVariant != variant else {
+            return
+        }
+        selectedParakeetVariant = variant
+        UserDefaults.standard.set(
+            variant.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.parakeetModel
+        )
+        configureModelReadiness(reloadSelectedModel: true)
+        reconcileRuntime(showSetupIfNeeded: false)
+        setupWindowController.refresh()
+    }
+
+    /// Names whichever model the active engine actually runs. Parakeet keeps
+    /// its own selection, so reporting the whisper model there would be wrong.
+    private var activeModelSummary: String {
+        if selectedEngine == .parakeetCoreML {
+            return "\(selectedEngine.displayName) "
+                + selectedParakeetVariant.displayName
+        }
+        return "\(selectedModel.displayName), \(selectedEngine.displayName)"
+    }
+
     /// Fetches a model that did not fit in the download, then selects it.
     private func offerModelDownload(_ model: DictationModel) {
         guard let entry = ModelDownloadCatalog.entry(for: model),
@@ -1921,7 +1952,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func selectDecodingProfile(_ profile: DecodingProfile) {
         guard !machine.phase.isBusy,
-              selectedEngine != .whisperKitCoreML,
+              selectedEngine.usesWhisperDecoding,
               decodingProfile != profile
         else {
             return
@@ -2155,7 +2186,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             modelAvailable: readiness.modelAvailable,
             hotkey: selectedHotkey.displayName,
             hotkeyMode: hotkeyActivationMode.rawValue,
-            model: "\(selectedModel.displayName), \(selectedEngine.displayName)",
+            model: activeModelSummary,
             recordingLimit: recordingLimit.displayName,
             threadCount: WhisperRuntimeDiscovery.recommendedThreadCount(),
             lastError: machine.lastError ?? startupError
@@ -2195,7 +2226,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var helperAvailable: Bool {
-        if selectedEngine == .whisperKitCoreML {
+        if !selectedEngine.usesLocalHelper {
             return true
         }
         return WhisperRuntimeDiscovery.helperCandidates().contains {
@@ -2247,7 +2278,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func revealModelLocation() {
         let activeModel = try? WhisperRuntimeDiscovery.discover(
             model: selectedModel,
-            engine: selectedEngine
+            engine: selectedEngine,
+            parakeetVariant: selectedParakeetVariant
         ).modelURL
         reveal(
             activeModel ?? WhisperHotkeyPaths.modelURL(for: selectedModel),
