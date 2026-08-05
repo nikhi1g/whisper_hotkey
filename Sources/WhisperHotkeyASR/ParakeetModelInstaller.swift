@@ -52,12 +52,11 @@ public enum ParakeetModelInstaller {
                 }
             )
             try Task.checkCancellation()
-        } catch is CancellationError {
-            throw CancellationError()
         } catch {
-            throw WhisperASRError.helperFailed(
-                "Parakeet download failed: \(error.localizedDescription)"
-            )
+            if isCancellation(error) {
+                throw CancellationError()
+            }
+            throw WhisperASRError.parakeetInstallFailed(error.localizedDescription)
         }
     }
 
@@ -68,5 +67,31 @@ public enum ParakeetModelInstaller {
         case .accurate:
             .v2
         }
+    }
+
+    /// Whether `error` represents a deliberate cancellation rather than a
+    /// genuine failure. FluidAudio's download stack cancels the underlying
+    /// `URLSessionTask` on Task cancellation (see
+    /// `FileDownloader.streamDownload`'s `withTaskCancellationHandler`),
+    /// which surfaces as an `NSURLErrorCancelled` error rather than Swift's
+    /// `CancellationError` — so a plain `catch is CancellationError` misses
+    /// it. Mirrors FluidAudio's own internal `RetryPolicy.isCancellation`,
+    /// which is not exposed publicly.
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        var current: NSError? = error as NSError
+        var visited: Set<ObjectIdentifier> = []
+        while let nsError = current, visited.insert(ObjectIdentifier(nsError)).inserted {
+            if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+                return true
+            }
+            if nsError.domain == NSCocoaErrorDomain, nsError.code == NSUserCancelledError {
+                return true
+            }
+            current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
     }
 }

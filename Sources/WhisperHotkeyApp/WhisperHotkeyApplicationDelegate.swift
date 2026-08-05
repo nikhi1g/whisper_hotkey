@@ -2463,6 +2463,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         case .noSpeech:
             return "No speech detected."
         case .modelMissing:
+            if selectedEngine == .parakeetCoreML {
+                return "Parakeet model missing: open Settings."
+            }
             return "Whisper model missing: run setup."
         case .helperUnavailable, .commandLineUnavailable:
             return "Whisper tools missing: run setup."
@@ -2470,7 +2473,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return "Microphone failed: run setup."
         case .recognitionTimedOut:
             return "Transcription timed out."
-        case .helperProtocolFailure, .helperFailed, .commandLineFailed:
+        case .helperProtocolFailure, .helperFailed, .commandLineFailed,
+            .parakeetInstallFailed:
             return "Transcription failed: see logs."
         }
     }
