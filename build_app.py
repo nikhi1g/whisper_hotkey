@@ -278,9 +278,32 @@ def verify_distribution_targets(binaries: list[Path]) -> None:
         )
 
 
+def unnotarized_distribution() -> bool:
+    """Public build signed with a development identity and never notarized.
+
+    Notarization requires a Developer ID Application certificate, which in turn
+    requires a paid Apple Developer Program membership. Without one, the app is
+    signed with the same stable Apple Development identity on every release so
+    that existing installs keep their designated requirement (in-app updates)
+    and their Microphone, Accessibility, and Input Monitoring grants. Gatekeeper
+    still blocks the first launch; the download instructions cover Open Anyway.
+    """
+    return (
+        os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
+        and os.environ.get("WHISPER_HOTKEY_UNNOTARIZED") == "1"
+    )
+
+
+def distribution_identity_prefixes() -> tuple[str, ...]:
+    if unnotarized_distribution():
+        return ("Developer ID Application:", "Apple Development:")
+    return ("Developer ID Application:",)
+
+
 def signing_identity() -> str:
     distribution = os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
     preview = os.environ.get("WHISPER_HOTKEY_PREVIEW") == "1"
+    prefixes = distribution_identity_prefixes()
     explicit = os.environ.get("WHISPER_HOTKEY_CODESIGN_IDENTITY", "").strip()
     if explicit:
         if explicit == "-":
@@ -290,9 +313,10 @@ def signing_identity() -> str:
                 "Ad-hoc signing is supported only for an explicitly opted-in "
                 "preview build. Provide a stable code-signing identity."
             )
-        if distribution and not explicit.startswith("Developer ID Application:"):
+        if distribution and not explicit.startswith(prefixes):
             raise RuntimeError(
-                "Distribution requires a Developer ID Application identity."
+                "Distribution requires one of these identities: "
+                + ", ".join(prefixes)
             )
         return explicit
 
@@ -304,14 +328,15 @@ def signing_identity() -> str:
     )
     for line in result.stdout.splitlines():
         if ")" in line and '"' in line:
-            if distribution and "Developer ID Application:" not in line:
+            if distribution and not any(prefix in line for prefix in prefixes):
                 continue
             identity_hash = line.split(")", 1)[1].strip().split(maxsplit=1)[0]
             if identity_hash:
                 return identity_hash
     if distribution:
         raise RuntimeError(
-            "No Developer ID Application identity found for distribution."
+            "No distribution identity found. Expected one of: "
+            + ", ".join(prefixes)
         )
     raise RuntimeError(
         "No stable code-signing identity found. Run ./run.sh to create the local "
@@ -338,7 +363,12 @@ def sign(identity: str, libraries: list[Path]) -> None:
             identity,
         ]
         if distribution:
-            command.extend(["--timestamp", "--options", "runtime"])
+            command.append("--timestamp")
+            if not unnotarized_distribution():
+                # The hardened runtime is a notarization prerequisite. Enabling
+                # it without notarization would only add entitlement
+                # requirements for microphone access and library loading.
+                command.extend(["--options", "runtime"])
         else:
             command.append("--timestamp=none")
         if identifier:

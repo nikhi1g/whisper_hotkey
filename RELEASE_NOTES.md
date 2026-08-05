@@ -1,18 +1,17 @@
-Version 3.2.2 makes the internal recognition dictionary safer and faster to
-manage.
+Version 3.2.3 fixes the public download, which macOS refused to open.
 
 ## Highlights
 
-- Separate unsaved additions from existing entries so editing or deleting draft
-  text cannot remove saved vocabulary.
-- Dictate comma, semicolon, or newline-separated entries directly into the Add
-  draft using the normal local hotkey.
-- Preview deterministic local parsing before saving, including duplicate and
-  capacity feedback.
-- Press Return to add valid draft entries and use Command-A to select the entire
-  draft for fast replacement or deletion.
-- Preserve the saved dictionary across app updates in the existing preferences
-  domain.
+- Download `whisper_hotkey-3.2.3-macos.zip`. The previous disk image was blocked
+  by macOS before it could mount, with no way forward except Move to Trash.
+- Approve the first launch once through **System Settings → Privacy & Security →
+  Open Anyway**. The README and the product page document the step.
+- Verify either asset before approving it using the published `.sha256` file.
+- The release workflow builds and uploads the assets again instead of failing on
+  notarization secrets that do not exist.
 
-Audio, transcripts, dictionary parsing, and recognition prompts remain local.
-The verified in-app update and restart flow remains unchanged.
+The app is signed with a stable Apple Development identity and is not notarized,
+because notarization requires a paid Apple Developer Program membership. The
+`whisper_hotkey.dmg` asset is unchanged and still serves the in-app updater.
+Audio and transcripts remain local, and the bundled Base English model is still
+pinned and SHA-256 verified.

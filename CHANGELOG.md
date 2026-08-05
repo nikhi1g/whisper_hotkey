@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.2.3: 2026-08-04
+
+Installable Download hotfix.
+
+- Published `whisper_hotkey-<version>-macos.zip` as the primary download because
+  macOS 15 and later block an unnotarized disk image before it mounts
+- Documented the one-time System Settings > Privacy & Security > Open Anyway
+  approval in the README and on the product page, and removed the inaccurate
+  claim that the download is notarized
+- Restored the release workflow, which failed on notarization secrets that do
+  not exist and left a hand-uploaded, unopenable disk image on the release page
+- Required an explicit channel in `tools/package_dmg.py` so an ad-hoc or preview
+  build can no longer be published under the public release asset name
+- Kept `whisper_hotkey.dmg` and the stable signing identity unchanged so in-app
+  updates and existing privacy grants continue to work
+
 ## 3.0.7: 2026-07-31
 
 Instant Start patch.

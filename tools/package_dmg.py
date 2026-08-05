@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Create and verify either a preview or notarized public release DMG."""
+"""Create and verify the release, unnotarized-release, or preview DMG.
+
+Exactly one channel must be requested, so an artifact can never be published
+under the public release name without stating how it was signed:
+
+  --notarize    Developer ID Application, submitted to Apple and stapled.
+  --unnotarized Stable named identity, no Apple ticket. Gatekeeper blocks the
+                first launch until the user chooses Open Anyway.
+  --preview     Ad-hoc signature only, published under a preview asset name.
+"""
 
 from __future__ import annotations
 
@@ -39,7 +48,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_release_app(app: Path, *, require_developer_id: bool) -> str:
+def verify_release_app(app: Path, *, channel: str) -> str:
     if not app.is_dir():
         raise RuntimeError(f"Application bundle not found at {app}")
     model = app / "Contents" / "Resources" / "Models" / MODEL_NAME
@@ -55,21 +64,25 @@ def verify_release_app(app: Path, *, require_developer_id: bool) -> str:
     )
     details = f"{result.stdout}\n{result.stderr}"
     authority = re.search(r"^Authority=(.+)$", details, re.M)
+    adhoc = re.search(r"^Signature=adhoc$", details, re.M) is not None
+    if channel == "preview":
+        if not adhoc or authority is not None:
+            raise RuntimeError(
+                "A preview DMG accepts only an ad-hoc signature. An app signed "
+                "by a named identity belongs in --notarize or --unnotarized."
+            )
+        run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
+        return "-"
     if authority is None:
-        if not require_developer_id and re.search(
-            r"^Signature=adhoc$", details, re.M
-        ):
-            run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
-            return "-"
         raise RuntimeError(
             "The DMG requires a signed app with a named code-signing authority."
         )
-    if require_developer_id and not authority.group(1).startswith(
+    if channel == "notarize" and not authority.group(1).startswith(
         "Developer ID Application:"
     ):
         raise RuntimeError(
-            "The public DMG requires a Developer ID Application-signed app."
-    )
+            "The notarized DMG requires a Developer ID Application-signed app."
+        )
     run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
     with tempfile.TemporaryDirectory(
         prefix="whisper-hotkey-signing-certificate-"
@@ -117,14 +130,14 @@ def notarize(dmg: Path) -> None:
     run(["/usr/bin/xcrun", "stapler", "validate", str(dmg)])
 
 
-def create_dmg(
-    app: Path,
-    output: Path,
-    *,
-    should_notarize: bool,
-    preview: bool,
-) -> Path:
-    identity = verify_release_app(app, require_developer_id=not preview)
+def create_dmg(app: Path, output: Path, *, channel: str) -> Path:
+    preview = channel == "preview"
+    if preview and output.name == DEFAULT_DMG.name:
+        raise RuntimeError(
+            f"A preview build must not be written as {DEFAULT_DMG.name}; that "
+            "asset name is what the product page and the in-app updater fetch."
+        )
+    identity = verify_release_app(app, channel=channel)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="whisper_hotkey-dmg-") as temporary:
@@ -155,7 +168,7 @@ def create_dmg(
     run(signing_command)
     run(["/usr/bin/codesign", "--verify", "--verbose=2", str(output)])
     run(["/usr/bin/hdiutil", "verify", str(output)])
-    if should_notarize:
+    if channel == "notarize":
         notarize(output)
         run([
             "/usr/sbin/spctl",
@@ -176,24 +189,33 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=DEFAULT_APP)
     parser.add_argument("--output", type=Path, default=DEFAULT_DMG)
-    parser.add_argument(
+    channels = parser.add_mutually_exclusive_group(required=True)
+    channels.add_argument(
         "--notarize",
-        action="store_true",
+        dest="channel",
+        action="store_const",
+        const="notarize",
         help="submit with notarytool, staple, and run a Gatekeeper assessment",
     )
-    parser.add_argument(
+    channels.add_argument(
+        "--unnotarized",
+        dest="channel",
+        action="store_const",
+        const="unnotarized",
+        help="publish a stably signed release that Apple has not notarized",
+    )
+    channels.add_argument(
         "--preview",
-        action="store_true",
-        help="allow an explicitly labeled, non-Developer-ID preview app",
+        dest="channel",
+        action="store_const",
+        const="preview",
+        help="allow an explicitly labeled, ad-hoc-signed preview app",
     )
     args = parser.parse_args()
-    if args.notarize and args.preview:
-        parser.error("--notarize and --preview cannot be combined")
     checksum = create_dmg(
         args.app.resolve(),
         args.output.resolve(),
-        should_notarize=args.notarize,
-        preview=args.preview,
+        channel=args.channel,
     )
     print(args.output.resolve())
     print(checksum)

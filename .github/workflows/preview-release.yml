@@ -42,6 +42,7 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=OFF \
             -DWHISPER_BUILD_TESTS=OFF \
             -DGGML_METAL=ON \
+            -DGGML_OPENMP=OFF \
             -DBUILD_SHARED_LIBS=ON
           cmake --build "${WHISPER_BUILD}" --parallel
           cmake --install "${WHISPER_BUILD}"

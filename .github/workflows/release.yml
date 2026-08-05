@@ -1,4 +1,4 @@
-name: Build notarized macOS release
+name: Build signed macOS release
 
 on:
   push:
@@ -16,11 +16,8 @@ jobs:
     env:
       RELEASE_REF_TYPE: ${{ github.ref_type }}
       RELEASE_REF_NAME: ${{ github.ref_name }}
-      CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
-      CERTIFICATE_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
-      NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
-      NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_BASE64 }}
+      CERTIFICATE_P12_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_PASSWORD }}
     steps:
       - name: Check out release ref
         uses: actions/checkout@v6
@@ -33,9 +30,6 @@ jobs:
           test "${RELEASE_REF_NAME}" = "v$(cat VERSION)"
           test -n "${CERTIFICATE_P12_BASE64}"
           test -n "${CERTIFICATE_P12_PASSWORD}"
-          test -n "${NOTARY_APPLE_ID}"
-          test -n "${NOTARY_PASSWORD}"
-          test -n "${APPLE_TEAM_ID}"
 
       - name: Install CMake
         run: brew install cmake
@@ -55,6 +49,7 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=OFF \
             -DWHISPER_BUILD_TESTS=OFF \
             -DGGML_METAL=ON \
+            -DGGML_OPENMP=OFF \
             -DBUILD_SHARED_LIBS=ON
           cmake --build "${WHISPER_BUILD}" --parallel
           cmake --install "${WHISPER_BUILD}"
@@ -62,11 +57,11 @@ jobs:
           echo "GGML_PREFIX=${WHISPER_PREFIX}" >> "${GITHUB_ENV}"
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "${GITHUB_ENV}"
 
-      - name: Import Developer ID certificate
+      - name: Import signing certificate
         run: |
           KEYCHAIN_PATH="${RUNNER_TEMP}/whisper-hotkey-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
-          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id-application.p12"
+          CERTIFICATE_PATH="${RUNNER_TEMP}/apple-signing-certificate.p12"
           printf '%s' "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${CERTIFICATE_PATH}"
           security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
           security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
@@ -87,17 +82,21 @@ jobs:
       - name: Test
         run: swift test
 
-      - name: Build Developer ID-signed app with bundled model
+      - name: Build signed app with bundled model
         env:
           WHISPER_HOTKEY_BUNDLE_MODEL: "1"
           WHISPER_HOTKEY_DISTRIBUTION: "1"
+          WHISPER_HOTKEY_UNNOTARIZED: "1"
         run: python3 build_app.py
 
       - name: Create source archive
         run: python3 tools/package_release.py "${GITHUB_REF_NAME}"
 
-      - name: Create, notarize, and staple DMG
-        run: python3 tools/package_dmg.py --notarize
+      - name: Create download ZIP
+        run: python3 tools/package_zip.py
+
+      - name: Create DMG for the in-app updater
+        run: python3 tools/package_dmg.py --unnotarized
 
       - name: Publish release assets
         env:
@@ -107,6 +106,8 @@ jobs:
             gh release create "${GITHUB_REF_NAME}" --title "whisper_hotkey $(cat VERSION)" --notes-file RELEASE_NOTES.md
           fi
           gh release upload "${GITHUB_REF_NAME}" --clobber \
+            dist/release/whisper_hotkey-*-macos.zip \
+            dist/release/whisper_hotkey-*-macos.zip.sha256 \
             dist/release/whisper_hotkey.dmg \
             dist/release/whisper_hotkey.dmg.sha256 \
             dist/release/whisper_hotkey-*-source.tar.gz \
