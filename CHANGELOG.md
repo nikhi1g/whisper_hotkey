@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fixed the Settings window wedging when the Engine chip was switched back and
+  forth. Returning from Parakeet applied the whisper model selection before the
+  Model row was rebuilt, so a two-segment control was asked for segment three
+  and AppKit raised NSRangeException from inside the click handler, abandoning
+  the rest of the refresh
+- Stopped offering to reinstall an app already running from ~/Applications
+
 ## 3.3.0: 2026-08-05
 
 A Faster and More Accurate Engine release.

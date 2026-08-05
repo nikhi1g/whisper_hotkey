@@ -343,6 +343,10 @@ public final class AdvancedSettingsWindowController:
         let state = stateProvider()
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
         select(mode: state.activationMode)
+        // The Model row has to carry the right family's chips before a
+        // selection is applied to it. Selecting first meant returning from
+        // Parakeet asked a two-segment control for segment three.
+        rebuildModelRowIfNeeded(for: state)
         switch ModelRowKind(engine: state.selectedEngine) {
         case .whisper:
             select(model: state.selectedModel)
@@ -402,7 +406,6 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled
                 && state.selectedTheme.customTheme != nil
 
-        rebuildModelRowIfNeeded(for: state)
         switch ModelRowKind(engine: state.selectedEngine) {
         case .whisper:
             for (index, model) in DictationModel.allCases.enumerated() {
@@ -1276,6 +1279,11 @@ public final class AdvancedSettingsWindowController:
         let kind = ModelRowKind(engine: state.selectedEngine)
         guard modelRowKind != kind else { return }
         modelRowKind = kind
+        // Drop the selection before the segment count changes. AppKit consults
+        // the selected index while resizing, and a stale index past the new
+        // bounds raises NSRangeException from inside the action that triggered
+        // the rebuild, leaving the window unresponsive.
+        modelControl.selectedSegment = -1
         switch kind {
         case .whisper:
             configure(
@@ -1298,7 +1306,7 @@ public final class AdvancedSettingsWindowController:
         guard let index = DictationModel.allCases.firstIndex(of: model) else {
             return
         }
-        modelControl.selectedSegment = index
+        selectModelSegment(index)
     }
 
     private func select(parakeetVariant: ParakeetVariant) {
@@ -1307,6 +1315,14 @@ public final class AdvancedSettingsWindowController:
         ) else {
             return
         }
+        selectModelSegment(index)
+    }
+
+    /// The Model row changes length with the engine, so every write goes
+    /// through here. Assigning an index past the current count raises
+    /// NSRangeException from inside AppKit rather than being ignored.
+    private func selectModelSegment(_ index: Int) {
+        guard (0..<modelControl.segmentCount).contains(index) else { return }
         modelControl.selectedSegment = index
     }
 

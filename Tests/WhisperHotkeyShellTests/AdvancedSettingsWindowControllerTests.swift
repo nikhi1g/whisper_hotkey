@@ -78,6 +78,72 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testSwitchingEnginesBackAndForthKeepsBothModelRowsUsable() {
+        // The box is updated by the actions the way the application delegate
+        // updates it, so the controller sees a changed engine on the refresh
+        // that follows its own action.
+        final class Selection {
+            var engine: RecognitionEngine = .whisperCppMetal
+            var model: DictationModel = .largeV3TurboQ5
+            var variant: ParakeetVariant = .accurate
+        }
+        let selection = Selection()
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: {
+                makeAdvancedSettingsState(
+                    model: selection.model,
+                    selectedParakeetVariant: selection.variant,
+                    engine: selection.engine,
+                    availableModels: Set(DictationModel.allCases),
+                    availableEngines: Set(RecognitionEngine.allCases)
+                )
+            },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { selection.model = $0 },
+                selectParakeetVariant: { selection.variant = $0 },
+                selectEngine: { selection.engine = $0 },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+        controller.showWindow(nil)
+
+        for iteration in 0..<8 {
+            controller.selectEngineForTesting(.parakeetCoreML)
+            XCTAssertEqual(
+                controller.selectedEngineForTesting,
+                .parakeetCoreML,
+                "engine did not stick on iteration \(iteration)"
+            )
+            XCTAssertEqual(
+                controller.modelChipLabelsForTesting,
+                ["Fast", "Accurate"],
+                "parakeet chips wrong on iteration \(iteration)"
+            )
+
+            controller.selectEngineForTesting(.whisperCppMetal)
+            XCTAssertEqual(
+                controller.selectedEngineForTesting,
+                .whisperCppMetal,
+                "engine did not return on iteration \(iteration)"
+            )
+            XCTAssertEqual(
+                controller.modelChipLabelsForTesting,
+                ["Base", "Small", "Medium", "Turbo"],
+                "whisper chips wrong on iteration \(iteration)"
+            )
+            XCTAssertEqual(
+                controller.selectedModelForTesting,
+                .largeV3TurboQ5,
+                "whisper model lost on iteration \(iteration)"
+            )
+        }
+        controller.close()
+    }
+
+    @MainActor
     func testPopulatesSelectionsAndMarksUnavailableModels() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
