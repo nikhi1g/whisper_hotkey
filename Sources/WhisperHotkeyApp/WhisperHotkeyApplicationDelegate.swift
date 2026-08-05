@@ -139,9 +139,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var softwareUpdateStatus: SoftwareUpdateStatus = .idle
     private let softwareUpdateChecker: any SoftwareUpdateChecking =
         GitHubReleaseUpdateChecker()
-    private let softwareUpdateInstaller: any SoftwareUpdateInstalling =
-        SoftwareUpdateInstaller()
     private var availableSoftwareUpdate: SoftwareUpdateRelease?
+    private var softwareUpdateProgressPanel: ModelDownloadProgressPanel?
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
@@ -1690,7 +1689,28 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         softwareUpdateStatus = .downloading
         advancedSettingsWindowController?.refreshIfVisible()
-        let installer = softwareUpdateInstaller
+        // The disk image is over a hundred megabytes and the install then
+        // mounts and verifies it, so the update reports progress instead of
+        // leaving the menu bar looking stalled.
+        let panel = ModelDownloadProgressPanel(
+            title: "Updating to \(release.version)",
+            totalByteCount: nil,
+            onCancel: { [weak self] in
+                self?.cancelSoftwareUpdateInstallation()
+            }
+        )
+        panel.show()
+        softwareUpdateProgressPanel = panel
+        let installer = SoftwareUpdateInstaller(
+            progress: { [weak self] written, total in
+                Task { @MainActor in
+                    self?.softwareUpdateProgressPanel?.update(
+                        completedByteCount: written,
+                        totalByteCount: total
+                    )
+                }
+            }
+        )
         let applicationURL = Bundle.main.bundleURL
         let installedVersion = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -1709,6 +1729,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 softwareUpdateStatus = .installing
+                // Verifying and copying the mounted app has no byte count to
+                // report, so the bar stops claiming a percentage.
+                softwareUpdateProgressPanel?.showIndeterminate(
+                    "Verifying and installing…"
+                )
                 advancedSettingsWindowController?.refreshIfVisible()
                 do {
                     try ApplicationRelauncher().scheduleUpdate(
@@ -1722,18 +1747,42 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     throw error
                 }
                 softwareUpdateInstallationTask = nil
+                dismissSoftwareUpdateProgress()
                 NSApp.terminate(nil)
             } catch is CancellationError {
                 self?.softwareUpdateInstallationTask = nil
+                self?.dismissSoftwareUpdateProgress()
             } catch {
                 guard let self, !Task.isCancelled else {
                     return
                 }
                 softwareUpdateStatus = .installationFailed
                 softwareUpdateInstallationTask = nil
+                dismissSoftwareUpdateProgress()
                 advancedSettingsWindowController?.refreshIfVisible()
             }
         }
+    }
+
+    private func dismissSoftwareUpdateProgress() {
+        softwareUpdateProgressPanel?.close()
+        softwareUpdateProgressPanel = nil
+    }
+
+    private func cancelSoftwareUpdateInstallation() {
+        softwareUpdateInstallationTask?.cancel()
+        softwareUpdateInstallationTask = nil
+        dismissSoftwareUpdateProgress()
+        // Cancelling returns to the offer, not to a failure.
+        if let release = availableSoftwareUpdate {
+            softwareUpdateStatus = .available(
+                version: release.version,
+                installable: release.isInstallable
+            )
+        } else {
+            softwareUpdateStatus = .idle
+        }
+        advancedSettingsWindowController?.refreshIfVisible()
     }
 
     private func selectDictationMode(_ mode: HotkeyActivationMode) {

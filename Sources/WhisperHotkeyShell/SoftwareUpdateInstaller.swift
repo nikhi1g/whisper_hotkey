@@ -37,15 +37,21 @@ public actor SoftwareUpdateInstaller: SoftwareUpdateInstalling {
     private static let diskImageName = "whisper_hotkey.dmg"
     private static let bundleIdentifier = "local.whisperhotkey.app"
 
+    /// Reports bytes written and, once the server states it, the total.
+    public typealias ProgressHandler = @Sendable (Int64, Int64?) -> Void
+
     private let session: URLSession
     private let fileManager: FileManager
+    private let progress: ProgressHandler?
 
     public init(
         session: URLSession = .shared,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        progress: ProgressHandler? = nil
     ) {
         self.session = session
         self.fileManager = fileManager
+        self.progress = progress
     }
 
     public func prepare(
@@ -127,7 +133,13 @@ public actor SoftwareUpdateInstaller: SoftwareUpdateInstalling {
     }
 
     private func download(from url: URL, to destination: URL) async throws {
-        let (temporaryURL, response) = try await session.download(from: url)
+        // The disk image is well over a hundred megabytes, so the download
+        // reports progress rather than appearing to hang.
+        let reporter = progress.map(DownloadProgressReporter.init)
+        let (temporaryURL, response) = try await session.download(
+            from: url,
+            delegate: reporter
+        )
         try Self.validate(response)
         try fileManager.moveItem(at: temporaryURL, to: destination)
     }
@@ -326,4 +338,35 @@ public actor SoftwareUpdateInstaller: SoftwareUpdateInstalling {
         let standardOutput: Data
         let standardError: Data
     }
+}
+
+/// Bridges `URLSession`'s delegate callbacks to a progress closure so the
+/// async download API can report how far along it is.
+final class DownloadProgressReporter: NSObject, URLSessionDownloadDelegate {
+    private let progress: SoftwareUpdateInstaller.ProgressHandler
+
+    init(progress: @escaping SoftwareUpdateInstaller.ProgressHandler) {
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        progress(
+            totalBytesWritten,
+            totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
+        )
+    }
+
+    /// Required by the protocol. The async `download(from:delegate:)` API
+    /// hands back the finished file itself, so nothing is needed here.
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {}
 }
