@@ -25,24 +25,29 @@ actor ParakeetRuntime {
     }
 
     private var modelVersion: AsrModelVersion {
-        switch variant {
-        case .fast:
-            .tdtCtc110m
-        case .accurate:
-            .v2
-        }
+        ParakeetModelInstaller.version(for: variant)
     }
 
     var isLoaded: Bool {
         manager != nil
     }
 
-    /// Loads the checkpoint, downloading it on first use. The download is a
-    /// one-time cost paid on the first preload for a given variant.
+    /// Loads an already-installed checkpoint.
+    ///
+    /// This never downloads. A dictation that had to fetch several hundred
+    /// megabytes first showed a Transcribing badge for the whole transfer, with
+    /// no progress and no timeout, which is indistinguishable from a hang. The
+    /// fetch is an explicit, cancellable step at selection time instead; see
+    /// `ParakeetModelInstaller`.
     func load() async throws {
         guard manager == nil else { return }
+        let directory = ParakeetModelInstaller.cacheDirectory(for: variant)
+        guard ParakeetModelInstaller.isInstalled(variant) else {
+            throw WhisperASRError.modelMissing(directory.path)
+        }
         do {
-            let loaded = try await AsrModels.downloadAndLoad(
+            let loaded = try await AsrModels.load(
+                from: directory,
                 version: modelVersion
             )
             try Task.checkCancellation()

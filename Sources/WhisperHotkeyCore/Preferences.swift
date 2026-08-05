@@ -908,6 +908,17 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// Size quoted before a first-use download. Approximate because the
+    /// checkpoint is several files and is compiled after the transfer.
+    public var approximateDownloadDescription: String {
+        switch self {
+        case .fast:
+            "220 MB"
+        case .accurate:
+            "440 MB"
+        }
+    }
+
     /// Directory FluidAudio caches this checkpoint under.
     public var cacheFolderName: String {
         switch self {

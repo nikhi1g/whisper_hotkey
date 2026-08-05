@@ -119,6 +119,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var selectedParakeetVariant = ParakeetVariant.selected(
         defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
     )
+    private var parakeetInstallTask: Task<Void, Never>?
+    private var parakeetInstallPanel: ModelDownloadProgressPanel?
     private var selectedEngine = RecognitionEngine.selected(
         defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
     )
@@ -1863,6 +1865,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         guard !machine.phase.isBusy, selectedParakeetVariant != variant else {
             return
         }
+        guard ParakeetModelInstaller.isInstalled(variant) else {
+            offerParakeetInstall(variant) { [weak self] installed in
+                guard installed else { return }
+                self?.selectParakeetVariant(variant)
+            }
+            return
+        }
         selectedParakeetVariant = variant
         UserDefaults.standard.set(
             variant.rawValue,
@@ -1871,6 +1880,109 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
         setupWindowController.refresh()
+    }
+
+    /// Fetches a Parakeet checkpoint before it is selected, rather than during
+    /// the first dictation that needs it. Downloading behind a Transcribing
+    /// badge gave no progress, no cancel, and no timeout.
+    private func offerParakeetInstall(
+        _ variant: ParakeetVariant,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard parakeetInstallTask == nil else {
+            completion(false)
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText =
+            "Parakeet \(variant.displayName) is not installed."
+        alert.informativeText = """
+            This checkpoint is downloaded on first use rather than included in \
+            the app. It is about \(variant.approximateDownloadDescription) and \
+            is compiled for this Mac after the transfer.
+            """
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            completion(false)
+            return
+        }
+
+        let panel = ModelDownloadProgressPanel(
+            title: "Downloading Parakeet \(variant.displayName)",
+            totalByteCount: nil
+        ) { [weak self] in
+            self?.parakeetInstallTask?.cancel()
+        }
+        panel.show()
+        parakeetInstallPanel = panel
+
+        // The progress handler is called off the main actor, so it hops back
+        // through a box that holds one weak reference rather than capturing
+        // the enclosing optional.
+        let owner = ParakeetInstallObserver(delegate: self)
+        parakeetInstallTask = Task { [weak self] in
+            var failure: String?
+            var cancelled = false
+            do {
+                try await ParakeetModelInstaller.install(variant) { phase in
+                    owner.report(phase)
+                }
+            } catch is CancellationError {
+                cancelled = true
+            } catch {
+                failure = error.localizedDescription
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.finishParakeetInstall()
+                if let failure {
+                    self.presentParakeetInstallFailure(
+                        variant,
+                        message: failure
+                    )
+                }
+            }
+            completion(failure == nil && !cancelled)
+        }
+    }
+
+    fileprivate func updateParakeetInstallPanel(
+        _ phase: ParakeetModelInstaller.Phase
+    ) {
+        switch phase {
+        case let .downloading(fraction):
+            parakeetInstallPanel?.update(
+                completedByteCount: Int64(fraction * 1000),
+                totalByteCount: 1000
+            )
+        case .compiling:
+            parakeetInstallPanel?.showIndeterminate(
+                "Compiling for this Mac…"
+            )
+        }
+    }
+
+    private func finishParakeetInstall() {
+        parakeetInstallPanel?.close()
+        parakeetInstallPanel = nil
+        parakeetInstallTask = nil
+    }
+
+    private func presentParakeetInstallFailure(
+        _ variant: ParakeetVariant,
+        message: String
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText =
+            "Parakeet \(variant.displayName) could not be installed."
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     /// Names whichever model the active engine actually runs. Parakeet keeps
@@ -1938,6 +2050,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
               engineAvailable(engine, model: selectedModel),
               selectedEngine != engine
         else {
+            return
+        }
+        if engine == .parakeetCoreML,
+           !ParakeetModelInstaller.isInstalled(selectedParakeetVariant) {
+            let variant = selectedParakeetVariant
+            offerParakeetInstall(variant) { [weak self] installed in
+                guard installed else { return }
+                self?.selectEngine(engine)
+            }
             return
         }
         selectedEngine = engine
@@ -2331,4 +2452,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         modelAvailable: false,
         helperAvailable: false
     )
+}
+
+/// Forwards install progress from FluidAudio's arbitrary queue to the delegate
+/// on the main actor. Exists so the progress closure captures one weak
+/// reference instead of the delegate's own mutable `self`.
+private final class ParakeetInstallObserver: @unchecked Sendable {
+    private weak var delegate: WhisperHotkeyApplicationDelegate?
+
+    init(delegate: WhisperHotkeyApplicationDelegate) {
+        self.delegate = delegate
+    }
+
+    func report(_ phase: ParakeetModelInstaller.Phase) {
+        Task { @MainActor [weak delegate] in
+            delegate?.updateParakeetInstallPanel(phase)
+        }
+    }
 }
