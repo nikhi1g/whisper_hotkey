@@ -28,6 +28,17 @@ constexpr float kAdaptiveMinimumAverageLogProbability = -0.55f;
 constexpr float kAdaptiveMaximumWeakTokenFraction = 0.05f;
 constexpr float kAdaptiveMaximumNoSpeechProbability = 0.50f;
 
+// A vocabulary-biasing prompt (e.g. the internal dictionary) only has real
+// speech to bias when the clip actually contains audible signal. When a clip
+// is silence or bare room noise, the prompt has nothing legitimate to help
+// recognize, and whisper's decoder can instead "continue" the prompt as if it
+// were prior transcript, echoing prompt entries verbatim into the output.
+// Real dictated speech (even quietly spoken) sits roughly an order of
+// magnitude above this normalized RMS floor; below it, we suppress the
+// prompt so decoding falls back to its unprimed behavior rather than risking
+// a confident hallucination of prompt vocabulary.
+constexpr float kMinimumPromptSignalRms = 0.02f;
+
 struct Options {
     std::string model_path;
     int threads = 4;
@@ -485,6 +496,22 @@ bool load_private_wave(
     return true;
 }
 
+// Root-mean-square level of the decoded PCM, normalized to [0, 1]. Used to
+// decide whether a clip has enough audible signal for a vocabulary-biasing
+// prompt to be safe (see kMinimumPromptSignalRms).
+float signal_rms(const std::vector<float> & samples) {
+    if (samples.empty()) {
+        return 0.0f;
+    }
+    double sum_squares = 0.0;
+    for (const float sample : samples) {
+        sum_squares += static_cast<double>(sample) * sample;
+    }
+    return static_cast<float>(
+        std::sqrt(sum_squares / static_cast<double>(samples.size()))
+    );
+}
+
 void discard_whisper_log(
     enum ggml_log_level,
     const char *,
@@ -738,7 +765,16 @@ int main(int argc, char ** argv) {
             continue;
         }
 
-        const std::string prompt = command["prompt"];
+        // Suppress the vocabulary-biasing prompt for clips that are too
+        // quiet to plausibly contain recognizable speech. With no genuine
+        // speech to bias, the prompt has nothing legitimate to help
+        // recognize and can instead be echoed verbatim into the transcript
+        // by the decoder. See kMinimumPromptSignalRms.
+        const std::string requested_prompt = command["prompt"];
+        const std::string prompt =
+            signal_rms(samples) >= kMinimumPromptSignalRms
+                ? requested_prompt
+                : std::string();
         DecodeResult result;
         if (!decode(
             context.get(),
