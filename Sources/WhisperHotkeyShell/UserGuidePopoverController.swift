@@ -44,9 +44,7 @@ enum UserGuideContent {
         let behavior = DictationModePresentation.optionTitle(
             for: state.activationMode
         )
-        let model = DictationModelPresentation.chipTitle(
-            for: state.selectedModel
-        )
+        let model = engineModelName(for: state)
         var rows = [
             UserGuideRow(
                 key: "active",
@@ -67,17 +65,12 @@ enum UserGuideContent {
             UserGuideRow(
                 key: "model",
                 title: model,
-                detail: modelDescription(state.selectedModel)
+                detail: engineModelDescription(for: state)
             ),
             UserGuideRow(
                 key: "engine",
                 title: state.selectedEngine.displayName,
                 detail: state.selectedEngine.menuTitle
-            ),
-            UserGuideRow(
-                key: "decoding",
-                title: state.decodingProfile.displayName,
-                detail: state.decodingProfile.description
             ),
             UserGuideRow(
                 key: "processing",
@@ -154,6 +147,16 @@ enum UserGuideContent {
                 detail: "Audio stays local and is deleted after each dictation."
             ),
         ]
+        if state.selectedEngine.usesWhisperDecoding {
+            rows.insert(
+                UserGuideRow(
+                    key: "decoding",
+                    title: state.decodingProfile.displayName,
+                    detail: state.decodingProfile.description
+                ),
+                at: 5
+            )
+        }
         if state.selectedHotkey == .capsLock {
             rows.insert(
                 UserGuideRow(
@@ -212,17 +215,31 @@ enum UserGuideContent {
                 )
             }
         )
-        rows.append(
-            contentsOf: DictationModel.allCases
-                .filter { $0 != state.selectedModel }
-                .map {
-                    UserGuideRow(
-                        key: "model",
-                        title: DictationModelPresentation.chipTitle(for: $0),
-                        detail: modelDescription($0)
-                    )
-                }
-        )
+        if state.selectedEngine == .parakeetCoreML {
+            rows.append(
+                contentsOf: ParakeetVariant.allCases
+                    .filter { $0 != state.selectedParakeetVariant }
+                    .map {
+                        UserGuideRow(
+                            key: "model",
+                            title: $0.displayName,
+                            detail: $0.menuTitle
+                        )
+                    }
+            )
+        } else {
+            rows.append(
+                contentsOf: DictationModel.allCases
+                    .filter { $0 != state.selectedModel }
+                    .map {
+                        UserGuideRow(
+                            key: "model",
+                            title: DictationModelPresentation.chipTitle(for: $0),
+                            detail: modelDescription($0)
+                        )
+                    }
+            )
+        }
         rows.append(
             contentsOf: RecognitionEngine.allCases
                 .filter { $0 != state.selectedEngine }
@@ -237,17 +254,19 @@ enum UserGuideContent {
                     )
                 }
         )
-        rows.append(
-            contentsOf: DecodingProfile.allCases
-                .filter { $0 != state.decodingProfile }
-                .map {
-                    UserGuideRow(
-                        key: "decoding",
-                        title: $0.displayName,
-                        detail: $0.description
-                    )
-                }
-        )
+        if state.selectedEngine.usesWhisperDecoding {
+            rows.append(
+                contentsOf: DecodingProfile.allCases
+                    .filter { $0 != state.decodingProfile }
+                    .map {
+                        UserGuideRow(
+                            key: "decoding",
+                            title: $0.displayName,
+                            detail: $0.description
+                        )
+                    }
+            )
+        }
         rows.append(
             contentsOf: ModelProcessingMode.allCases
                 .filter { $0 != state.processingMode }
@@ -302,14 +321,34 @@ enum UserGuideContent {
     private static func activePathDetail(
         for state: AdvancedSettingsState
     ) -> String {
+        let model = engineModelName(for: state)
         switch state.activationMode {
         case .hold:
-            return "Hold \(state.selectedHotkey.displayName) to listen, then release to transcribe and insert with \(DictationModelPresentation.chipTitle(for: state.selectedModel))."
+            return "Hold \(state.selectedHotkey.displayName) to listen, then release to transcribe and insert with \(model)."
         case .toggle:
-            return "Tap \(state.selectedHotkey.displayName) to listen, then tap again to transcribe and insert with \(DictationModelPresentation.chipTitle(for: state.selectedModel))."
+            return "Tap \(state.selectedHotkey.displayName) to listen, then tap again to transcribe and insert with \(model)."
         case .pause:
-            return "Tap \(state.selectedHotkey.displayName) to listen. Natural pauses insert \(DictationModelPresentation.chipTitle(for: state.selectedModel)) phrases while recording continues."
+            return "Tap \(state.selectedHotkey.displayName) to listen. Natural pauses insert \(model) phrases while recording continues."
         }
+    }
+
+    /// Names the checkpoint actually running: the whisper model chip for
+    /// whisper.cpp and WhisperKit, or the Parakeet variant when Parakeet is
+    /// selected, since Parakeet does not run a whisper model at all.
+    private static func engineModelName(
+        for state: AdvancedSettingsState
+    ) -> String {
+        state.selectedEngine == .parakeetCoreML
+            ? state.selectedParakeetVariant.displayName
+            : DictationModelPresentation.chipTitle(for: state.selectedModel)
+    }
+
+    private static func engineModelDescription(
+        for state: AdvancedSettingsState
+    ) -> String {
+        state.selectedEngine == .parakeetCoreML
+            ? state.selectedParakeetVariant.menuTitle
+            : modelDescription(state.selectedModel)
     }
 
     private static func activationDescription(
