@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.3.0: 2026-08-05
+
+A Faster and More Accurate Engine release.
+
+- Added Parakeet as a fourth recognition engine, running NVIDIA Parakeet on the
+  Neural Engine through FluidAudio. On the repository's LibriSpeech benchmark
+  (100 utterances, Apple M5 Pro) it beats every whisper option on both axes at
+  once: 2.62% word error rate at 56 ms per utterance, against Large-v3 Turbo
+  Q5's 4.32% at 321 ms
+- Gave Parakeet its own two checkpoints, Fast and Accurate, and its own saved
+  selection, so switching engines no longer overwrites the whisper model choice
+- Reordered the Recognition settings so Engine comes first, because it decides
+  which models exist and whether Decoding applies at all
+- Swapped the Model row to whichever family the selected engine belongs to,
+  instead of labelling Parakeet checkpoints with whisper's size names
+- Hid the Decoding row on engines that have no beam search, for Parakeet and
+  WhisperKit alike, where it was previously greyed out but still painted a
+  selected profile
+- Dropped the internal dictionary and Pause Mode prompt on Parakeet, which is a
+  transducer and accepts no prompt
+- Added a reproducible Parakeet benchmark under `Benchmarks/Parakeet/`, scored
+  with the same word error math as the whisper benchmark
+- Left every existing engine, model, and decoding choice in place
+
 ## 3.2.4: 2026-08-05
 
 Clean Dictation and a Real Install release.
