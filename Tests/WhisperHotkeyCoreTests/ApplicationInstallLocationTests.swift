@@ -27,6 +27,27 @@ final class ApplicationInstallLocationTests: XCTestCase {
         XCTAssertEqual(location, .installed)
     }
 
+    /// Directory URLs spelled with and without a trailing slash name the same
+    /// place. Comparing URLs rather than paths made them unequal, which put an
+    /// app already in ~/Applications into `.unmanaged`.
+    func testDirectoryURLSpellingDoesNotChangeTheLocation() {
+        for isDirectory in [true, false] {
+            let location = ApplicationInstallLocator.locate(
+                bundleURL: home
+                    .appendingPathComponent("Applications", isDirectory: true)
+                    .appendingPathComponent(
+                        "whisper_hotkey.app",
+                        isDirectory: isDirectory
+                    ),
+                homeDirectory: URL(
+                    fileURLWithPath: home.path,
+                    isDirectory: isDirectory
+                )
+            )
+            XCTAssertEqual(location, .installed)
+        }
+    }
+
     func testDownloadsBundleIsUnmanaged() {
         let location = ApplicationInstallLocator.locate(
             bundleURL: home

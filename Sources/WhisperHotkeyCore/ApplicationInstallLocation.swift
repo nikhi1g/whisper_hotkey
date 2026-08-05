@@ -50,12 +50,19 @@ public enum ApplicationInstallLocator {
         if bundleURL.path.contains(translocationMarker) {
             return .translocated
         }
+        // Compare paths, not URLs. `resolvingSymlinksInPath` keeps the trailing
+        // slash on a directory URL it cannot resolve but drops it on one it
+        // can, and URL equality is string-based, so two spellings of the same
+        // directory compared unequal wherever the path did not exist. That put
+        // an app installed in ~/Applications into `.unmanaged` and offered to
+        // reinstall it.
         let parent = bundleURL
             .standardizedFileURL
             .resolvingSymlinksInPath()
             .deletingLastPathComponent()
+            .path
         let isManaged = managedParents(homeDirectory: homeDirectory).contains {
-            $0.standardizedFileURL.resolvingSymlinksInPath() == parent
+            $0.standardizedFileURL.resolvingSymlinksInPath().path == parent
         }
         return isManaged ? .installed : .unmanaged
     }
