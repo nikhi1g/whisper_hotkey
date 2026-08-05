@@ -195,6 +195,14 @@ public final class AdvancedSettingsWindowController:
     )
     private let internalDictionaryExistingStack = NSStackView()
     private let internalDictionaryExistingScrollView = NSScrollView()
+    /// Shown in place of the Decoding row's approach of hiding entirely.
+    /// Internal dictionary entries still apply on every whisper engine, so
+    /// hiding them while Parakeet is selected would just make them harder to
+    /// find again — this note plus disabling the controls below says the
+    /// same "does not apply here" without losing access to the list.
+    private let internalDictionaryUnsupportedLabel = NSTextField(
+        labelWithString: ""
+    )
     private lazy var internalDictionaryControl = makeInternalDictionaryControl()
     private let keepLatestDictationToggle = NSButton(
         checkboxWithTitle: "Keep latest dictation",
@@ -392,12 +400,22 @@ public final class AdvancedSettingsWindowController:
         // decoding profile, so showing one selected would be a lie.
         decodingRow?.isHidden = !state.selectedEngine.usesWhisperDecoding
         processingModeControl.isEnabled = state.configurationEnabled
+        // Disabled rather than hidden, unlike Decoding: the entries still
+        // apply on every whisper engine, so Parakeet only needs to say they
+        // are inert right now, not put them out of reach.
+        internalDictionaryUnsupportedLabel.isHidden =
+            state.selectedEngine.supportsPromptConditioning
         internalDictionaryDraftField.isEnabled = state.configurationEnabled
+            && state.selectedEngine.supportsPromptConditioning
         internalDictionaryAddButton.isEnabled = state.configurationEnabled
+            && state.selectedEngine.supportsPromptConditioning
             && !currentInternalDictionaryDraftResult.candidates.isEmpty
         internalDictionaryExistingStack.arrangedSubviews
             .compactMap { $0 as? NSButton }
-            .forEach { $0.isEnabled = state.configurationEnabled }
+            .forEach {
+                $0.isEnabled = state.configurationEnabled
+                    && state.selectedEngine.supportsPromptConditioning
+            }
         keepLatestDictationToggle.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
         themePopup.isEnabled = state.configurationEnabled
@@ -1427,7 +1445,30 @@ public final class AdvancedSettingsWindowController:
         panes.translatesAutoresizingMaskIntoConstraints = false
         panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 132).isActive =
             true
-        return panes
+
+        internalDictionaryUnsupportedLabel.stringValue =
+            "Parakeet accepts no prompt, so these entries have no effect "
+                + "until you switch to a whisper engine. They stay saved."
+        internalDictionaryUnsupportedLabel.font = .systemFont(ofSize: 10)
+        internalDictionaryUnsupportedLabel.textColor = .secondaryLabelColor
+        internalDictionaryUnsupportedLabel.maximumNumberOfLines = 2
+        internalDictionaryUnsupportedLabel.lineBreakMode = .byWordWrapping
+        internalDictionaryUnsupportedLabel.isHidden = true
+        internalDictionaryUnsupportedLabel
+            .setContentCompressionResistancePriority(
+                .defaultLow,
+                for: .horizontal
+            )
+        themedSecondaryLabels.append(internalDictionaryUnsupportedLabel)
+
+        let column = NSStackView(
+            views: [internalDictionaryUnsupportedLabel, panes]
+        )
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 6
+        column.translatesAutoresizingMaskIntoConstraints = false
+        return column
     }
 
     private func makeContentView() -> NSView {
@@ -1788,6 +1829,17 @@ public final class AdvancedSettingsWindowController:
 
     var decodingRowVisibleForTesting: Bool {
         decodingRow.map { !$0.isHidden } ?? false
+    }
+
+    var internalDictionaryUnsupportedNoticeVisibleForTesting: Bool {
+        !internalDictionaryUnsupportedLabel.isHidden
+    }
+
+    var internalDictionaryControlsEnabledForTesting: Bool {
+        internalDictionaryDraftField.isEnabled
+            && internalDictionaryExistingStack.arrangedSubviews
+                .compactMap { $0 as? NSButton }
+                .allSatisfy(\.isEnabled)
     }
 
     var modelChipLabelsForTesting: [String] {

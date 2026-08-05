@@ -78,6 +78,54 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testInternalDictionaryRowMarksItselfInertOnParakeetButStaysReachable() {
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                engine: .parakeetCoreML,
+                internalDictionaryEntries: ["Codex", "projLab"],
+                availableModels: Set(DictationModel.allCases),
+                availableEngines: Set(RecognitionEngine.allCases)
+            )
+        )
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+        controller.showWindow(nil)
+
+        // Unlike Decoding, the row stays on screen: these entries still
+        // apply on every whisper engine, so hiding them would only make
+        // them harder to find again.
+        XCTAssertTrue(
+            controller.internalDictionaryUnsupportedNoticeVisibleForTesting
+        )
+        XCTAssertFalse(controller.internalDictionaryControlsEnabledForTesting)
+        XCTAssertEqual(
+            controller.internalDictionaryEntriesForTesting,
+            ["Codex", "projLab"]
+        )
+
+        box.value = makeAdvancedSettingsState(
+            engine: .whisperCppMetal,
+            internalDictionaryEntries: ["Codex", "projLab"],
+            availableModels: Set(DictationModel.allCases),
+            availableEngines: Set(RecognitionEngine.allCases)
+        )
+        controller.refresh()
+
+        XCTAssertFalse(
+            controller.internalDictionaryUnsupportedNoticeVisibleForTesting
+        )
+        XCTAssertTrue(controller.internalDictionaryControlsEnabledForTesting)
+        // Switching engines never touched the stored list.
+        XCTAssertEqual(
+            controller.internalDictionaryEntriesForTesting,
+            ["Codex", "projLab"]
+        )
+        controller.close()
+    }
+
+    @MainActor
     func testSwitchingEnginesBackAndForthKeepsBothModelRowsUsable() {
         // The box is updated by the actions the way the application delegate
         // updates it, so the controller sees a changed engine on the refresh
