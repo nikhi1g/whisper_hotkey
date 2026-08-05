@@ -1,15 +1,13 @@
 name: Deploy product site to Pages
 
 on:
+  # Every push to main, not just ones touching site/. The page advertises the
+  # current main commit, so a path filter left that stamp stale after any
+  # commit elsewhere in the repository.
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - "VERSION"
-      - "Assets/AppIcon.png"
-      - ".github/workflows/pages.yml"
-  # Publishing a release redeploys the site, so the version and the main commit
-  # it advertises refresh without a separate commit touching site/.
+  # Publishing a release redeploys as well, so the advertised version refreshes
+  # even when the release is cut from a commit already deployed.
   release:
     types: [published]
   workflow_dispatch:
