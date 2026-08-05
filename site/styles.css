@@ -415,7 +415,10 @@ h2 { margin: 0; font-size: 27px; font-weight: 690; line-height: 1.05; letter-spa
 .copy-option-header { margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .copy-option-header strong { color: var(--text); font-size: 11.5px; }
 .copy-option-header span { color: var(--accent); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.copy-option code { display: block; color: var(--muted); font: 9.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.copy-option code { display: block; color: var(--muted); font: 9.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* The copied text contains long unbreakable URLs; without this they overflow
+   the section and consume the page's right margin. */
+.copy-option [data-copy-content] { display: block; min-width: 0; overflow-wrap: anywhere; }
 
 .system-graph { min-width: 0; min-height: 0; flex: none; }
 .system-graph svg { width: 100%; height: auto; display: block; }
