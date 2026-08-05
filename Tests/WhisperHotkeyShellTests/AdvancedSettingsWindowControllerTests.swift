@@ -70,11 +70,32 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.summaryValuesForTesting[2],
             "Parakeet Accurate After Recording"
         )
+        controller.close()
+    }
+
+    @MainActor
+    func testParakeetSettingsFitTheWindow() {
+        // Deliberately does not order the window on screen. showWindow lets the
+        // host display constrain the frame, which made this assertion depend on
+        // the machine rather than on the layout, and it failed on CI while
+        // passing locally.
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                model: .largeV3TurboQ5,
+                selectedParakeetVariant: .accurate,
+                engine: .parakeetCoreML,
+                availableModels: Set(DictationModel.allCases),
+                availableEngines: Set(RecognitionEngine.allCases)
+            )
+        )
+        let controller = makeController(
+            box: box,
+            service: AdvancedSettingsFakeLoginItemService()
+        )
         XCTAssertTrue(
             controller.controlsFitWindowForTesting,
             controller.controlsOutsideWindowForTesting.joined(separator: ", ")
         )
-        controller.close()
     }
 
     @MainActor
