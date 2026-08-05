@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.2.4: 2026-08-05
+
+Clean Dictation and a Real Install release.
+
+- Withheld the internal dictionary's recognition hint from clips with no
+  audible signal, where whisper could decode it as a confident continuation and
+  splice entries such as `Codex.md` into the middle of real dictation
+- Offered to move the app into Applications on first launch, and to relaunch
+  from the installed copy through its own bundled launcher
+- Opened Settings once on a new installation
+- Bundled Base English, Small English, and Large-v3 Turbo Q5, every model the
+  first-run profile can select, taking the download to about 1 GB
+- Downloaded Medium English on demand with progress and pinned SHA-256
+  verification, where selecting it previously did nothing
+- Reported progress while an update downloads, verifies, and installs
+
 ## 3.2.3: 2026-08-04
 
 Installable Download hotfix.

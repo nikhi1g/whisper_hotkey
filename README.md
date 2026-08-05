@@ -162,17 +162,24 @@ human-in-the-loop verification gate.
 
 ## Models and recognition engines
 
-The download includes Base English as the best compact first install. On a genuinely
-fresh launch, whisper_hotkey chooses the strongest verified model already
-available within the Mac's memory tier. It never downloads another model at
-runtime. Other local models trade disk space and speed for accuracy:
+The download includes Base English, Small English, and Large-v3 Turbo Q5 —
+every model a fresh launch can select on its own. On a genuinely fresh launch,
+whisper_hotkey chooses the strongest verified model already available within
+the Mac's memory tier, so it never starts on a model it does not have. Models
+trade disk space and speed for accuracy:
 
-| Option | Model | Download | Typical reason to choose it |
-| --- | --- | ---: | --- |
-| `base` | Base English | 141 MB | Fastest and lightest; default |
-| `small` | Small English | 465 MB | Better accuracy at moderate cost |
-| `medium` | Medium English | 1.5 GB | Highest English-only accuracy; heaviest |
-| `turbo` | Large-v3 Turbo Q5 | 547 MB | Strong accuracy/speed balance |
+| Option | Model | Size | In the download | Typical reason to choose it |
+| --- | --- | ---: | --- | --- |
+| `base` | Base English | 141 MB | Yes | Fastest and lightest; default |
+| `small` | Small English | 465 MB | Yes | Better accuracy at moderate cost |
+| `turbo` | Large-v3 Turbo Q5 | 547 MB | Yes | Strong accuracy/speed balance |
+| `medium` | Medium English | 1.5 GB | On demand | Highest English-only accuracy; heaviest |
+
+Medium English is the one model that cannot be bundled: all four together
+exceed GitHub's 2 GB release-asset limit. Selecting it in Settings offers to
+download it, showing progress and verifying it against the same pinned SHA-256
+the build pipeline uses. Nothing is installed if that check fails, and no other
+model is ever fetched at runtime.
 
 Install and select one model by rerunning the bootstrap:
 
