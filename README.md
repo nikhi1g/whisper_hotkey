@@ -9,7 +9,7 @@ focused at release time. Audio and transcripts are not sent to a server.
 The fastest path is the signed, self-contained download:
 
 1. **[Download the latest release](https://github.com/nikhi1g/whisper_hotkey/releases/latest)**
-   and pick `whisper_hotkey-<version>-macos.zip`.
+   and pick `whisper_hotkey.zip`.
 2. Unzip it and drag **whisper_hotkey** into **Applications**.
 3. Open `/Applications/whisper_hotkey.app`. macOS blocks the first launch with
    *"Apple could not verify …"*; click **Done**, then open **System Settings →
@@ -36,7 +36,7 @@ Every release publishes a checksum, so you can confirm you received the exact
 published file before you approve it:
 
 ```sh
-shasum -a 256 -c whisper_hotkey-<version>-macos.zip.sha256
+shasum -a 256 -c whisper_hotkey.zip.sha256
 ```
 
 The `.dmg` asset in each release contains the same app and exists for the in-app
@@ -119,8 +119,9 @@ The setup window opens automatically. Complete every row:
 If you installed from source, return to Terminal and press Return after
 completing the rows. If anything is still missing, `run.sh` prints the current
 status, reopens Setup, and waits for you again. Once every requirement is
-ready, it prints `Setup verified` and finishes installation. A DMG installation
-uses the same setup window without the attached Terminal verification loop.
+ready, it prints `Setup verified` and finishes installation. A download
+installation uses the same setup window without the attached Terminal
+verification loop.
 
 If macOS asks to quit and reopen the app after a permission change, allow it.
 The menu-bar icon can reopen Setup at any time. A source installation also
@@ -161,7 +162,7 @@ human-in-the-loop verification gate.
 
 ## Models and recognition engines
 
-The DMG includes Base English as the best compact first install. On a genuinely
+The download includes Base English as the best compact first install. On a genuinely
 fresh launch, whisper_hotkey chooses the strongest verified model already
 available within the Mac's memory tier. It never downloads another model at
 runtime. Other local models trade disk space and speed for accuracy:

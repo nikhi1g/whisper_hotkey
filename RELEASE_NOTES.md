@@ -2,7 +2,7 @@ Version 3.2.3 fixes the public download, which macOS refused to open.
 
 ## Highlights
 
-- Download `whisper_hotkey-3.2.3-macos.zip`. The previous disk image was blocked
+- Download `whisper_hotkey.zip`. The previous disk image was blocked
   by macOS before it could mount, with no way forward except Move to Trash.
 - Approve the first launch once through **System Settings → Privacy & Security →
   Open Anyway**. The README and the product page document the step.

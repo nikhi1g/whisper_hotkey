@@ -4,7 +4,7 @@ The public product route is
 [`https://nikhi1g.github.io/whisper_hotkey/`](https://nikhi1g.github.io/whisper_hotkey/).
 GitHub Pages deploys the static files in `site/` through `pages.yml`. The page
 queries the latest GitHub release and sends its primary button to the
-`whisper_hotkey-<version>-macos.zip` asset, falling back to `whisper_hotkey.dmg`
+`whisper_hotkey.zip` asset, falling back to `whisper_hotkey.dmg`
 and then to the releases page.
 
 ## Signing status

@@ -4,7 +4,7 @@
 
 Installable Download hotfix.
 
-- Published `whisper_hotkey-<version>-macos.zip` as the primary download because
+- Published `whisper_hotkey.zip` as the primary download because
   macOS 15 and later block an unnotarized disk image before it mounts
 - Documented the one-time System Settings > Privacy & Security > Open Anyway
   approval in the README and on the product page, and removed the inaccurate

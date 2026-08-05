@@ -17,7 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP = ROOT / "dist" / "whisper_hotkey.app"
-RELEASE_DIR = ROOT / "dist" / "release"
+# Unversioned so that releases/latest/download/whisper_hotkey.zip stays stable.
+DEFAULT_ZIP = ROOT / "dist" / "release" / "whisper_hotkey.zip"
 
 
 def sha256(path: Path) -> str:
@@ -56,14 +57,9 @@ def create_zip(app: Path, output: Path) -> Path:
 
 
 def main() -> None:
-    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, default=DEFAULT_APP)
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=RELEASE_DIR / f"whisper_hotkey-{version}-macos.zip",
-    )
+    parser.add_argument("--output", type=Path, default=DEFAULT_ZIP)
     args = parser.parse_args()
     output = args.output.resolve()
     checksum = create_zip(args.app.resolve(), output)

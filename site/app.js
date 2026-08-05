@@ -157,7 +157,7 @@ const refreshStableDownload = async () => {
     // The ZIP is the human download. macOS blocks an unnotarized disk image
     // before it mounts, so the DMG is only the fallback for older releases.
     const asset =
-      assets.find(candidate => /^whisper_hotkey-.+-macos\.zip$/.test(candidate.name)) ??
+      assets.find(candidate => candidate.name === 'whisper_hotkey.zip') ??
       assets.find(candidate => candidate.name === 'whisper_hotkey.dmg');
     if (!asset || typeof asset.browser_download_url !== 'string') return;
 

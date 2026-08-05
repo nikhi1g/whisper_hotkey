@@ -120,11 +120,11 @@
           <div class="quick-options" aria-label="Copyable setup options">
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Coding agent</strong><span data-copy-state aria-live="polite">Click to copy</span></span>
-              <span data-copy-content>Clone https://github.com/nikhi1g/whisper_hotkey.git, run ./run.sh, and do not finish until the model, permissions, and a dictation test are verified.</span>
+              <span data-copy-content>Download https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.zip, extract it into /Applications, launch it, and do not finish until Microphone, Accessibility, and Input Monitoring are granted and a dictation test is verified.</span>
             </button>
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Terminal</strong><span data-copy-state aria-live="polite">Click to copy</span></span>
-              <code data-copy-content>git clone https://github.com/nikhi1g/whisper_hotkey.git &amp;&amp; cd whisper_hotkey &amp;&amp; ./run.sh</code>
+              <code data-copy-content>curl -L -o /tmp/whisper_hotkey.zip https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.zip &amp;&amp; ditto -x -k /tmp/whisper_hotkey.zip /Applications &amp;&amp; open /Applications/whisper_hotkey.app</code>
             </button>
           </div>
         </div>
