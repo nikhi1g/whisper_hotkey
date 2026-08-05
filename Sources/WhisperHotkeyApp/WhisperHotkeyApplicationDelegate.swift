@@ -184,6 +184,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     )
     private var advancedSettingsWindowController:
         AdvancedSettingsWindowController?
+    private var modelDownloadController: ModelDownloadController?
     private lazy var menuBarController = MenuBarController(
         toggleDictationEnabled: effectiveToggleDictationEnabled,
         selectedHotkey: selectedHotkey,
@@ -1783,10 +1784,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func selectModel(_ model: DictationModel) {
-        guard !machine.phase.isBusy,
-              modelAvailable(model),
-              selectedModel != model
-        else {
+        guard !machine.phase.isBusy, selectedModel != model else {
+            return
+        }
+        guard modelAvailable(model) else {
+            // Selecting a model that was too large to bundle used to do
+            // nothing at all. Offer to fetch it instead.
+            offerModelDownload(model)
             return
         }
         selectedModel = model
@@ -1797,6 +1801,56 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
         setupWindowController.refresh()
+    }
+
+    /// Fetches a model that did not fit in the download, then selects it.
+    private func offerModelDownload(_ model: DictationModel) {
+        guard let entry = ModelDownloadCatalog.entry(for: model),
+              modelDownloadController == nil
+        else {
+            return
+        }
+        let controller = ModelDownloadController(entry: entry)
+        modelDownloadController = controller
+        controller.confirmAndStart { [weak self] result in
+            guard let self else {
+                return
+            }
+            modelDownloadController = nil
+            switch result {
+            case .success:
+                advancedSettingsWindowController?.refreshIfVisible()
+                selectModel(model)
+            case .failure(.cancelled):
+                break
+            case let .failure(error):
+                presentModelDownloadFailure(model, error: error)
+            }
+        }
+    }
+
+    private func presentModelDownloadFailure(
+        _ model: DictationModel,
+        error: ModelDownloadError
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "\(model.menuTitle) could not be installed."
+        switch error {
+        case .checksumMismatch:
+            alert.informativeText = """
+                The downloaded file did not match its expected checksum and \
+                was discarded. Nothing was installed.
+                """
+        case let .transportFailed(detail):
+            alert.informativeText = "The download did not finish.\n\n\(detail)"
+        case let .installFailed(detail):
+            alert.informativeText = detail
+        case .notDownloadable, .cancelled:
+            alert.informativeText = "The download did not finish."
+        }
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func selectEngine(_ engine: RecognitionEngine) {
