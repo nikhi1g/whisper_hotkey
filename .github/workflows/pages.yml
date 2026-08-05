@@ -5,8 +5,13 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "VERSION"
       - "Assets/AppIcon.png"
       - ".github/workflows/pages.yml"
+  # Publishing a release redeploys the site, so the version and the main commit
+  # it advertises refresh without a separate commit touching site/.
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -25,16 +30,28 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      # Always main, never the release tag. The site advertises the current
+      # main commit, and a release event would otherwise check out the tag and
+      # stamp a commit that is not what "View source" links to.
+      - name: Check out main
         uses: actions/checkout@v6
+        with:
+          ref: main
       - name: Assemble static site
         run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          commit="$(git rev-parse HEAD)"
+          short_sha="${commit:0:7}"
           mkdir -p _site/assets
           cp -R site/. _site/
           cp Assets/AppIcon.png _site/assets/icon.png
-          short_sha="${GITHUB_SHA:0:7}"
-          sed -i "s|main:latest|${GITHUB_REF_NAME}:${short_sha}|g" _site/index.html
-          printf '{"branch":"%s","commit":"%s"}\n' "${GITHUB_REF_NAME}" "${GITHUB_SHA}" > _site/build.json
+          # Stamp both into the HTML so the page is correct before any script
+          # runs, and repeat them in build.json for the live refresh.
+          sed -i "s|main:latest|main:${short_sha}|g" _site/index.html
+          sed -i "s|VERSION_PLACEHOLDER|v${version}|g" _site/index.html
+          printf '{"branch":"main","commit":"%s","version":"%s"}\n' \
+            "${commit}" "${version}" > _site/build.json
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
       - name: Upload Pages artifact

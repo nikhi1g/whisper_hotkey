@@ -123,6 +123,16 @@ const waitForTrailCompletion = signal => {
   });
 };
 
+// Set once the releases API supplies a tag, so the build.json baseline never
+// races ahead of it and replaces a real tag with the deployed VERSION.
+let downloadVersionCameFromRelease = false;
+
+// An un-deployed checkout still holds the literal placeholder. Blank it rather
+// than showing scaffolding to anyone previewing site/ locally.
+if (downloadVersion && downloadVersion.textContent.includes('PLACEHOLDER')) {
+  downloadVersion.textContent = '';
+}
+
 const refreshSourceRevision = async () => {
   if (!sourceButton || !sourceRevision) return;
 
@@ -139,6 +149,14 @@ const refreshSourceRevision = async () => {
     sourceRevision.textContent = `${build.branch}:${shortCommit}`;
     sourceButton.href = 'https://github.com/nikhi1g/whisper_hotkey/tree/main';
     sourceButton.title = `View main. Current site build ${shortCommit}`;
+
+    // The deployed VERSION is the baseline. The releases API is authoritative
+    // when it answers, so never overwrite a version it already supplied.
+    if (downloadVersion && !downloadVersionCameFromRelease
+        && typeof build.version === 'string'
+        && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(build.version)) {
+      downloadVersion.textContent = `v${build.version}`;
+    }
   } catch {
     // Keep the revision stamped into the deployed HTML when metadata is unavailable.
   }
@@ -167,6 +185,7 @@ const refreshStableDownload = async () => {
     downloadLabel.textContent = 'Download for macOS';
     if (downloadVersion && typeof release.tag_name === 'string') {
       downloadVersion.textContent = release.tag_name;
+      downloadVersionCameFromRelease = true;
     }
   } catch {
     // The releases page remains a safe fallback until a stable build exists.
