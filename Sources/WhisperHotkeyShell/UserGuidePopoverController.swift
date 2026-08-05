@@ -147,14 +147,17 @@ enum UserGuideContent {
                 detail: "Audio stays local and is deleted after each dictation."
             ),
         ]
-        if state.selectedEngine.usesWhisperDecoding {
+        if state.selectedEngine.usesWhisperDecoding,
+           let engineIndex = rows.firstIndex(where: { $0.key == "engine" }) {
+            // Positioned relative to the engine row rather than at a fixed
+            // index, so adding a row above it cannot silently move Decoding.
             rows.insert(
                 UserGuideRow(
                     key: "decoding",
                     title: state.decodingProfile.displayName,
                     detail: state.decodingProfile.description
                 ),
-                at: 5
+                at: rows.index(after: engineIndex)
             )
         }
         if state.selectedHotkey == .capsLock {
