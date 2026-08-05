@@ -24,10 +24,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP = ROOT / "dist" / "whisper_hotkey.app"
 DEFAULT_DMG = ROOT / "dist" / "release" / "whisper_hotkey.dmg"
-MODEL_NAME = "ggml-base.en.bin"
-MODEL_SHA256 = (
-    "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-)
+# Must stay in step with BUNDLED_MODELS in build_app.py.
+BUNDLED_MODELS: dict[str, str] = {
+    "ggml-base.en.bin":
+        "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "ggml-small.en.bin":
+        "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+    "ggml-large-v3-turbo-q5_0.bin":
+        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+}
 
 
 def run(command: list[str], *, capture: bool = False) -> str:
@@ -51,11 +56,13 @@ def sha256(path: Path) -> str:
 def verify_release_app(app: Path, *, channel: str) -> str:
     if not app.is_dir():
         raise RuntimeError(f"Application bundle not found at {app}")
-    model = app / "Contents" / "Resources" / "Models" / MODEL_NAME
-    if not model.is_file() or sha256(model) != MODEL_SHA256:
-        raise RuntimeError(
-            "The release app must contain the pinned, verified Base English model."
-        )
+    models = app / "Contents" / "Resources" / "Models"
+    for name, expected in BUNDLED_MODELS.items():
+        model = models / name
+        if not model.is_file() or sha256(model) != expected:
+            raise RuntimeError(
+                f"The release app must contain the pinned, verified {name}."
+            )
     result = subprocess.run(
         ["/usr/bin/codesign", "--display", "--verbose=4", str(app)],
         check=True,

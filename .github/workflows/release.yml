@@ -71,13 +71,21 @@ jobs:
           security list-keychains -d user -s "${KEYCHAIN_PATH}"
           echo "RELEASE_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Download and verify bundled Base English model
+      - name: Download and verify bundled models
         run: |
-          MODEL_PATH="${RUNNER_TEMP}/ggml-base.en.bin"
-          curl --fail --location --retry 3 --output "${MODEL_PATH}" \
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
-          echo "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002  ${MODEL_PATH}" | shasum -a 256 --check
-          echo "WHISPER_HOTKEY_BUNDLED_MODEL_PATH=${MODEL_PATH}" >> "${GITHUB_ENV}"
+          CACHE="${HOME}/.cache/whisper"
+          mkdir -p "${CACHE}"
+          download() {
+            curl --fail --location --retry 3 --output "${CACHE}/$1" \
+              "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$1"
+            echo "$2  ${CACHE}/$1" | shasum -a 256 --check
+          }
+          download ggml-base.en.bin \
+            a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002
+          download ggml-small.en.bin \
+            c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d
+          download ggml-large-v3-turbo-q5_0.bin \
+            394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
 
       - name: Test
         run: swift test

@@ -31,6 +31,16 @@ BASE_MODEL_NAME = "ggml-base.en.bin"
 BASE_MODEL_SHA256 = (
     "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
 )
+# Every model the first-run profile can select on its own, so no Mac starts on
+# a model it does not have. Medium is deliberately absent: it is never chosen
+# automatically, and all four together exceed the 2 GB release-asset limit.
+BUNDLED_MODELS: dict[str, str] = {
+    BASE_MODEL_NAME: BASE_MODEL_SHA256,
+    "ggml-small.en.bin":
+        "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+    "ggml-large-v3-turbo-q5_0.bin":
+        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+}
 
 
 def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
@@ -102,34 +112,41 @@ def bundle(products: Path) -> None:
     write_login_agent_plist()
 
 
-def bundle_verified_base_model() -> None:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def bundle_verified_models() -> None:
     if os.environ.get("WHISPER_HOTKEY_BUNDLE_MODEL") != "1":
         return
-    configured_source = os.environ.get(
+    configured_base = os.environ.get(
         "WHISPER_HOTKEY_BUNDLED_MODEL_PATH",
         "",
     ).strip()
-    source = (
-        Path(configured_source).expanduser()
-        if configured_source
-        else Path.home() / ".cache" / "whisper" / BASE_MODEL_NAME
-    )
-    if not source.is_file():
-        raise RuntimeError(
-            f"Release model not found at {source}. Run ./run.sh or set "
-            "WHISPER_HOTKEY_BUNDLED_MODEL_PATH."
-        )
-    digest = hashlib.sha256()
-    with source.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    if digest.hexdigest() != BASE_MODEL_SHA256:
-        raise RuntimeError(
-            f"Refusing to bundle {source}: pinned SHA-256 verification failed."
-        )
+    cache = Path.home() / ".cache" / "whisper"
     destination_directory = RESOURCES / "Models"
     destination_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination_directory / BASE_MODEL_NAME)
+    for name, expected in BUNDLED_MODELS.items():
+        source = (
+            Path(configured_base).expanduser()
+            if configured_base and name == BASE_MODEL_NAME
+            else cache / name
+        )
+        if not source.is_file():
+            raise RuntimeError(
+                f"Release model not found at {source}. Run ./run.sh to "
+                "download and verify every bundled model."
+            )
+        if file_sha256(source) != expected:
+            raise RuntimeError(
+                f"Refusing to bundle {source}: pinned SHA-256 verification "
+                "failed."
+            )
+        shutil.copy2(source, destination_directory / name)
 
 
 def dependency_prefix(environment_key: str, formula: str) -> Path | None:
@@ -390,7 +407,7 @@ def main() -> None:
     products = swift_build()
     DIST.mkdir(parents=True, exist_ok=True)
     bundle(products)
-    bundle_verified_base_model()
+    bundle_verified_models()
     libraries = bundled_dynamic_libraries()
     verify_bundled_dependencies([
         *libraries,
