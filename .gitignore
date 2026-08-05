@@ -18,3 +18,9 @@ __pycache__/
 *.pyc
 Benchmarks/Data/
 Benchmarks/Results/
+# Local agent configuration, not part of the project.
+.claude/
+# macOS writes a custom folder icon as a file whose name ends in a carriage
+# return. Matched with a single-character glob to keep a literal CR out of
+# this file.
+Icon?
