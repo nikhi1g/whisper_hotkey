@@ -405,6 +405,15 @@ public final class AdvancedSettingsWindowController:
         // are inert right now, not put them out of reach.
         internalDictionaryUnsupportedLabel.isHidden =
             state.selectedEngine.supportsPromptConditioning
+        if !state.selectedEngine.supportsPromptConditioning {
+            // Named from the engine rather than hardcoded, so the notice
+            // cannot outlive the assumption that Parakeet is the only engine
+            // without prompt conditioning.
+            internalDictionaryUnsupportedLabel.stringValue =
+                "\(state.selectedEngine.displayName) accepts no prompt, so "
+                    + "these entries have no effect until you switch to a "
+                    + "whisper engine. They stay saved."
+        }
         internalDictionaryDraftField.isEnabled = state.configurationEnabled
             && state.selectedEngine.supportsPromptConditioning
         internalDictionaryAddButton.isEnabled = state.configurationEnabled
@@ -1446,9 +1455,6 @@ public final class AdvancedSettingsWindowController:
         panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 132).isActive =
             true
 
-        internalDictionaryUnsupportedLabel.stringValue =
-            "Parakeet accepts no prompt, so these entries have no effect "
-                + "until you switch to a whisper engine. They stay saved."
         internalDictionaryUnsupportedLabel.font = .systemFont(ofSize: 10)
         internalDictionaryUnsupportedLabel.textColor = .secondaryLabelColor
         internalDictionaryUnsupportedLabel.maximumNumberOfLines = 2
