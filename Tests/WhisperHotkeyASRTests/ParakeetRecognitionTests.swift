@@ -75,6 +75,41 @@ final class ParakeetRecognitionTests: XCTestCase {
         XCTAssertTrue(RecognitionEngine.whisperCppMetal.usesLocalHelper)
     }
 
+    func testInstallerReportsAMissingCheckpointRatherThanFetchingIt() async {
+        // A dictation must never trigger a several-hundred-megabyte download.
+        // The recognizer reports the missing path so the badge can show a real
+        // error instead of stalling behind a Transcribing badge.
+        let runtime = ParakeetRuntime(variant: .accurate)
+        guard !ParakeetModelInstaller.isInstalled(.accurate) else {
+            // Installed on this machine, so assert the inverse: loading must
+            // not have to reach the network to succeed.
+            XCTAssertTrue(
+                ParakeetModelInstaller.cacheDirectory(for: .accurate)
+                    .path.contains("FluidAudio")
+            )
+            return
+        }
+        do {
+            _ = try await runtime.transcribe(
+                audioURL: URL(fileURLWithPath: "/dev/null")
+            )
+            XCTFail("a missing checkpoint should not transcribe")
+        } catch let error as WhisperASRError {
+            guard case .modelMissing = error else {
+                return XCTFail("expected modelMissing, got \(error)")
+            }
+        } catch {
+            XCTFail("expected modelMissing, got \(error)")
+        }
+    }
+
+    func testCacheDirectoriesDifferPerVariant() {
+        XCTAssertNotEqual(
+            ParakeetModelInstaller.cacheDirectory(for: .fast),
+            ParakeetModelInstaller.cacheDirectory(for: .accurate)
+        )
+    }
+
     /// End-to-end recognition against a real checkpoint. Skipped unless
     /// `WHISPER_HOTKEY_PARAKEET_FIXTURE` points at a 16 kHz mono PCM16 WAV,
     /// because it downloads ~220 MB on a cold cache.
