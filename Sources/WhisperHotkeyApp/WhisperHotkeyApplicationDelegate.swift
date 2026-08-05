@@ -2299,7 +2299,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             accessibilityGranted: systemPermissions.accessibility == .granted,
             inputMonitoringGranted: systemPermissions.inputMonitoring == .granted,
             modelAvailable: modelAvailable,
-            helperAvailable: helperAvailable
+            helperAvailable: helperAvailable,
+            engine: selectedEngine
         )
     }
 

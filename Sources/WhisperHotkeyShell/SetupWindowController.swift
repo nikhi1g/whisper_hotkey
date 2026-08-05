@@ -1,4 +1,5 @@
 import AppKit
+import WhisperHotkeyCore
 
 public struct SetupReadiness: Equatable, Sendable {
     public var microphoneGranted: Bool
@@ -6,19 +7,25 @@ public struct SetupReadiness: Equatable, Sendable {
     public var inputMonitoringGranted: Bool
     public var modelAvailable: Bool
     public var helperAvailable: Bool
+    /// Named in the model and helper rows. Parakeet runs no whisper model and
+    /// no helper subprocess, so labelling those rows "Whisper" would describe
+    /// something the selected engine does not use.
+    public var engine: RecognitionEngine
 
     public init(
         microphoneGranted: Bool,
         accessibilityGranted: Bool,
         inputMonitoringGranted: Bool,
         modelAvailable: Bool,
-        helperAvailable: Bool
+        helperAvailable: Bool,
+        engine: RecognitionEngine = .defaultEngine
     ) {
         self.microphoneGranted = microphoneGranted
         self.accessibilityGranted = accessibilityGranted
         self.inputMonitoringGranted = inputMonitoringGranted
         self.modelAvailable = modelAvailable
         self.helperAvailable = helperAvailable
+        self.engine = engine
     }
 
     public var isReady: Bool {
@@ -91,6 +98,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private struct RowControls {
+        let name: NSTextField
         let status: NSTextField
         let button: NSButton
     }
@@ -163,10 +171,24 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
         _ = showIfNeeded(force: true)
     }
 
+    /// The model and helper rows describe whatever the selected engine
+    /// actually uses. Parakeet runs its own checkpoint on the Neural Engine and
+    /// no helper subprocess at all, so naming whisper in either row would
+    /// report something that is not running.
+    private func nameRowsForEngine(_ engine: RecognitionEngine) {
+        rowControls[.model]?.name.stringValue = engine == .parakeetCoreML
+            ? "Selected Parakeet model"
+            : "Selected Whisper model"
+        rowControls[.helper]?.name.stringValue = engine.usesLocalHelper
+            ? "Whisper helper"
+            : "Recognition runtime"
+    }
+
     public func refresh() {
         let readiness = readinessProvider()
         automaticallyEnableLoginItemIfReady(readiness)
         let loginStatus = loginItemManager.status
+        nameRowsForEngine(readiness.engine)
 
         update(
             .microphone,
@@ -361,8 +383,8 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             (.microphone, "Microphone"),
             (.accessibility, "Accessibility"),
             (.inputMonitoring, "Input Monitoring"),
-            (.model, "Selected Whisper model"),
-            (.helper, "Whisper helper"),
+            (.model, "Selected model"),
+            (.helper, "Recognition helper"),
             (.loginItem, "Login Item"),
         ]
 
@@ -380,7 +402,11 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             button.tag = row.rawValue
             button.controlSize = .small
             grid.addRow(with: [nameLabel, statusLabel, button])
-            rowControls[row] = RowControls(status: statusLabel, button: button)
+            rowControls[row] = RowControls(
+                name: nameLabel,
+                status: statusLabel,
+                button: button
+            )
         }
 
         grid.column(at: 0).width = 135
