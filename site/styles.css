@@ -140,9 +140,19 @@ h1 span { color: #768390; }
 
 .hero-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   margin-top: 17px;
+}
+
+/* Each action is its button plus a caption beneath it, so the button itself
+   holds only its label and stays optically centered. */
+.hero-action { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.action-note {
+  color: var(--muted);
+  font: 500 9px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  min-height: 11px;
 }
 
 .button {
@@ -168,9 +178,7 @@ nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .button-secondary { border-color: var(--line); background: #2d333b; color: #cdd9e5; }
 .button-secondary:hover { border-color: #768390; background: #373e47; }
 .button-arrow { font-size: 17px; }
-.source-button { min-height: 50px; }
-.source-label { display: flex; align-items: flex-start; flex-direction: column; line-height: 1.1; }
-.source-label small { margin-top: 4px; color: var(--muted); font: 500 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.source-label { line-height: 1.1; }
 
 .product-stage {
   position: relative;
@@ -487,6 +495,7 @@ footer {
   .page-shell { width: min(calc(100% - 32px), var(--content)); }
   .hero { padding: 44px 0 42px; }
   .hero-actions { align-items: stretch; flex-direction: column; }
+  .hero-action { width: 100%; }
   .button { width: 100%; }
   .product-stage { min-height: 370px; margin-top: 18px; }
   .document-window { min-height: 300px; }

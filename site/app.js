@@ -2,6 +2,7 @@ const sourceButton = document.querySelector('[data-source-button]');
 const sourceRevision = document.querySelector('[data-source-revision]');
 const downloadButton = document.querySelector('[data-download-button]');
 const downloadLabel = document.querySelector('[data-download-label]');
+const downloadVersion = document.querySelector('[data-download-version]');
 const copyOptions = document.querySelectorAll('[data-copy-option]');
 const badge = document.querySelector('[data-demo-badge]');
 const activityTrail = badge?.querySelector('.activity-trail path');
@@ -164,6 +165,9 @@ const refreshStableDownload = async () => {
     downloadButton.href = asset.browser_download_url;
     downloadButton.title = `Download ${release.tag_name}`;
     downloadLabel.textContent = 'Download for macOS';
+    if (downloadVersion && typeof release.tag_name === 'string') {
+      downloadVersion.textContent = release.tag_name;
+    }
   } catch {
     // The releases page remains a safe fallback until a stable build exists.
   }
