@@ -12,6 +12,7 @@ public enum WhisperASRError: LocalizedError, Equatable, Sendable {
     case recognitionTimedOut
     case commandLineFailed(Int32)
     case noSpeech
+    case parakeetInstallFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -37,6 +38,8 @@ public enum WhisperASRError: LocalizedError, Equatable, Sendable {
             "Local whisper-cli failed with status \(status)."
         case .noSpeech:
             "No speech was detected."
+        case .parakeetInstallFailed(let reason):
+            "Parakeet download failed: \(reason)"
         }
     }
 }
