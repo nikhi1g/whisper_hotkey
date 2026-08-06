@@ -1,8 +1,11 @@
 # Changelog
 
-## 3.4.0: 2026-08-05
+## 3.4.1: 2026-08-05
 
 Two Choices release. Recognition is one decision now, not four.
+
+Released as 3.4.1 because the 3.4.0 tag was cut one commit early, before the
+vocabulary-row and packaging fixes below. It was never published.
 
 - Led the Recognition settings with **Fast** and **Accurate**, folding engine,
   model, decoding profile, and processing mode behind an Advanced disclosure.
@@ -24,6 +27,14 @@ Two Choices release. Recognition is one decision now, not four.
   and the internal dictionary only biases Whisper
 - Emptied the runtime download catalog: every model the app can select now
   ships inside it
+- Hid the vocabulary row outright on an engine that accepts no prompt, instead
+  of showing it disabled beneath a sentence explaining that it does nothing.
+  Entries are still never cleared
+- Made the advanced escape hatch a labelled "Advanced Options" button with a
+  gear, right-aligned. A `.disclosure` bezel draws a bare triangle and discards
+  the button's title, so it rendered as a stray glyph
+- Stopped release packaging duplicating the bundled-model list, which drifted
+  the moment a model was retired and failed only at DMG time
 
 ## 3.3.6: 2026-08-05
 

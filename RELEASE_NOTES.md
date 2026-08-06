@@ -1,4 +1,4 @@
-Version 3.4.0 turns recognition into one decision. Settings offers Fast and
+Version 3.4.1 turns recognition into one decision. Settings offers Fast and
 Accurate; everything else folds away.
 
 ## Two presets

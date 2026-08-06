@@ -196,7 +196,7 @@ explanation for the state.
 
 Both Whisper models remain because Parakeet is a transducer: it accepts no
 prompt, so the internal dictionary and Pause Mode context only bias Whisper.
-Small and Medium English were retired in 3.4.0 — Parakeet Fast beats Small on
+Small and Medium English were retired in 3.4.1 — Parakeet Fast beats Small on
 size, speed, and accuracy at once, and Medium was the largest and slowest model
 in the app without being more accurate than Turbo.
 

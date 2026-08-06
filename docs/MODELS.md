@@ -1,6 +1,6 @@
 # Local models
 
-Version 3.4.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.4.1 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, whisper.cpp with a Core ML encoder, native
 WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
 Recognition is English-only and entirely local.
@@ -12,7 +12,7 @@ Recognition is English-only and entirely local.
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
 | Base English | `ggml-base.en.bin` | 141 MB | Lightest whisper tier |
 
-Small and Medium English were retired in 3.4.0. Parakeet Fast beats Small on
+Small and Medium English were retired in 3.4.1. Parakeet Fast beats Small on
 size, speed, and accuracy at once, and Medium was the largest and slowest model
 in the app without being more accurate than Turbo. A saved selection of either
 migrates to Turbo.
