@@ -62,7 +62,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.recognitionRowTitlesForTesting,
             [
-                "Engine", "Model", "Decoding", "Processing",
+                "Recognition", "Engine", "Model", "Decoding", "Processing",
                 "Internal dictionary", "Recording limit",
             ]
         )
@@ -315,7 +315,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
             controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 700)
+            CGSize(width: 620, height: 744)
         )
         XCTAssertEqual(
             controller.window?.title,

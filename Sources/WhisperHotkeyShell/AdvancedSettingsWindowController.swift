@@ -9,6 +9,15 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     /// Parakeet's own selection, kept beside the whisper one so switching
     /// engines never overwrites the other engine's choice.
     public let selectedParakeetVariant: ParakeetVariant
+    /// Which preset the current configuration represents, or `.custom`.
+    /// Derived, never stored: the advanced controls remain the source of truth.
+    public var recognitionPreset: RecognitionPreset {
+        RecognitionPreset.matching(
+            engine: selectedEngine,
+            parakeetVariant: selectedParakeetVariant,
+            processingMode: processingMode
+        )
+    }
     public let selectedEngine: RecognitionEngine
     public let decodingProfile: DecodingProfile
     public let processingMode: ModelProcessingMode
@@ -68,6 +77,7 @@ public struct AdvancedSettingsActions {
     public var selectHotkey: (HotkeyKey) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectParakeetVariant: (ParakeetVariant) -> Void
+    public var selectRecognitionPreset: (RecognitionPreset) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
     public var selectDecodingProfile: (DecodingProfile) -> Void
     public var selectProcessingMode: (ModelProcessingMode) -> Void
@@ -87,6 +97,7 @@ public struct AdvancedSettingsActions {
         selectHotkey: @escaping (HotkeyKey) -> Void,
         selectModel: @escaping (DictationModel) -> Void,
         selectParakeetVariant: @escaping (ParakeetVariant) -> Void = { _ in },
+        selectRecognitionPreset: @escaping (RecognitionPreset) -> Void = { _ in },
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
@@ -105,6 +116,7 @@ public struct AdvancedSettingsActions {
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectParakeetVariant = selectParakeetVariant
+        self.selectRecognitionPreset = selectRecognitionPreset
         self.selectEngine = selectEngine
         self.selectDecodingProfile = selectDecodingProfile
         self.selectProcessingMode = selectProcessingMode
@@ -161,6 +173,13 @@ public final class AdvancedSettingsWindowController:
     private let modeControl = NSSegmentedControl()
     private let modelControl = NSSegmentedControl()
     private let engineControl = NSSegmentedControl()
+    private let presetControl = NSSegmentedControl()
+    private let advancedDisclosure = NSButton()
+    /// A `.disclosure` bezel draws a bare triangle and discards the button's
+    /// title, so the label lives beside it or the control is unexplained.
+    private let advancedDisclosureLabel = NSTextField(labelWithString: "Advanced")
+    private var advancedRows: [NSGridRow] = []
+    private var showsAdvancedRecognition = false
     private let decodingControl = NSSegmentedControl()
     /// Held so the Decoding row can be hidden outright on engines that have no
     /// beam search. A disabled segmented control still paints its selection,
@@ -274,7 +293,7 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = SettingsWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 700),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 744),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -350,6 +369,27 @@ public final class AdvancedSettingsWindowController:
         // The Model row has to carry the right family's chips before a
         // selection is applied to it. Selecting first meant returning from
         // Parakeet asked a two-segment control for segment three.
+        let preset = state.recognitionPreset
+        if let index = RecognitionPreset.selectable.firstIndex(of: preset) {
+            presetControl.selectedSegment = index
+        } else {
+            // Custom: no segment is the truth, so leave none highlighted
+            // rather than claiming a preset the settings no longer match.
+            presetControl.selectedSegment = -1
+        }
+        presetControl.isEnabled = state.configurationEnabled
+        advancedDisclosureLabel.stringValue = preset == .custom
+            ? "Advanced (in use)"
+            : "Advanced"
+        // Custom cannot be folded away: it exists only because the advanced
+        // controls are doing something, so they have to be visible.
+        let showsAdvanced = showsAdvancedRecognition || preset == .custom
+        advancedDisclosure.state = showsAdvanced ? .on : .off
+        advancedDisclosure.isEnabled = state.configurationEnabled
+            && preset != .custom
+        for row in advancedRows {
+            row.isHidden = !showsAdvanced
+        }
         rebuildModelRowIfNeeded(for: state)
         switch ModelRowKind(engine: state.selectedEngine) {
         case .whisper:
@@ -528,6 +568,27 @@ public final class AdvancedSettingsWindowController:
             return
         }
         actions.selectDictationMode(mode)
+        refresh()
+    }
+
+    @objc private func selectRecognitionPreset(_ sender: NSSegmentedControl) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              RecognitionPreset.selectable.indices.contains(
+                sender.selectedSegment
+              )
+        else {
+            refresh()
+            return
+        }
+        actions.selectRecognitionPreset(
+            RecognitionPreset.selectable[sender.selectedSegment]
+        )
+        refresh()
+    }
+
+    @objc private func toggleAdvancedRecognition(_ sender: NSButton) {
+        showsAdvancedRecognition = sender.state == .on
         refresh()
     }
 
@@ -854,6 +915,21 @@ public final class AdvancedSettingsWindowController:
             ),
             action: #selector(selectModel(_:))
         )
+        configure(
+            presetControl,
+            labels: RecognitionPreset.selectable.map(\.displayName),
+            action: #selector(selectRecognitionPreset(_:))
+        )
+        for (index, preset) in RecognitionPreset.selectable.enumerated() {
+            presetControl.setToolTip(preset.summary, forSegment: index)
+        }
+        advancedDisclosure.setButtonType(.pushOnPushOff)
+        advancedDisclosure.bezelStyle = .disclosure
+        advancedDisclosure.target = self
+        advancedDisclosure.action = #selector(toggleAdvancedRecognition(_:))
+        advancedDisclosure.setAccessibilityLabel("Show advanced recognition")
+        advancedDisclosureLabel.font = .systemFont(ofSize: 11)
+        advancedDisclosureLabel.textColor = .secondaryLabelColor
         configure(
             engineControl,
             labels: RecognitionEngine.allCases.map(\.displayName),
@@ -1524,21 +1600,48 @@ public final class AdvancedSettingsWindowController:
         // Decoding applies at all. Reading top to bottom now follows the
         // dependency rather than cutting across it.
         recognitionRowTitles = [
-            "Engine", "Model", "Decoding", "Processing",
+            "Recognition", "Engine", "Model", "Decoding", "Processing",
             "Internal dictionary", "Recording limit",
         ]
-        addRow(to: recognitionGrid, title: "Engine", control: engineControl)
-        addRow(to: recognitionGrid, title: "Model", control: modelControl)
+        // The disclosure shares the preset's row rather than taking one of its
+        // own: the section has a fixed height budget, and a row spent on a
+        // single toggle is a row not spent on a setting.
+        let recognitionControls = NSStackView(
+            views: [presetControl, advancedDisclosure, advancedDisclosureLabel]
+        )
+        recognitionControls.orientation = .horizontal
+        recognitionControls.spacing = 8
+        recognitionControls.alignment = .centerY
+        addRow(
+            to: recognitionGrid,
+            title: "Recognition",
+            control: recognitionControls
+        )
+        let engineRow = addRow(
+            to: recognitionGrid,
+            title: "Engine",
+            control: engineControl
+        )
+        let modelRow = addRow(
+            to: recognitionGrid,
+            title: "Model",
+            control: modelControl
+        )
         decodingRow = addRow(
             to: recognitionGrid,
             title: "Decoding",
             control: decodingControl
         )
-        addRow(
+        let processingRow = addRow(
             to: recognitionGrid,
             title: "Processing",
             control: processingModeControl
         )
+        // Engine, model, decoding, and processing all exist to serve one of
+        // the two presets. They stay reachable, but folded away by default so
+        // the common choice is the visible one.
+        advancedRows = [engineRow, modelRow, decodingRow, processingRow]
+            .compactMap { $0 }
         addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
@@ -1827,6 +1930,25 @@ public final class AdvancedSettingsWindowController:
 
     var modeControlEnabledForTesting: Bool {
         modeControl.isEnabled
+    }
+
+    var advancedRecognitionVisibleForTesting: Bool {
+        advancedRows.contains { !$0.isHidden }
+    }
+
+    var presetChipLabelsForTesting: [String] {
+        (0..<presetControl.segmentCount).compactMap {
+            presetControl.label(forSegment: $0)
+        }
+    }
+
+    var selectedPresetForTesting: RecognitionPreset? {
+        guard RecognitionPreset.selectable.indices.contains(
+            presetControl.selectedSegment
+        ) else {
+            return nil
+        }
+        return RecognitionPreset.selectable[presetControl.selectedSegment]
     }
 
     var decodingRowVisibleForTesting: Bool {

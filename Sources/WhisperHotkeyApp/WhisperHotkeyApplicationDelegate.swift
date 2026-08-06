@@ -1575,6 +1575,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     selectParakeetVariant: { [weak self] variant in
                         self?.selectParakeetVariant(variant)
                     },
+                    selectRecognitionPreset: { [weak self] preset in
+                        self?.applyRecognitionPreset(preset)
+                    },
                     selectEngine: { [weak self] engine in
                         self?.selectEngine(engine)
                     },
@@ -1880,6 +1883,49 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         configureModelReadiness(reloadSelectedModel: true)
         reconcileRuntime(showSetupIfNeeded: false)
         setupWindowController.refresh()
+    }
+
+    /// Applies a preset by writing everything it resolves, in one step, so the
+    /// configuration can never sit half-applied and read as Custom.
+    private func applyRecognitionPreset(_ preset: RecognitionPreset) {
+        guard !machine.phase.isBusy,
+              RecognitionPreset.selectable.contains(preset)
+        else {
+            return
+        }
+        let resolution = preset.resolution
+        guard ParakeetModelInstaller.isInstalled(resolution.parakeetVariant)
+        else {
+            // Both presets ship inside the app, so this only happens if the
+            // bundled copy is missing. Offer the download rather than
+            // selecting a configuration that cannot run.
+            offerParakeetInstall(resolution.parakeetVariant) { [weak self] in
+                guard $0 else { return }
+                self?.applyRecognitionPreset(preset)
+            }
+            return
+        }
+        let defaults = UserDefaults.standard
+        selectedParakeetVariant = resolution.parakeetVariant
+        defaults.set(
+            resolution.parakeetVariant.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.parakeetModel
+        )
+        selectedEngine = resolution.engine
+        defaults.set(
+            resolution.engine.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+        )
+        processingMode = resolution.processingMode
+        defaults.set(
+            resolution.processingMode.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.modelProcessingMode
+        )
+        configureModelReadiness(reloadSelectedModel: true)
+        reconcileRuntime(showSetupIfNeeded: false)
+        setupWindowController.refresh()
+        advancedSettingsWindowController?.refreshIfVisible()
+        updateMenuBar()
     }
 
     /// Fetches a Parakeet checkpoint before it is selected, rather than during

@@ -1069,3 +1069,101 @@ public enum RecordingLimit: String, CaseIterable, Codable, Sendable {
         return Self(rawValue: rawValue) ?? .defaultLimit
     }
 }
+
+/// The recognition choice as a user makes it: a tradeoff, not a stack.
+///
+/// Every technical control the app exposes — engine, model, decoding profile,
+/// processing mode — exists to serve one of two intentions. A preset names the
+/// intention and resolves the rest. `custom` is not selectable; it is what the
+/// picker reports once the advanced controls no longer match either preset.
+public enum RecognitionPreset: String, CaseIterable, Codable, Sendable {
+    case fast
+    case accurate
+    case custom
+
+    /// The two a user can pick. `custom` is a reported state.
+    public static var selectable: [Self] { [.fast, .accurate] }
+
+    public static let defaultPreset: Self = .accurate
+
+    public var displayName: String {
+        switch self {
+        case .fast:
+            "Fast"
+        case .accurate:
+            "Accurate"
+        case .custom:
+            "Custom"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .fast:
+            "Lowest latency and memory. Still more accurate than any Whisper "
+                + "model this app ships."
+        case .accurate:
+            "The most accurate option, and still answers in well under a "
+                + "tenth of a second. Recommended."
+        case .custom:
+            "Advanced settings no longer match either preset."
+        }
+    }
+
+    /// What the preset resolves to. Both use Parakeet, which is measurably
+    /// ahead of every Whisper configuration on accuracy and latency at once,
+    /// and both ship inside the app so neither needs a download.
+    public var resolution: RecognitionResolution {
+        switch self {
+        case .fast:
+            RecognitionResolution(
+                engine: .parakeetCoreML,
+                parakeetVariant: .fast,
+                processingMode: .decodeWhileSpeaking
+            )
+        case .accurate, .custom:
+            RecognitionResolution(
+                engine: .parakeetCoreML,
+                parakeetVariant: .accurate,
+                processingMode: .decodeWhileSpeaking
+            )
+        }
+    }
+
+    /// Which preset the given configuration represents, or `custom`.
+    ///
+    /// Decoding profile is deliberately not compared: Parakeet has no beam
+    /// search, so the stored profile cannot affect a preset's behavior and
+    /// must not be able to knock a preset into `custom`.
+    public static func matching(
+        engine: RecognitionEngine,
+        parakeetVariant: ParakeetVariant,
+        processingMode: ModelProcessingMode
+    ) -> Self {
+        for preset in selectable {
+            let resolution = preset.resolution
+            if resolution.engine == engine,
+               resolution.parakeetVariant == parakeetVariant,
+               resolution.processingMode == processingMode {
+                return preset
+            }
+        }
+        return .custom
+    }
+}
+
+public struct RecognitionResolution: Equatable, Sendable {
+    public let engine: RecognitionEngine
+    public let parakeetVariant: ParakeetVariant
+    public let processingMode: ModelProcessingMode
+
+    public init(
+        engine: RecognitionEngine,
+        parakeetVariant: ParakeetVariant,
+        processingMode: ModelProcessingMode
+    ) {
+        self.engine = engine
+        self.parakeetVariant = parakeetVariant
+        self.processingMode = processingMode
+    }
+}
