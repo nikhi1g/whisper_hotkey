@@ -47,6 +47,31 @@ English-only). The first run downloads the checkpoint. Two warm-up passes run
 before timing so the measurement reflects a resident model, matching how the
 whisper benchmark drives an already-loaded helper.
 
+## Cohere Transcribe
+
+The same harness benchmarks Cohere Transcribe, so its numbers are directly
+comparable to Parakeet's rather than to a published leaderboard average.
+
+```sh
+./Benchmarks/Parakeet/.build/release/parakeet-benchmark cohere-download
+./Benchmarks/Parakeet/.build/release/parakeet-benchmark cohere /tmp/wavlist.txt \
+  > /tmp/cohere.jsonl
+python3 Benchmarks/Scripts/score_parakeet.py /tmp/cohere.jsonl
+```
+
+Measured on the 100-utterance set, Apple M5 Pro:
+
+| Engine | Combined WER | test-clean | test-other | Mean latency |
+| --- | ---: | ---: | ---: | ---: |
+| Parakeet Accurate | 2.62% | 1.54% | 3.86% | 56 ms |
+| Cohere Transcribe | 2.57% | 1.13% | 4.21% | 629 ms |
+
+Cohere ranks 0.63 WER ahead of Parakeet on the Open ASR Leaderboard's
+seven-split mean, and that lead does not survive contact with this corpus: the
+two tie overall, Cohere wins on clean read speech, Parakeet wins on noisy
+speech, and Cohere costs eleven times the latency. Leaderboard rank is a
+screening signal, not a decision.
+
 The downloader pins the checksums published by OpenSLR. Results contain
 aggregate and per-utterance timing, word-error counts, and numeric confidence
 measurements, but never audio or transcript text. `--wav-root` must mirror the

@@ -43,6 +43,68 @@ if arguments.count >= 2, arguments[1] == "download" {
     exit(0)
 }
 
+// Cohere Transcribe: a different engine entirely, benchmarked through the same
+// WAV list and JSON output so its WER and latency are directly comparable.
+if arguments.count >= 2, arguments[1] == "cohere-download" {
+    let directory = MLModelConfigurationUtils.defaultModelsDirectory(
+        for: Repo.cohereTranscribeCoreml
+    )
+    FileHandle.standardError.write(
+        "downloading to \(directory.path)\n".data(using: .utf8)!
+    )
+    try await ModelHub.download(.cohereTranscribeCoreml, to: directory)
+    FileHandle.standardError.write("ready\n".data(using: .utf8)!)
+    exit(0)
+}
+
+if arguments.count == 3, arguments[1] == "cohere" {
+    let listURL = URL(fileURLWithPath: arguments[2])
+    let paths = try String(contentsOf: listURL, encoding: .utf8)
+        .split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    let directory = MLModelConfigurationUtils.defaultModelsDirectory(
+        for: Repo.cohereTranscribeCoreml
+    )
+    let loadStart = Date()
+    let models = try await CoherePipeline.loadModels(
+        encoderDir: directory,
+        decoderDir: directory,
+        vocabDir: directory
+    )
+    let pipeline = CoherePipeline()
+    let converter = AudioConverter()
+    FileHandle.standardError.write(
+        "loaded cohere in \(String(format: "%.1f", Date().timeIntervalSince(loadStart)))s\n"
+            .data(using: .utf8)!
+    )
+    // Warm up on the first file so compilation is not charged to timing.
+    if let first = paths.first {
+        _ = try? await pipeline.transcribeLong(
+            audio: try converter.resampleAudioFile(URL(fileURLWithPath: first)),
+            models: models
+        )
+    }
+    struct CohereRow: Encodable {
+        let id: String
+        let text: String
+        let seconds: Double
+    }
+    let encoder = JSONEncoder()
+    for path in paths {
+        let url = URL(fileURLWithPath: path)
+        let samples = try converter.resampleAudioFile(url)
+        let started = Date()
+        let result = try await pipeline.transcribeLong(audio: samples, models: models)
+        let row = CohereRow(
+            id: url.deletingPathExtension().lastPathComponent,
+            text: result.text,
+            seconds: Date().timeIntervalSince(started)
+        )
+        FileHandle.standardOutput.write(try encoder.encode(row))
+        FileHandle.standardOutput.write("\n".data(using: .utf8)!)
+    }
+    exit(0)
+}
+
 guard arguments.count == 3 else {
     fail("usage: parakeet-benchmark <v2|v3|tdtCtc110m> <wav-list>")
 }

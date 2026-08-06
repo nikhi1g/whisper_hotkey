@@ -4,12 +4,11 @@ import WhisperHotkeyCore
 
 /// Installs the Cohere Transcribe checkpoint.
 ///
-/// Unlike Parakeet, this one is not bundled. The q8 Core ML build is roughly
-/// 2.2 GB — a 1.9 GB encoder plus its decoders — which is larger than the
-/// entire application including both Parakeet checkpoints and both Whisper
-/// models, and past GitHub's release-asset limit. It is fetched on demand
-/// through the same explicit, cancellable flow every other on-demand model
-/// uses.
+/// Unlike Parakeet, this one is not bundled. The compiled q8 Core ML build is
+/// 2.4 GB measured on disk — larger than the entire application including both
+/// Parakeet checkpoints and both Whisper models, and past GitHub's
+/// release-asset limit. It is fetched on demand through the same explicit,
+/// cancellable flow every other on-demand model uses.
 public enum CohereModelInstaller {
     public enum Phase: Equatable, Sendable {
         case downloading(fractionCompleted: Double)
@@ -41,9 +40,15 @@ public enum CohereModelInstaller {
         progress: @escaping @Sendable (Phase) -> Void
     ) async throws {
         do {
+            // `download(_:to:)` appends the repo's folder name itself, so it
+            // takes the models root. Passing the repo directory nests it twice.
+            // The subdirectory form is used instead so `.mlpackage` sources can
+            // be skipped: they sit beside the compiled `.mlmodelc` bundles and
+            // double the transfer to 4.7 GB without being loadable.
             try await ModelHub.download(
                 repo,
-                to: cacheDirectory(),
+                subdirectory: "q8",
+                to: cacheDirectory().deletingLastPathComponent(),
                 progressHandler: { update in
                     switch update.phase {
                     case .compiling:
@@ -55,7 +60,8 @@ public enum CohereModelInstaller {
                             )
                         )
                     }
-                }
+                },
+                shouldSkip: { $0.hasSuffix(".mlpackage") }
             )
             try Task.checkCancellation()
         } catch {

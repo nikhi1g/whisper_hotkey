@@ -478,7 +478,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         case .parakeetCoreML:
             "Parakeet Neural Engine"
         case .cohereCoreML:
-            "Cohere Transcribe (most accurate, slower, 2.2 GB download)"
+            "Cohere Transcribe (better on clean speech, ~11x slower, 2.4 GB)"
         }
     }
 

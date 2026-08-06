@@ -101,8 +101,11 @@ def main() -> None:
     print(f"p50 latency     {percentile(latencies, 0.50) * 1000:.1f} ms")
     print(f"p95 latency     {percentile(latencies, 0.95) * 1000:.1f} ms")
     print(f"WER combined    {100 * total_edits / total_words:.2f}%")
-    print(f"WER test-clean  {100 * edits['test-clean'] / counts['test-clean']:.2f}%")
-    print(f"WER test-other  {100 * edits['test-other'] / counts['test-other']:.2f}%")
+    # A run may cover only one split; report what is present rather than
+    # dividing by zero.
+    for split in ("test-clean", "test-other"):
+        if counts[split]:
+            print(f"WER {split:11} {100 * edits[split] / counts[split]:.2f}%")
 
 
 if __name__ == "__main__":

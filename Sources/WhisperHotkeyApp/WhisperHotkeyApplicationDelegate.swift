@@ -2009,10 +2009,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .informational
         alert.messageText = "Cohere Transcribe is not installed."
         alert.informativeText = "This engine is downloaded on first use rather "
-            + "than included in the app. It is about 2.2 GB and is compiled "
-            + "for this Mac after the transfer. It is the most accurate engine "
-            + "available, but it decodes one token at a time, so dictation "
-            + "finishes noticeably slower than Parakeet."
+            + "than included in the app. It is about 2.4 GB.\n\n"
+            + "Measured on this project's benchmark it is roughly eleven times "
+            + "slower than Parakeet — about 0.6 seconds per phrase against "
+            + "0.06 — for the same overall accuracy. It is more accurate on "
+            + "clean speech and less accurate on noisy speech. Choose it only "
+            + "if you dictate in quiet conditions and prefer accuracy there "
+            + "over speed."
         alert.addButton(withTitle: "Download")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
