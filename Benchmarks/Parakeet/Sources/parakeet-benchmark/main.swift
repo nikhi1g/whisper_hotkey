@@ -1,25 +1,54 @@
 import Foundation
 import FluidAudio
 
-// Usage: parabench <v2|v3|tdtCtc110m> <wav-list-file>
-// Emits one JSON object per line: {"id":..., "text":..., "seconds":...}
+// Usage:
+//   parakeet-benchmark <v2|v3|tdtCtc110m> <wav-list-file>
+//     Transcribes each WAV and emits one JSON object per line:
+//     {"id":..., "text":..., "seconds":...}
+//   parakeet-benchmark download <v2|v3|tdtCtc110m> [more...]
+//     Downloads the named checkpoints into FluidAudio's cache and exits.
+//     The release build bundles the checkpoints into the app, so a clean
+//     machine has to populate that cache before build_app.py can copy them.
+
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write((message + "\n").data(using: .utf8)!)
+    exit(2)
+}
+
+func parseVersion(_ name: String) -> AsrModelVersion {
+    switch name {
+    case "v2": return .v2
+    case "v3": return .v3
+    case "tdtCtc110m": return .tdtCtc110m
+    default: fail("unknown version \(name)")
+    }
+}
 
 let arguments = CommandLine.arguments
+
+if arguments.count >= 2, arguments[1] == "download" {
+    let names = Array(arguments.dropFirst(2))
+    guard !names.isEmpty else {
+        fail("usage: parakeet-benchmark download <v2|v3|tdtCtc110m> [more...]")
+    }
+    for name in names {
+        let version = parseVersion(name)
+        // A no-op when the checkpoint is already complete, so this is safe to
+        // run unconditionally in CI and locally.
+        let directory = try await AsrModels.download(version: version)
+        FileHandle.standardError.write(
+            "ready \(name) at \(directory.path)\n".data(using: .utf8)!
+        )
+    }
+    exit(0)
+}
+
 guard arguments.count == 3 else {
-    FileHandle.standardError.write("usage: parabench <v2|v3|tdtCtc110m> <wav-list>\n".data(using: .utf8)!)
-    exit(2)
+    fail("usage: parakeet-benchmark <v2|v3|tdtCtc110m> <wav-list>")
 }
 
 let versionName = arguments[1]
-let version: AsrModelVersion
-switch versionName {
-case "v2": version = .v2
-case "v3": version = .v3
-case "tdtCtc110m": version = .tdtCtc110m
-default:
-    FileHandle.standardError.write("unknown version \(versionName)\n".data(using: .utf8)!)
-    exit(2)
-}
+let version = parseVersion(versionName)
 
 let listURL = URL(fileURLWithPath: arguments[2])
 let paths = try String(contentsOf: listURL, encoding: .utf8)

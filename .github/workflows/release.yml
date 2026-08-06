@@ -82,10 +82,16 @@ jobs:
           }
           download ggml-base.en.bin \
             a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002
-          download ggml-small.en.bin \
-            c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d
           download ggml-large-v3-turbo-q5_0.bin \
             394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
+
+      - name: Download bundled Parakeet checkpoints
+        run: |
+          # Both checkpoints ship inside the app, so build_app.py copies
+          # them out of FluidAudio's cache. A clean runner has no cache, so
+          # populate it first. This is a no-op when they are already there.
+          swift run --package-path Benchmarks/Parakeet -c release \
+            parakeet-benchmark download tdtCtc110m v2
 
       - name: Test
         run: swift test
