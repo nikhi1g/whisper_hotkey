@@ -1985,13 +1985,89 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.finishParakeetInstall()
                 if let failure {
-                    self.presentParakeetInstallFailure(
-                        variant,
+                    self.presentInstallFailure(
+                        "Parakeet \(variant.displayName)",
                         message: failure
                     )
                 }
             }
             completion(failure == nil && !cancelled)
+        }
+    }
+
+    /// Cohere's Core ML build is larger than the whole application, so it is
+    /// never bundled. Same explicit flow as Parakeet: name the size, show
+    /// progress, allow cancel, and only select the engine once it succeeded.
+    private func offerCohereInstall(
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard parakeetInstallTask == nil else {
+            completion(false)
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Cohere Transcribe is not installed."
+        alert.informativeText = "This engine is downloaded on first use rather "
+            + "than included in the app. It is about 2.2 GB and is compiled "
+            + "for this Mac after the transfer. It is the most accurate engine "
+            + "available, but it decodes one token at a time, so dictation "
+            + "finishes noticeably slower than Parakeet."
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            completion(false)
+            return
+        }
+
+        let panel = ModelDownloadProgressPanel(
+            title: "Downloading Cohere Transcribe",
+            totalByteCount: nil
+        ) { [weak self] in
+            self?.parakeetInstallTask?.cancel()
+        }
+        panel.show()
+        parakeetInstallPanel = panel
+
+        let observer = CohereInstallObserver(delegate: self)
+        parakeetInstallTask = Task { [weak self] in
+            var failure: String?
+            var cancelled = false
+            do {
+                try await CohereModelInstaller.install { phase in
+                    observer.report(phase)
+                }
+            } catch is CancellationError {
+                cancelled = true
+            } catch {
+                failure = error.localizedDescription
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.finishParakeetInstall()
+                if let failure {
+                    self.presentInstallFailure(
+                        "Cohere Transcribe",
+                        message: failure
+                    )
+                }
+            }
+            completion(failure == nil && !cancelled)
+        }
+    }
+
+    fileprivate func updateCohereInstallPanel(
+        _ phase: CohereModelInstaller.Phase
+    ) {
+        switch phase {
+        case let .downloading(fraction):
+            parakeetInstallPanel?.update(
+                completedByteCount: Int64(fraction * 1000),
+                totalByteCount: 1000
+            )
+        case .compiling:
+            parakeetInstallPanel?.showIndeterminate("Compiling for this Mac…")
         }
     }
 
@@ -2017,14 +2093,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         parakeetInstallTask = nil
     }
 
-    private func presentParakeetInstallFailure(
-        _ variant: ParakeetVariant,
+    fileprivate func presentInstallFailure(
+        _ subject: String,
         message: String
     ) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText =
-            "Parakeet \(variant.displayName) could not be installed."
+        alert.messageText = "\(subject) could not be installed."
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         NSApp.activate(ignoringOtherApps: true)
@@ -2106,6 +2181,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 model.rawValue,
                 forKey: WhisperHotkeyPreferenceKeys.dictationModel
             )
+        }
+        if engine == .cohereCoreML, !CohereModelInstaller.isInstalled() {
+            offerCohereInstall { [weak self] installed in
+                guard installed else { return }
+                self?.selectEngine(engine)
+            }
+            return
         }
         if engine == .parakeetCoreML,
            !ParakeetModelInstaller.isInstalled(selectedParakeetVariant) {
@@ -2521,7 +2603,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         case .recognitionTimedOut:
             return "Transcription timed out."
         case .helperProtocolFailure, .helperFailed, .commandLineFailed,
-            .parakeetInstallFailed:
+            .modelInstallFailed:
             return "Transcription failed: see logs."
         }
     }
@@ -2548,6 +2630,22 @@ private final class ParakeetInstallObserver: @unchecked Sendable {
     func report(_ phase: ParakeetModelInstaller.Phase) {
         Task { @MainActor [weak delegate] in
             delegate?.updateParakeetInstallPanel(phase)
+        }
+    }
+}
+
+/// Forwards Cohere install progress from FluidAudio's arbitrary queue to the
+/// delegate on the main actor.
+private final class CohereInstallObserver: @unchecked Sendable {
+    private weak var delegate: WhisperHotkeyApplicationDelegate?
+
+    init(delegate: WhisperHotkeyApplicationDelegate) {
+        self.delegate = delegate
+    }
+
+    func report(_ phase: CohereModelInstaller.Phase) {
+        Task { @MainActor [weak delegate] in
+            delegate?.updateCohereInstallPanel(phase)
         }
     }
 }

@@ -69,7 +69,7 @@ class RunScriptTests(unittest.TestCase):
             "for value in base turbo; do model_preference \"$value\"; done"
         )
         engines = self.evaluate_bootstrap_function(
-            "for value in metal coreml whisperkit parakeet; do engine_preference \"$value\"; done"
+            "for value in metal coreml whisperkit parakeet cohere; do engine_preference \"$value\"; done"
         )
 
         self.assertEqual(
@@ -83,6 +83,7 @@ class RunScriptTests(unittest.TestCase):
                 "whisperCppCoreML",
                 "whisperKitCoreML",
                 "parakeetCoreML",
+                "cohereCoreML",
             ],
         )
 

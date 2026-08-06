@@ -90,7 +90,7 @@ public enum ParakeetModelInstaller {
             if isCancellation(error) {
                 throw CancellationError()
             }
-            throw WhisperASRError.parakeetInstallFailed(error.localizedDescription)
+            throw WhisperASRError.modelInstallFailed(error.localizedDescription)
         }
     }
 

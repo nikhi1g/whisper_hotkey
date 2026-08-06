@@ -298,6 +298,7 @@ final class PreferenceTests: XCTestCase {
                 .whisperCppCoreML,
                 .whisperKitCoreML,
                 .parakeetCoreML,
+                .cohereCoreML,
             ]
         )
         defaults.set(

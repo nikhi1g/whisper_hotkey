@@ -448,6 +448,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     case whisperCppCoreML
     case whisperKitCoreML
     case parakeetCoreML
+    case cohereCoreML
 
     public static let defaultEngine: Self = .whisperCppMetal
 
@@ -461,6 +462,8 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "WhisperKit"
         case .parakeetCoreML:
             "Parakeet"
+        case .cohereCoreML:
+            "Cohere"
         }
     }
 
@@ -474,6 +477,8 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "WhisperKit Core ML and Neural Engine"
         case .parakeetCoreML:
             "Parakeet Neural Engine"
+        case .cohereCoreML:
+            "Cohere Transcribe (most accurate, slower, 2.2 GB download)"
         }
     }
 
@@ -484,7 +489,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal, .whisperCppCoreML:
             true
-        case .whisperKitCoreML, .parakeetCoreML:
+        case .whisperKitCoreML, .parakeetCoreML, .cohereCoreML:
             false
         }
     }
@@ -495,7 +500,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal, .whisperCppCoreML:
             true
-        case .whisperKitCoreML, .parakeetCoreML:
+        case .whisperKitCoreML, .parakeetCoreML, .cohereCoreML:
             false
         }
     }
@@ -503,7 +508,18 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     /// Whether a text prompt can bias the decode. Parakeet transducers accept
     /// no prompt, so the dictionary and Pause Mode context are dropped.
     public var supportsPromptConditioning: Bool {
-        self != .parakeetCoreML
+        switch self {
+        case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+            true
+        case .parakeetCoreML, .cohereCoreML:
+            false
+        }
+    }
+
+    /// Whether the engine's checkpoint ships inside the app. Cohere's Core ML
+    /// build is larger than the entire application, so it is fetched on demand.
+    public var shipsInsideTheApp: Bool {
+        self != .cohereCoreML
     }
 
     public static func selected(
