@@ -185,6 +185,9 @@ public final class AdvancedSettingsWindowController:
     /// beam search. A disabled segmented control still paints its selection,
     /// which reads as "this is on".
     private var decodingRow: NSGridRow?
+    /// Held so the whole vocabulary row can be hidden on an engine that
+    /// accepts no prompt.
+    private var internalDictionaryRow: NSGridRow?
     /// Which chip set the Model row currently shows, so `refresh` only rebuilds
     /// the control when the engine actually changes what belongs there.
     private var modelRowKind: ModelRowKind?
@@ -210,14 +213,6 @@ public final class AdvancedSettingsWindowController:
     )
     private let internalDictionaryExistingStack = NSStackView()
     private let internalDictionaryExistingScrollView = NSScrollView()
-    /// Shown in place of the Decoding row's approach of hiding entirely.
-    /// Internal dictionary entries still apply on every whisper engine, so
-    /// hiding them while Parakeet is selected would just make them harder to
-    /// find again — this note plus disabling the controls below says the
-    /// same "does not apply here" without losing access to the list.
-    private let internalDictionaryUnsupportedLabel = NSTextField(
-        labelWithString: ""
-    )
     private lazy var internalDictionaryControl = makeInternalDictionaryControl()
     private let keepLatestDictationToggle = NSButton(
         checkboxWithTitle: "Keep latest dictation",
@@ -436,30 +431,18 @@ public final class AdvancedSettingsWindowController:
         // decoding profile, so showing one selected would be a lie.
         decodingRow?.isHidden = !state.selectedEngine.usesWhisperDecoding
         processingModeControl.isEnabled = state.configurationEnabled
-        // Disabled rather than hidden, unlike Decoding: the entries still
-        // apply on every whisper engine, so Parakeet only needs to say they
-        // are inert right now, not put them out of reach.
-        internalDictionaryUnsupportedLabel.isHidden =
-            state.selectedEngine.supportsPromptConditioning
-        if !state.selectedEngine.supportsPromptConditioning {
-            // Named from the engine rather than hardcoded, so the notice
-            // cannot outlive the assumption that Parakeet is the only engine
-            // without prompt conditioning.
-            internalDictionaryUnsupportedLabel.stringValue =
-                "\(state.selectedEngine.displayName) accepts no prompt, so "
-                    + "these entries have no effect until you switch to a "
-                    + "whisper engine. They stay saved."
-        }
+        // Hidden, like Decoding, rather than shown disabled under a sentence
+        // explaining why it does nothing. An engine that accepts no prompt has
+        // no vocabulary setting; entries stay saved for the whisper engines.
+        internalDictionaryRow?.isHidden =
+            !state.selectedEngine.supportsPromptConditioning
         internalDictionaryDraftField.isEnabled = state.configurationEnabled
-            && state.selectedEngine.supportsPromptConditioning
         internalDictionaryAddButton.isEnabled = state.configurationEnabled
-            && state.selectedEngine.supportsPromptConditioning
             && !currentInternalDictionaryDraftResult.candidates.isEmpty
         internalDictionaryExistingStack.arrangedSubviews
             .compactMap { $0 as? NSButton }
             .forEach {
                 $0.isEnabled = state.configurationEnabled
-                    && state.selectedEngine.supportsPromptConditioning
             }
         keepLatestDictationToggle.isEnabled = state.configurationEnabled
         recordingLimitPopup.isEnabled = state.configurationEnabled
@@ -1533,21 +1516,7 @@ public final class AdvancedSettingsWindowController:
         panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 132).isActive =
             true
 
-        internalDictionaryUnsupportedLabel.font = .systemFont(ofSize: 10)
-        internalDictionaryUnsupportedLabel.textColor = .secondaryLabelColor
-        internalDictionaryUnsupportedLabel.maximumNumberOfLines = 2
-        internalDictionaryUnsupportedLabel.lineBreakMode = .byWordWrapping
-        internalDictionaryUnsupportedLabel.isHidden = true
-        internalDictionaryUnsupportedLabel
-            .setContentCompressionResistancePriority(
-                .defaultLow,
-                for: .horizontal
-            )
-        themedSecondaryLabels.append(internalDictionaryUnsupportedLabel)
-
-        let column = NSStackView(
-            views: [internalDictionaryUnsupportedLabel, panes]
-        )
+        let column = NSStackView(views: [panes])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 6
@@ -1656,7 +1625,7 @@ public final class AdvancedSettingsWindowController:
         // the common choice is the visible one.
         advancedRows = [engineRow, modelRow, decodingRow, processingRow]
             .compactMap { $0 }
-        addRow(
+        internalDictionaryRow = addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
             control: internalDictionaryControl
@@ -1969,8 +1938,8 @@ public final class AdvancedSettingsWindowController:
         decodingRow.map { !$0.isHidden } ?? false
     }
 
-    var internalDictionaryUnsupportedNoticeVisibleForTesting: Bool {
-        !internalDictionaryUnsupportedLabel.isHidden
+    var internalDictionaryRowVisibleForTesting: Bool {
+        internalDictionaryRow.map { !$0.isHidden } ?? false
     }
 
     var internalDictionaryControlsEnabledForTesting: Bool {

@@ -99,7 +99,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testInternalDictionaryRowMarksItselfInertOnParakeetButStaysReachable() {
+    func testInternalDictionaryRowIsHiddenOnAnEngineWithoutPrompts() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
                 engine: .parakeetCoreML,
@@ -114,13 +114,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         controller.showWindow(nil)
 
-        // Unlike Decoding, the row stays on screen: these entries still
-        // apply on every whisper engine, so hiding them would only make
-        // them harder to find again.
-        XCTAssertTrue(
-            controller.internalDictionaryUnsupportedNoticeVisibleForTesting
-        )
-        XCTAssertFalse(controller.internalDictionaryControlsEnabledForTesting)
+        // An engine that accepts no prompt has no vocabulary setting, so the
+        // row is hidden rather than shown disabled under a sentence
+        // explaining why it does nothing.
+        XCTAssertFalse(controller.internalDictionaryRowVisibleForTesting)
         XCTAssertEqual(
             controller.internalDictionaryEntriesForTesting,
             ["Codex", "projLab"]
@@ -134,9 +131,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         controller.refresh()
 
-        XCTAssertFalse(
-            controller.internalDictionaryUnsupportedNoticeVisibleForTesting
-        )
+        XCTAssertTrue(controller.internalDictionaryRowVisibleForTesting)
         XCTAssertTrue(controller.internalDictionaryControlsEnabledForTesting)
         // Switching engines never touched the stored list.
         XCTAssertEqual(

@@ -17,22 +17,23 @@ import hashlib
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+# Imported rather than duplicated. A copy of this list drifted out of step with
+# build_app.py the moment a model was retired, and the release only failed at
+# packaging time, after the tag was already pushed.
+from build_app import (  # noqa: E402
+    BUNDLED_MODELS,
+    BUNDLED_PARAKEET_MODELS,
+)
 DEFAULT_APP = ROOT / "dist" / "whisper_hotkey.app"
 DEFAULT_DMG = ROOT / "dist" / "release" / "whisper_hotkey.dmg"
-# Must stay in step with BUNDLED_MODELS in build_app.py.
-BUNDLED_MODELS: dict[str, str] = {
-    "ggml-base.en.bin":
-        "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-    "ggml-small.en.bin":
-        "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
-    "ggml-large-v3-turbo-q5_0.bin":
-        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
-}
 
 
 def run(command: list[str], *, capture: bool = False) -> str:
@@ -62,6 +63,15 @@ def verify_release_app(app: Path, *, channel: str) -> str:
         if not model.is_file() or sha256(model) != expected:
             raise RuntimeError(
                 f"The release app must contain the pinned, verified {name}."
+            )
+    # Parakeet checkpoints are directories of compiled Core ML models whose
+    # layout FluidAudio owns, so they are verified by presence rather than by a
+    # digest this project does not control.
+    parakeet = app / "Contents" / "Resources" / "ParakeetModels"
+    for name in BUNDLED_PARAKEET_MODELS:
+        if not (parakeet / name).is_dir():
+            raise RuntimeError(
+                f"The release app must contain the bundled {name} checkpoint."
             )
     result = subprocess.run(
         ["/usr/bin/codesign", "--display", "--verbose=4", str(app)],
