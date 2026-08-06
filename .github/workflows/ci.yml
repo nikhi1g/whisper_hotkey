@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Every other workflow here can be run on demand. CI could not, so a push
+  # whose event GitHub failed to deliver left no way to get a run at all.
+  workflow_dispatch:
 
 permissions:
   contents: read
