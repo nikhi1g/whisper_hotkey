@@ -1,16 +1,21 @@
 # Local models
 
-Version 3.3.6 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.4.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, whisper.cpp with a Core ML encoder, native
 WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
 Recognition is English-only and entirely local.
 
-| Menu choice | File | Download | Tradeoff |
+| Menu choice | File | Size | Tradeoff |
 | --- | --- | ---: | --- |
-| Base English | `ggml-base.en.bin` | 141 MB | Fastest, lowest-memory, default |
-| Small English | `ggml-small.en.bin` | 465 MB | Better accuracy, moderate latency |
-| Medium English | `ggml-medium.en.bin` | 1.5 GB | Highest English-only accuracy, heaviest |
-| Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Strong accuracy/speed balance |
+| Parakeet Accurate | `parakeet-tdt-0.6b-v2` | 443 MB | Best accuracy and latency; default |
+| Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
+| Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
+| Base English | `ggml-base.en.bin` | 141 MB | Lightest whisper tier |
+
+Small and Medium English were retired in 3.4.0. Parakeet Fast beats Small on
+size, speed, and accuracy at once, and Medium was the largest and slowest model
+in the app without being more accurate than Turbo. A saved selection of either
+migrates to Turbo.
 
 Memory varies with whisper.cpp, Metal allocation, and recording length, so the
 menu shows download size rather than promising a fixed RAM number.

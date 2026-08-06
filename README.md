@@ -160,59 +160,58 @@ verify-setup  enable-login  disable-login  logs
 nonzero exit status until the complete setup is ready. `run.sh` uses it for the
 human-in-the-loop verification gate.
 
-## Models and recognition engines
+## Recognition
 
-The download includes Base English, Small English, and Large-v3 Turbo Q5 —
-every model a fresh launch can select on its own. On a genuinely fresh launch,
-whisper_hotkey chooses the strongest verified model already available within
-the Mac's memory tier, so it never starts on a model it does not have. Models
-trade disk space and speed for accuracy:
+Recognition leads with one choice, not four. Settings offers **Fast** and
+**Accurate**; everything else folds behind an Advanced disclosure.
 
-| Option | Model | Size | In the download | Typical reason to choose it |
-| --- | --- | ---: | --- | --- |
-| `base` | Base English | 141 MB | Yes | Fastest and lightest; default |
-| `small` | Small English | 465 MB | Yes | Better accuracy at moderate cost |
-| `turbo` | Large-v3 Turbo Q5 | 547 MB | Yes | Strong accuracy/speed balance |
-| `medium` | Medium English | 1.5 GB | On demand | Highest English-only accuracy; heaviest |
+| Preset | Runs | Word error rate | Latency |
+| --- | --- | ---: | ---: |
+| Fast | Parakeet 110M | 3.88% | 34 ms |
+| Accurate | Parakeet 0.6B | 2.62% | 56 ms |
 
-Medium English is the one model that cannot be bundled: all four together
-exceed GitHub's 2 GB release-asset limit. Selecting it in Settings offers to
-download it, showing progress and verifying it against the same pinned SHA-256
-the build pipeline uses. Nothing is installed if that check fails, and no other
-model is ever fetched at runtime.
+Both presets run NVIDIA Parakeet on the Neural Engine, and both checkpoints
+ship inside the app, so the best configuration on accuracy and latency is
+available on a fresh install with no download. Measured on this repository's
+own benchmark; reproduce with the harness in `Benchmarks/Parakeet/`.
 
-Install and select one model by rerunning the bootstrap:
+There are only two presets because a third would have nowhere to sit. Parakeet
+0.6B is simultaneously the most accurate option and answers in well under a
+tenth of a second, so a "balanced" tier would resolve to the same
+configuration as an "most accurate" one.
+
+### Advanced
+
+The Advanced disclosure exposes the engine, model, decoding profile, and
+processing mode directly. A configuration that matches neither preset reports
+**Custom** and keeps those controls open, because they are the only
+explanation for the state.
+
+| Option | Model | Size | Reason to choose it |
+| --- | --- | ---: | --- |
+| Parakeet Accurate | `parakeet-tdt-0.6b-v2` | 443 MB | Default; best on both axes |
+| Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
+| `turbo` | Large-v3 Turbo Q5 | 547 MB | Whisper, supports the internal dictionary |
+| `base` | Base English | 141 MB | Lightest whisper tier |
+
+Both Whisper models remain because Parakeet is a transducer: it accepts no
+prompt, so the internal dictionary and Pause Mode context only bias Whisper.
+Small and Medium English were retired in 3.4.0 — Parakeet Fast beats Small on
+size, speed, and accuracy at once, and Medium was the largest and slowest model
+in the app without being more accurate than Turbo.
+
+Every model ships inside the app. Nothing is fetched at runtime.
 
 ```sh
-./run.sh --model small
-./run.sh --model medium
+./run.sh --model base
 ./run.sh --model turbo
-./run.sh --all-models
-```
-
-Metal is the default engine. Optional Core ML artifacts are installed and
-selected explicitly:
-
-```sh
+./run.sh --engine parakeet
 ./run.sh --model turbo --engine coreml
 ./run.sh --model turbo --engine whisperkit
-./run.sh --engine parakeet
 ```
 
-Parakeet runs NVIDIA Parakeet on the Neural Engine instead of whisper, and on
-this repository's LibriSpeech benchmark it is both more accurate and several
-times faster than every whisper option: 2.62% WER at 56 ms per utterance
-against Large-v3 Turbo Q5's 4.32% at 321 ms. It is its own model family, so
-selecting it swaps the four whisper chips for its own two, Fast and Accurate,
-and keeps that choice separately from the whisper one. Both download on first
-use rather than through the bootstrap. Because it is a transducer it has no beam search, so the
-Decoding chips do not apply, and it accepts no prompt, so the internal
-dictionary and Pause Mode context do not bias it.
-
-`--all-models` selects Base after installing all four. Any explicit `--model`
-or `--engine` choice is persisted before the newly built app launches. Missing
-models and engines remain disabled in Settings; rerun the bootstrap to add one.
-The app never silently switches engines. See
+Any explicit `--model` or `--engine` choice is persisted before the newly built
+app launches. The app never silently switches engines. See
 [docs/MODELS.md](docs/MODELS.md) for engine and decoding details.
 
 ## Validate or troubleshoot
@@ -222,7 +221,7 @@ anything:
 
 ```sh
 ./run.sh --check
-./run.sh --check --model small --engine coreml
+./run.sh --check --model turbo --engine coreml
 ```
 
 Common recovery commands:

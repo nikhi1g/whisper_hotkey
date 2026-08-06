@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.4.0: 2026-08-05
+
+Two Choices release. Recognition is one decision now, not four.
+
+- Led the Recognition settings with **Fast** and **Accurate**, folding engine,
+  model, decoding profile, and processing mode behind an Advanced disclosure.
+  Those four controls existed to serve one decision — lowest latency or best
+  accuracy — and made the user assemble it from parts in vocabulary they had no
+  reason to know
+- Resolved both presets to Parakeet, which is ahead of every Whisper
+  configuration on accuracy and latency at once
+- Shipped both Parakeet checkpoints inside the app, so the best configuration
+  is available on a fresh install with no download at all
+- Reported **Custom** for a configuration matching neither preset, highlighting
+  no segment and keeping the advanced controls open, since they are the only
+  explanation for the state
+- Retired Small and Medium English. Parakeet Fast beats Small on size, speed,
+  and accuracy at once (217 MB, 3.88%, 34 ms against 466 MB and 8.59%), and
+  Medium was the largest and slowest model in the app without being more
+  accurate than Turbo. A saved selection of either migrates to Turbo
+- Kept Base English and Large-v3 Turbo Q5, because Parakeet accepts no prompt
+  and the internal dictionary only biases Whisper
+- Emptied the runtime download catalog: every model the app can select now
+  ships inside it
+
 ## 3.3.6: 2026-08-05
 
 An Honest Interface release. Every fix here is a surface that reported

@@ -1,50 +1,47 @@
-Version 3.3.6 fixes the interface bugs that shipped alongside Parakeet in
-3.3.0. Every one of them is the same defect in a different place: a surface
-reporting something other than what the app was actually doing.
+Version 3.4.0 turns recognition into one decision. Settings offers Fast and
+Accurate; everything else folds away.
 
-## Highlights
+## Two presets
 
-- **Settings no longer wedges when you switch engines.** Going from Parakeet
-  back to a whisper engine applied the model selection before the Model row was
-  rebuilt, so a two-segment control was asked for its third segment. AppKit
-  raised an exception from inside the click handler, the refresh was abandoned
-  half-done, and every later click hit the same wall. Nothing crashed, which is
-  exactly why it looked like a freeze.
-- **Parakeet checkpoints install before they are selected.** Choosing Parakeet
-  used to succeed instantly and defer the real cost to your first dictation,
-  which then downloaded several hundred megabytes behind a Transcribing badge
-  with no progress, no cancel, and no timeout. It is now an explicit step with
-  a size confirmation, a progress panel, and a Cancel that leaves your previous
-  engine in place.
-- **Cancelling an install is no longer reported as a failure**, and a Parakeet
-  problem is no longer described as a whisper helper failure.
+| Preset | Runs | Word error rate | Latency |
+| --- | --- | ---: | ---: |
+| Fast | Parakeet 110M | 3.88% | 34 ms |
+| Accurate | Parakeet 0.6B | 2.62% | 56 ms |
 
-## Surfaces that now describe what is running
+Both run NVIDIA Parakeet on the Neural Engine, and **both checkpoints now ship
+inside the app**, so the best configuration on accuracy and latency at once is
+there on a fresh install with no download.
 
-- The **User Guide** named the whisper model and offered Precision and Smart
-  Decode even on Parakeet, which is a transducer with no beam search.
-- The **internal dictionary** stayed fully interactive on Parakeet, saving
-  entries that never reached the recognizer because a transducer accepts no
-  prompt. The row now says so. Entries are kept, not cleared, because they
-  still apply on every whisper engine.
-- The **Setup window** reported a ready whisper model and a ready whisper
-  helper for an engine that uses neither.
-- The **engine picker** could strand you: engine availability was computed
-  against the selected whisper model, so one uninstalled model greyed out every
-  whisper engine at once, with no way back from Parakeet.
+There are two presets rather than three because a third had nowhere to sit.
+Parakeet 0.6B is simultaneously the most accurate option and answers in well
+under a tenth of a second, so a "balanced" tier would have resolved to the same
+configuration as "most accurate". A picker whose options are not distinct is a
+picker that lies about having a choice.
 
-## Also
+## Advanced is still there
 
-- An app already running from ~/Applications is no longer offered a reinstall
-  it does not need.
+Engine, model, decoding profile, and processing mode live behind an Advanced
+disclosure. A configuration matching neither preset reports **Custom**,
+highlights no segment, and keeps those controls open, because they are the only
+explanation for the state.
 
-Nothing about recognition itself changed. The measured numbers from 3.3.0 still
-stand: Parakeet Accurate at 2.62% word error rate and 56 ms per utterance
-against Large-v3 Turbo Q5's 4.32% at 321 ms, on the benchmark in
-`Benchmarks/Parakeet/`.
+## The model lineup is smaller
+
+Small and Medium English are retired.
+
+- **Small** had no remaining niche: Parakeet Fast beats it on size, speed, and
+  accuracy at once — 217 MB and 3.88% against Small's 466 MB and 8.59% — and
+  Turbo beats it on accuracy for only 82 MB more.
+- **Medium** was the largest and slowest model in the app and was not more
+  accurate than Turbo.
+
+A saved selection of either migrates to Turbo. Base English and Large-v3 Turbo
+Q5 stay: Parakeet is a transducer and accepts no prompt, so the internal
+dictionary only biases Whisper, and Base is the only genuinely lightweight tier.
+
+Every model now ships inside the app. Nothing is fetched at runtime.
 
 The app is signed with a stable Apple Development identity and is not
 notarized, so the first launch still needs one approval through System
 Settings > Privacy & Security > Open Anyway. Audio and transcripts remain
-local, and every bundled and downloaded whisper model is verified against a
-pinned SHA-256.
+local, and every bundled Whisper model is verified against a pinned SHA-256.
