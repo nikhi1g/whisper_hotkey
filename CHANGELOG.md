@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.4.2: 2026-08-06
+
+Release plumbing. No change to how the app behaves.
+
+- Populated the Parakeet cache before the release build. Bundling the
+  checkpoints in 3.4.1 broke the release workflow in a way hidden behind the
+  missing signing secrets: `build_app.py` copies them out of FluidAudio's cache,
+  and a clean runner has none, so the build would have failed even once the
+  secrets were added. The benchmark harness grew a `download` subcommand rather
+  than this needing a new package or a hand-rolled fetch
+- Dropped the retired `ggml-small.en.bin` from the workflow's download list. The
+  workflow's downloads now match `build_app.py` exactly
+- Separated the Parakeet copy from the verified whisper copy in `build_app.py`,
+  so a test stubbing the whisper model list no longer reaches for the real
+  FluidAudio cache
+
 ## 3.4.1: 2026-08-05
 
 Two Choices release. Recognition is one decision now, not four.

@@ -1,45 +1,31 @@
-Version 3.4.1 turns recognition into one decision. Settings offers Fast and
-Accurate; everything else folds away.
+Version 3.4.2 is release plumbing. Nothing about how the app behaves changed
+from 3.4.1 — if you are already on 3.4.1, there is no reason to update.
 
-## Two presets
+## What it fixes
 
-| Preset | Runs | Word error rate | Latency |
-| --- | --- | ---: | ---: |
-| Fast | Parakeet 110M | 3.88% | 34 ms |
-| Accurate | Parakeet 0.6B | 2.62% | 56 ms |
+Bundling the Parakeet checkpoints in 3.4.1 broke the signed-release workflow in
+a way that was hidden behind an unrelated failure. `build_app.py` copies the
+checkpoints out of FluidAudio's cache, and a clean CI runner has no cache, so
+the build would have failed even once the signing secrets were in place.
 
-Both run NVIDIA Parakeet on the Neural Engine, and **both checkpoints now ship
-inside the app**, so the best configuration on accuracy and latency at once is
-there on a fresh install with no download.
+- The benchmark harness grew a `download` subcommand, so the workflow can
+  populate that cache before building. It already links FluidAudio, so this
+  needed no new package and no hand-rolled fetch against a file layout
+  FluidAudio owns. Verified against both a warm cache, where it is a no-op, and
+  a genuinely empty one.
+- The workflow was still downloading `ggml-small.en.bin`, retired in 3.4.1. Its
+  download list now matches `build_app.py` exactly, so the two cannot drift
+  again the next time the lineup changes.
+- `build_app.py` no longer copies the Parakeet checkpoints from inside the
+  function that copies the digest-verified Whisper models. Each does one job,
+  and the Parakeet copy honors the same opt-in flag, so an ordinary development
+  build does not need the checkpoints present.
 
-There are two presets rather than three because a third had nowhere to sit.
-Parakeet 0.6B is simultaneously the most accurate option and answers in well
-under a tenth of a second, so a "balanced" tier would have resolved to the same
-configuration as "most accurate". A picker whose options are not distinct is a
-picker that lies about having a choice.
+## Unchanged
 
-## Advanced is still there
-
-Engine, model, decoding profile, and processing mode live behind an Advanced
-disclosure. A configuration matching neither preset reports **Custom**,
-highlights no segment, and keeps those controls open, because they are the only
-explanation for the state.
-
-## The model lineup is smaller
-
-Small and Medium English are retired.
-
-- **Small** had no remaining niche: Parakeet Fast beats it on size, speed, and
-  accuracy at once — 217 MB and 3.88% against Small's 466 MB and 8.59% — and
-  Turbo beats it on accuracy for only 82 MB more.
-- **Medium** was the largest and slowest model in the app and was not more
-  accurate than Turbo.
-
-A saved selection of either migrates to Turbo. Base English and Large-v3 Turbo
-Q5 stay: Parakeet is a transducer and accepts no prompt, so the internal
-dictionary only biases Whisper, and Base is the only genuinely lightweight tier.
-
-Every model now ships inside the app. Nothing is fetched at runtime.
+The recognition presets, the bundled model lineup, and the app binary behave
+exactly as in 3.4.1: Fast and Accurate, both running Parakeet on the Neural
+Engine, with both checkpoints shipped inside the app.
 
 The app is signed with a stable Apple Development identity and is not
 notarized, so the first launch still needs one approval through System

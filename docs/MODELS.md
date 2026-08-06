@@ -1,6 +1,6 @@
 # Local models
 
-Version 3.4.1 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.4.2 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, whisper.cpp with a Core ML encoder, native
 WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
 Recognition is English-only and entirely local.
