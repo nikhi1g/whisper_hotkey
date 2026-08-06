@@ -174,10 +174,10 @@ public final class AdvancedSettingsWindowController:
     private let modelControl = NSSegmentedControl()
     private let engineControl = NSSegmentedControl()
     private let presetControl = NSSegmentedControl()
+    /// A labelled button rather than a disclosure triangle: a bare triangle
+    /// renders as a stray glyph beside the preset chips and says nothing about
+    /// what it opens.
     private let advancedDisclosure = NSButton()
-    /// A `.disclosure` bezel draws a bare triangle and discards the button's
-    /// title, so the label lives beside it or the control is unexplained.
-    private let advancedDisclosureLabel = NSTextField(labelWithString: "Advanced")
     private var advancedRows: [NSGridRow] = []
     private var showsAdvancedRecognition = false
     private let decodingControl = NSSegmentedControl()
@@ -378,9 +378,9 @@ public final class AdvancedSettingsWindowController:
             presetControl.selectedSegment = -1
         }
         presetControl.isEnabled = state.configurationEnabled
-        advancedDisclosureLabel.stringValue = preset == .custom
-            ? "Advanced (in use)"
-            : "Advanced"
+        advancedDisclosure.title = preset == .custom
+            ? "Advanced Options (in use)"
+            : "Advanced Options"
         // Custom cannot be folded away: it exists only because the advanced
         // controls are doing something, so they have to be visible.
         let showsAdvanced = showsAdvancedRecognition || preset == .custom
@@ -924,12 +924,18 @@ public final class AdvancedSettingsWindowController:
             presetControl.setToolTip(preset.summary, forSegment: index)
         }
         advancedDisclosure.setButtonType(.pushOnPushOff)
-        advancedDisclosure.bezelStyle = .disclosure
+        advancedDisclosure.bezelStyle = .rounded
+        advancedDisclosure.controlSize = .small
+        advancedDisclosure.title = "Advanced Options"
+        advancedDisclosure.image = NSImage(
+            systemSymbolName: "gearshape",
+            accessibilityDescription: nil
+        )
+        advancedDisclosure.imagePosition = .imageLeading
+        advancedDisclosure.imageHugsTitle = true
         advancedDisclosure.target = self
         advancedDisclosure.action = #selector(toggleAdvancedRecognition(_:))
-        advancedDisclosure.setAccessibilityLabel("Show advanced recognition")
-        advancedDisclosureLabel.font = .systemFont(ofSize: 11)
-        advancedDisclosureLabel.textColor = .secondaryLabelColor
+        advancedDisclosure.setAccessibilityLabel("Advanced Options")
         configure(
             engineControl,
             labels: RecognitionEngine.allCases.map(\.displayName),
@@ -1606,8 +1612,16 @@ public final class AdvancedSettingsWindowController:
         // The disclosure shares the preset's row rather than taking one of its
         // own: the section has a fixed height budget, and a row spent on a
         // single toggle is a row not spent on a setting.
+        // A flexible spacer pushes the button to the trailing edge, so the two
+        // presets read as the row's content and the escape hatch sits apart.
+        let recognitionSpacer = NSView()
+        recognitionSpacer.translatesAutoresizingMaskIntoConstraints = false
+        recognitionSpacer.setContentHuggingPriority(
+            .defaultLow,
+            for: .horizontal
+        )
         let recognitionControls = NSStackView(
-            views: [presetControl, advancedDisclosure, advancedDisclosureLabel]
+            views: [presetControl, recognitionSpacer, advancedDisclosure]
         )
         recognitionControls.orientation = .horizontal
         recognitionControls.spacing = 8
