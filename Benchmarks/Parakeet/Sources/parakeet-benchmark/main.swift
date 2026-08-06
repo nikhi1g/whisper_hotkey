@@ -43,6 +43,53 @@ if arguments.count >= 2, arguments[1] == "download" {
     exit(0)
 }
 
+// Parakeet Unified: one checkpoint serving offline and streaming. Benchmarked
+// through the same WAV list and JSON output as every other engine here.
+if arguments.count == 3, arguments[1] == "unified" {
+    let listURL = URL(fileURLWithPath: arguments[2])
+    let paths = try String(contentsOf: listURL, encoding: .utf8)
+        .split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    let manager = UnifiedAsrManager()
+    let converter = AudioConverter()
+    let loadStart = Date()
+    // Downloads on first use, then loads from the same cache.
+    try await manager.loadModels()
+    FileHandle.standardError.write(
+        "loaded unified in \(String(format: "%.1f", Date().timeIntervalSince(loadStart)))s\n"
+            .data(using: .utf8)!
+    )
+    if let first = paths.first {
+        for _ in 0..<2 {
+            _ = try? await manager.transcribe(
+                try converter.resampleAudioFile(URL(fileURLWithPath: first))
+            )
+        }
+        FileHandle.standardError.write("warmed up\n".data(using: .utf8)!)
+    }
+    struct UnifiedRow: Encodable {
+        let id: String
+        let text: String
+        let seconds: Double
+    }
+    let encoder = JSONEncoder()
+    for path in paths {
+        let url = URL(fileURLWithPath: path)
+        let samples = try converter.resampleAudioFile(url)
+        try await manager.reset()
+        let started = Date()
+        let text = try await manager.transcribe(samples)
+        let row = UnifiedRow(
+            id: url.deletingPathExtension().lastPathComponent,
+            text: text,
+            seconds: Date().timeIntervalSince(started)
+        )
+        FileHandle.standardOutput.write(try encoder.encode(row))
+        FileHandle.standardOutput.write("\n".data(using: .utf8)!)
+    }
+    await manager.cleanup()
+    exit(0)
+}
+
 // Cohere Transcribe: a different engine entirely, benchmarked through the same
 // WAV list and JSON output so its WER and latency are directly comparable.
 if arguments.count >= 2, arguments[1] == "cohere-download" {

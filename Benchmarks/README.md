@@ -47,6 +47,27 @@ English-only). The first run downloads the checkpoint. Two warm-up passes run
 before timing so the measurement reflects a resident model, matching how the
 whisper benchmark drives an already-loaded helper.
 
+## Parakeet Unified
+
+```sh
+./Benchmarks/Parakeet/.build/release/parakeet-benchmark unified /tmp/wavlist.txt \
+  > /tmp/unified.jsonl
+python3 Benchmarks/Scripts/score_parakeet.py /tmp/unified.jsonl
+```
+
+Measured on the 100-utterance set, Apple M5 Pro, against the shipping engine:
+
+| Engine | Combined WER | test-clean | test-other | Mean | p50 | p95 | Disk |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Parakeet Unified | **2.46%** | **1.44%** | **3.63%** | **50 ms** | **41 ms** | 105 ms | 594 MB |
+| Parakeet TDT v2 | 2.62% | 1.54% | 3.86% | 56 ms | 53 ms | **78 ms** | 443 MB |
+
+Unified wins every accuracy measure and both mean and median latency. Its only
+regression is the tail: it transcribes audio longer than 15 s with overlapping
+windows, and all seven files over that length in this set are slower than v2
+(138 ms against 100 ms at the worst). Dictation phrases are far shorter than
+that, so the median is the number that matters and the tail is bounded.
+
 ## Cohere Transcribe
 
 The same harness benchmarks Cohere Transcribe, so its numbers are directly
