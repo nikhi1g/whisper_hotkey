@@ -156,16 +156,20 @@ def bundle_verified_models() -> None:
                 "failed."
             )
         shutil.copy2(source, destination_directory / name)
-    bundle_parakeet_models()
 
 
 def bundle_parakeet_models() -> None:
     """Copy the Parakeet checkpoints into the app bundle.
 
+    Kept separate from bundle_verified_models so each does one job: the whisper
+    models are verified by pinned digest, these are verified by presence.
+
     These are directories of compiled Core ML models rather than single files,
     and FluidAudio owns their layout, so they are copied wholesale and verified
     by presence rather than by a digest we do not control.
     """
+    if os.environ.get("WHISPER_HOTKEY_BUNDLE_MODEL") != "1":
+        return
     destination_directory = RESOURCES / "ParakeetModels"
     destination_directory.mkdir(parents=True, exist_ok=True)
     for name in BUNDLED_PARAKEET_MODELS:
@@ -440,6 +444,7 @@ def main() -> None:
     DIST.mkdir(parents=True, exist_ok=True)
     bundle(products)
     bundle_verified_models()
+    bundle_parakeet_models()
     libraries = bundled_dynamic_libraries()
     verify_bundled_dependencies([
         *libraries,
