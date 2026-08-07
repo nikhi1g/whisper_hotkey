@@ -139,54 +139,6 @@ public enum WhisperHotkeyPaths {
             .standardizedFileURL
     }
 
-    public static func coreMLModelURL(
-        for model: DictationModel,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) -> URL {
-        homeDirectory
-            .appendingPathComponent(
-                ".cache/whisper/coreml",
-                isDirectory: true
-            )
-            .appendingPathComponent(model.fileName)
-            .standardizedFileURL
-    }
-
-    public static func coreMLEncoderURL(
-        for model: DictationModel,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) -> URL {
-        let modelURL = coreMLModelURL(
-            for: model,
-            homeDirectory: homeDirectory
-        )
-        var stem = modelURL.deletingPathExtension().lastPathComponent
-        if let quantizedRange = stem.range(
-            of: #"-q\d_\d$"#,
-            options: .regularExpression
-        ) {
-            stem.removeSubrange(quantizedRange)
-        }
-        return modelURL.deletingLastPathComponent()
-            .appendingPathComponent(
-                "\(stem)-encoder.mlmodelc",
-                isDirectory: true
-            )
-    }
-
-    public static func whisperKitModelURL(
-        for model: DictationModel,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) -> URL {
-        homeDirectory
-            .appendingPathComponent(
-                ".cache/whisperkit",
-                isDirectory: true
-            )
-            .appendingPathComponent(model.whisperKitFolderName, isDirectory: true)
-            .standardizedFileURL
-    }
-
     /// Where FluidAudio caches a Parakeet checkpoint. This is reported for
     /// display and diagnostics only: FluidAudio owns the directory and creates
     /// it on first download, so nothing here should treat it as a precondition.

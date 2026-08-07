@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_DIR="${HOME}/.cache/whisper"
 MODEL_BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
-COREML_WHISPER_PREFIX="${HOME}/.local/share/whisper_hotkey/whisper.cpp-coreml-1.9.1"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 LOCAL_SIGNING_IDENTITY="whisper_hotkey Local Development"
 BUNDLE_IDENTIFIER="local.whisperhotkey.app"
@@ -25,7 +24,7 @@ Usage: ./run.sh [options]
 Build, install, launch, and open setup for whisper_hotkey.
 
   --model base|turbo                Install and select one model (default: base)
-  --engine metal|coreml|whisperkit|parakeet|cohere
+  --engine metal|parakeet|cohere
                                     Install and select an engine (default: metal)
                                     parakeet fetches its model on first use
   --all-models                      Install every supported model (~2.7 GB)
@@ -97,8 +96,6 @@ model_preference() {
 engine_preference() {
     case "$1" in
         metal) echo "whisperCppMetal" ;;
-        coreml) echo "whisperCppCoreML" ;;
-        whisperkit) echo "whisperKitCoreML" ;;
         parakeet) echo "parakeetCoreML" ;;
         cohere) echo "cohereCoreML" ;;
         *) die "unknown engine: $1" ;;
@@ -270,26 +267,6 @@ wait_for_verified_setup() {
     done
 }
 
-coreml_encoder_name() {
-    case "$1" in
-        base) echo "ggml-base.en-encoder.mlmodelc.zip" ;;
-        small) echo "ggml-small.en-encoder.mlmodelc.zip" ;;
-        medium) echo "ggml-medium.en-encoder.mlmodelc.zip" ;;
-        turbo) echo "ggml-large-v3-turbo-encoder.mlmodelc.zip" ;;
-        *) die "unknown model: $1" ;;
-    esac
-}
-
-coreml_encoder_sha256() {
-    case "$1" in
-        base) echo "8cf860309e2449e2bdc8be834cf838ab2565747ecc8c0ef914ef5975115e192b" ;;
-        small) echo "b2ef1c506378b825b4b4341979a93e1656b5d6c129f17114cfb8fb78aabc2f89" ;;
-        medium) echo "cdc44fee3c62b5743913e3147ed75f4e8ecfb52dd7a0f0f7387094b406ff0ee6" ;;
-        turbo) echo "84bedfe895bd7b5de6e8e89a0803dfc5addf8c0c5bc4c937451716bf7cf7988a" ;;
-        *) die "unknown model: $1" ;;
-    esac
-}
-
 verify_model() {
     local model="$1" file expected actual
     file="${MODEL_DIR}/$(model_file "$model")"
@@ -330,92 +307,6 @@ download_model() {
     DOWNLOAD_TEMP_FILE=""
 }
 
-download_coreml_encoder() {
-    local model="$1" name archive temporary expected actual coreml_dir
-    name="$(coreml_encoder_name "$model")"
-    archive="${MODEL_DIR}/${name}"
-    temporary="${archive}.download.$$"
-    DOWNLOAD_TEMP_FILE="$temporary"
-    coreml_dir="${MODEL_DIR}/coreml"
-    /bin/mkdir -p "$coreml_dir"
-    /bin/chmod 700 "$coreml_dir"
-    if [[ ! -f "$archive" ]]; then
-        note "Downloading $name"
-        /usr/bin/curl --fail --location --retry 3 --progress-bar \
-            "${MODEL_BASE_URL}/${name}" --output "$temporary"
-        expected="$(coreml_encoder_sha256 "$model")"
-        actual="$(/usr/bin/shasum -a 256 "$temporary" | /usr/bin/awk '{print $1}')"
-        [[ "$actual" == "$expected" ]] \
-            || die "checksum verification failed for $name"
-        /bin/chmod 600 "$temporary"
-        /bin/mv "$temporary" "$archive"
-    fi
-    DOWNLOAD_TEMP_FILE=""
-    expected="$(coreml_encoder_sha256 "$model")"
-    actual="$(/usr/bin/shasum -a 256 "$archive" | /usr/bin/awk '{print $1}')"
-    [[ "$actual" == "$expected" ]] || die "invalid Core ML encoder archive"
-    /usr/bin/ditto -x -k "$archive" "$coreml_dir"
-    /bin/ln -sfn "../$(model_file "$model")" \
-        "${coreml_dir}/$(model_file "$model")"
-}
-
-verify_coreml_encoder() {
-    local model="$1" archive expected actual encoder model_link
-    archive="${MODEL_DIR}/$(coreml_encoder_name "$model")"
-    encoder="${MODEL_DIR}/coreml/$(
-        coreml_encoder_name "$model" | /usr/bin/sed 's/\.zip$//'
-    )"
-    model_link="${MODEL_DIR}/coreml/$(model_file "$model")"
-    [[ -f "$archive" && -d "$encoder" && -f "$model_link" ]] || return 1
-    expected="$(coreml_encoder_sha256 "$model")"
-    actual="$(/usr/bin/shasum -a 256 "$archive" | /usr/bin/awk '{print $1}')"
-    [[ "$actual" == "$expected" ]]
-}
-
-prepare_coreml_runtime() {
-    local source_dir build_dir
-    WHISPER_CPP_PREFIX="$COREML_WHISPER_PREFIX"
-    GGML_PREFIX="$WHISPER_CPP_PREFIX"
-    source_dir="${HOME}/.cache/whisper_hotkey/whisper.cpp-1.9.1"
-    build_dir="${source_dir}/build-coreml"
-    if [[ ! -f "${WHISPER_CPP_PREFIX}/share/whisper_hotkey/macos-14" ]]; then
-        /bin/mkdir -p "$(/usr/bin/dirname "$source_dir")"
-        if [[ ! -d "${source_dir}/.git" ]]; then
-            note "Fetching pinned whisper.cpp 1.9.1 source"
-            /usr/bin/git clone --depth 1 --branch v1.9.1 \
-                https://github.com/ggml-org/whisper.cpp.git "$source_dir"
-        fi
-        [[ "$(/usr/bin/git -C "$source_dir" rev-parse HEAD)" \
-            == "f049fff95a089aa9969deb009cdd4892b3e74916" ]] \
-            || die "whisper.cpp source revision is not the pinned v1.9.1 commit"
-        note "Building whisper.cpp with Core ML and Metal"
-        /opt/homebrew/bin/cmake -S "$source_dir" -B "$build_dir" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-            -DCMAKE_INSTALL_PREFIX="$WHISPER_CPP_PREFIX" \
-            -DWHISPER_COREML=ON \
-            -DWHISPER_COREML_ALLOW_FALLBACK=ON \
-            -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DGGML_METAL=ON \
-            -DBUILD_SHARED_LIBS=ON
-        /opt/homebrew/bin/cmake --build "$build_dir" --parallel
-        /opt/homebrew/bin/cmake --install "$build_dir"
-        /bin/mkdir -p "${WHISPER_CPP_PREFIX}/share/whisper_hotkey"
-        /usr/bin/touch \
-            "${WHISPER_CPP_PREFIX}/share/whisper_hotkey/macos-14"
-    fi
-    export WHISPER_HOTKEY_COREML=1
-}
-
-use_installed_coreml_runtime() {
-    if [[ -f "${COREML_WHISPER_PREFIX}/lib/libwhisper.dylib" ]]; then
-        WHISPER_CPP_PREFIX="$COREML_WHISPER_PREFIX"
-        GGML_PREFIX="$COREML_WHISPER_PREFIX"
-        export WHISPER_CPP_PREFIX GGML_PREFIX
-        export WHISPER_HOTKEY_COREML=1
-    fi
-}
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -434,7 +325,7 @@ while [[ $# -gt 0 ]]; do
         --engine)
             [[ $# -ge 2 ]] || die "--engine requires a value"
             case "$2" in
-                metal|coreml|whisperkit|parakeet|cohere) ENGINE="$2" ;;
+                metal|parakeet|cohere) ENGINE="$2" ;;
                 *) die "unknown engine: $2" ;;
             esac
             SELECTION_WAS_REQUESTED=1
@@ -465,15 +356,6 @@ if ! /opt/homebrew/bin/brew list --versions whisper-cpp >/dev/null 2>&1; then
     /opt/homebrew/bin/brew install whisper-cpp
 fi
 
-if [[ "$ENGINE" == "coreml" \
-      && ! -f "${COREML_WHISPER_PREFIX}/share/whisper_hotkey/macos-14" \
-      && ! -x /opt/homebrew/bin/cmake ]]
-then
-    [[ "$CHECK_ONLY" -eq 0 ]] || die "Homebrew cmake is not installed"
-    note "Installing cmake for the optional Core ML runtime build"
-    /opt/homebrew/bin/brew install cmake
-fi
-
 export WHISPER_CPP_PREFIX GGML_PREFIX HOMEBREW_PREFIX
 HOMEBREW_PREFIX="$(/opt/homebrew/bin/brew --prefix)"
 WHISPER_CPP_PREFIX="$(/opt/homebrew/bin/brew --prefix whisper-cpp)"
@@ -483,24 +365,6 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
     for model in "${REQUESTED_MODELS[@]}"; do
         verify_model "$model" || die "$(model_file "$model") is missing or invalid"
     done
-    case "$ENGINE" in
-        coreml)
-            [[ -f "${COREML_WHISPER_PREFIX}/share/whisper_hotkey/macos-14" ]] \
-                || die "the pinned Core ML whisper.cpp runtime is missing"
-            for model in "${REQUESTED_MODELS[@]}"; do
-                verify_coreml_encoder "$model" \
-                    || die "the Core ML encoder for $model is missing or invalid"
-            done
-            ;;
-        whisperkit)
-            for model in "${REQUESTED_MODELS[@]}"; do
-                /usr/bin/python3 \
-                    "${ROOT}/scripts/download_whisperkit_model.py" \
-                    "$model" --destination "${HOME}/.cache/whisperkit" \
-                    --verify-only
-            done
-            ;;
-    esac
     note "Prerequisites and requested models are ready"
     exit 0
 fi
@@ -508,22 +372,6 @@ fi
 /bin/mkdir -p "$MODEL_DIR"
 /bin/chmod 700 "$MODEL_DIR"
 for model in "${REQUESTED_MODELS[@]}"; do download_model "$model"; done
-case "$ENGINE" in
-    coreml)
-        prepare_coreml_runtime
-        for model in "${REQUESTED_MODELS[@]}"; do
-            download_coreml_encoder "$model"
-        done
-        ;;
-    whisperkit)
-        for model in "${REQUESTED_MODELS[@]}"; do
-            note "Downloading verified WhisperKit $model model"
-            /usr/bin/python3 "${ROOT}/scripts/download_whisperkit_model.py" \
-                "$model" --destination "${HOME}/.cache/whisperkit"
-        done
-        ;;
-esac
-use_installed_coreml_runtime
 
 cd "$ROOT"
 note "Building whisper_hotkey $(/bin/cat VERSION)"

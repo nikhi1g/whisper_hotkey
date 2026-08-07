@@ -290,76 +290,30 @@ final class RecognitionTests: XCTestCase {
         )
     }
 
-    func testDiscoveryRequiresCompleteExplicitAcceleratedArtifacts() throws {
+    /// The Core ML encoder and WhisperKit engines were retired in 3.6.0; what
+    /// survives is Metal's requirement that the model path be a real file.
+    /// A directory there used to satisfy the existence check.
+    func testDiscoveryRejectsADirectoryWhereTheModelFileBelongs() throws {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: home) }
 
-        let coreMLModel = WhisperHotkeyPaths.coreMLModelURL(
-            for: .baseEnglish,
-            homeDirectory: home
-        )
-        let encoder = WhisperHotkeyPaths.coreMLEncoderURL(
+        let modelURL = WhisperHotkeyPaths.modelURL(
             for: .baseEnglish,
             homeDirectory: home
         )
         try FileManager.default.createDirectory(
-            at: coreMLModel.deletingLastPathComponent(),
+            at: modelURL,
             withIntermediateDirectories: true
         )
-        try Data([0]).write(to: coreMLModel)
         XCTAssertThrowsError(
             try WhisperRuntimeDiscovery.discover(
                 model: .baseEnglish,
-                engine: .whisperCppCoreML,
-                environment: ["WHISPER_HOTKEY_COREML": "1"],
+                engine: .whisperCppMetal,
+                environment: [:],
                 homeDirectory: home
             )
         )
-        try FileManager.default.createDirectory(
-            at: encoder,
-            withIntermediateDirectories: true
-        )
-        let coreMLConfiguration = try WhisperRuntimeDiscovery.discover(
-            model: .baseEnglish,
-            engine: .whisperCppCoreML,
-            environment: ["WHISPER_HOTKEY_COREML": "1"],
-            homeDirectory: home
-        )
-        XCTAssertEqual(coreMLConfiguration.modelURL, coreMLModel)
-
-        let whisperKit = WhisperHotkeyPaths.whisperKitModelURL(
-            for: .baseEnglish,
-            homeDirectory: home
-        )
-        try FileManager.default.createDirectory(
-            at: whisperKit,
-            withIntermediateDirectories: true
-        )
-        for name in [
-            "AudioEncoder.mlmodelc",
-            "MelSpectrogram.mlmodelc",
-            "TextDecoder.mlmodelc",
-        ] {
-            try FileManager.default.createDirectory(
-                at: whisperKit.appendingPathComponent(name),
-                withIntermediateDirectories: true
-            )
-        }
-        try Data("{}".utf8).write(
-            to: whisperKit.appendingPathComponent("tokenizer.json")
-        )
-        try Data("{}".utf8).write(
-            to: whisperKit.appendingPathComponent("tokenizer_config.json")
-        )
-        let whisperKitConfiguration = try WhisperRuntimeDiscovery.discover(
-            model: .baseEnglish,
-            engine: .whisperKitCoreML,
-            environment: [:],
-            homeDirectory: home
-        )
-        XCTAssertEqual(whisperKitConfiguration.modelURL, whisperKit)
-        XCTAssertEqual(whisperKitConfiguration.engine, .whisperKitCoreML)
     }
 
     func testThreadBudgetUsesHalfTheMachineUpToEight() {

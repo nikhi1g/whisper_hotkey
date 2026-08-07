@@ -115,8 +115,6 @@ def bundle(products: Path) -> None:
     shutil.copy2(products / "whisper_hotkey", DIST / "whisper_hotkey")
     shutil.copy2(ROOT / "purpose.md", RESOURCES / "purpose.md")
     shutil.copy2(ASSETS / "AppIcon.icns", RESOURCES / "AppIcon.icns")
-    if os.environ.get("WHISPER_HOTKEY_COREML") == "1":
-        (RESOURCES / "CoreMLEnabled").touch()
     write_info_plist()
     write_login_agent_plist()
 

@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import WhisperKit
 import WhisperHotkeyCore
 
 public enum WhisperReadiness: Equatable, Sendable {
@@ -146,24 +145,6 @@ public enum WhisperRuntimeDiscovery {
                         isDirectory: &isDirectory
                     ) && !isDirectory.boolValue
                 } ?? installedModelURL
-        case .whisperCppCoreML:
-            guard environment["WHISPER_HOTKEY_COREML"] == "1"
-                || bundle.url(
-                    forResource: "CoreMLEnabled",
-                    withExtension: nil
-                ) != nil
-            else {
-                throw WhisperASRError.helperUnavailable
-            }
-            modelURL = WhisperHotkeyPaths.coreMLModelURL(
-                for: model,
-                homeDirectory: homeDirectory
-            )
-        case .whisperKitCoreML:
-            modelURL = WhisperHotkeyPaths.whisperKitModelURL(
-                for: model,
-                homeDirectory: homeDirectory
-            )
         case .parakeetCoreML, .cohereCoreML:
             preconditionFailure("Handled before this switch")
         }
@@ -171,36 +152,8 @@ public enum WhisperRuntimeDiscovery {
         guard fileManager.fileExists(
             atPath: modelURL.path,
             isDirectory: &isDirectory
-        ), isDirectory.boolValue == (engine == .whisperKitCoreML) else {
+        ), !isDirectory.boolValue else {
             throw WhisperASRError.modelMissing(modelURL.path)
-        }
-        if engine == .whisperCppCoreML {
-            let encoderURL = WhisperHotkeyPaths.coreMLEncoderURL(
-                for: model,
-                homeDirectory: homeDirectory
-            )
-            guard fileManager.fileExists(
-                atPath: encoderURL.path,
-                isDirectory: &isDirectory
-            ), isDirectory.boolValue else {
-                throw WhisperASRError.modelMissing(encoderURL.path)
-            }
-        }
-        if engine == .whisperKitCoreML {
-            let requiredNames = [
-                "AudioEncoder.mlmodelc",
-                "MelSpectrogram.mlmodelc",
-                "TextDecoder.mlmodelc",
-                "tokenizer.json",
-                "tokenizer_config.json",
-            ]
-            guard requiredNames.allSatisfy({
-                fileManager.fileExists(
-                    atPath: modelURL.appendingPathComponent($0).path
-                )
-            }) else {
-                throw WhisperASRError.modelMissing(modelURL.path)
-            }
         }
 
         let helper = helperCandidates(
@@ -366,7 +319,6 @@ public actor WhisperRecognizer {
     private var activeConfiguration: WhisperRuntimeConfiguration?
     private var preloadTask: Task<WhisperHelperSession, Error>?
     private var helperSession: WhisperHelperSession?
-    private var whisperKitRuntime: WhisperKit?
     private var parakeetRuntime: ParakeetRuntime?
     private var cohereRuntime: CohereRuntime?
     private var cachedHelperFailure: CachedHelperFailure?
@@ -396,13 +348,11 @@ public actor WhisperRecognizer {
     public func preload() async throws {
         let configuration = try resolvedConfiguration()
         switch configuration.engine {
-        case .whisperKitCoreML:
-            _ = try await preparedWhisperKit(configuration: configuration)
         case .parakeetCoreML:
             _ = try await preparedParakeet(configuration: configuration)
         case .cohereCoreML:
             _ = try await preparedCohere()
-        case .whisperCppMetal, .whisperCppCoreML:
+        case .whisperCppMetal:
             _ = try ensureLease()
             _ = try await preparedHelper()
         }
@@ -482,15 +432,6 @@ public actor WhisperRecognizer {
             }
             return
         }
-        if let whisperKitRuntime {
-            if !keepsModelReady {
-                await whisperKitRuntime.unloadModels()
-                self.whisperKitRuntime = nil
-                activeConfiguration = nil
-                readiness = .idle
-            }
-            return
-        }
         guard let activeLease else {
             return
         }
@@ -506,14 +447,6 @@ public actor WhisperRecognizer {
     ) async throws -> String {
         defer { audio.delete() }
         let configuration = try resolvedConfiguration()
-        if configuration.engine == .whisperKitCoreML {
-            return try await transcribeWithWhisperKit(
-                audio,
-                configuration: configuration,
-                keepLoaded: keepHelperLoaded || keepsModelReady,
-                prompt: prompt
-            )
-        }
         if configuration.engine == .cohereCoreML {
             return try await transcribeWithCohere(
                 audio,
@@ -561,11 +494,6 @@ public actor WhisperRecognizer {
                 readiness = .failed
                 cachedHelperFailure = nil
                 let configuration = try resolvedConfiguration()
-                if configuration.engine == .whisperCppCoreML {
-                    throw WhisperASRError.helperFailed(
-                        "Core ML helper failed"
-                    )
-                }
                 let transcript = try await Self.runCommandLineFallback(
                     configuration: configuration,
                     audioURL: audio.url,
@@ -645,8 +573,7 @@ public actor WhisperRecognizer {
                     executableURL: helperURL,
                     modelURL: configuration.modelURL,
                     options: configuredOptions,
-                    requireCoreML:
-                        configuration.engine == .whisperCppCoreML,
+                    requireCoreML: false,
                     processController: processController,
                     lease: lease
                 )
@@ -676,99 +603,6 @@ public actor WhisperRecognizer {
                 readiness = .failed
             }
             throw error
-        }
-    }
-
-    private func preparedWhisperKit(
-        configuration: WhisperRuntimeConfiguration
-    ) async throws -> WhisperKit {
-        if let whisperKitRuntime, readiness == .ready {
-            return whisperKitRuntime
-        }
-        readiness = .loading
-        do {
-            let config = WhisperKitConfig(
-                modelFolder: configuration.modelURL.path,
-                tokenizerFolder: configuration.modelURL,
-                verbose: false,
-                prewarm: false,
-                load: true,
-                download: false
-            )
-            let runtime = try await WhisperKit(config)
-            try Task.checkCancellation()
-            whisperKitRuntime = runtime
-            readiness = .ready
-            return runtime
-        } catch is CancellationError {
-            readiness = .idle
-            throw CancellationError()
-        } catch {
-            readiness = .failed
-            throw WhisperASRError.helperFailed("WhisperKit model load failed")
-        }
-    }
-
-    private func transcribeWithWhisperKit(
-        _ audio: WhisperAudioFile,
-        configuration: WhisperRuntimeConfiguration,
-        keepLoaded: Bool,
-        prompt: String?
-    ) async throws -> String {
-        guard audio.speechPresence != .absent else {
-            throw WhisperASRError.noSpeech
-        }
-        let runtime = try await preparedWhisperKit(
-            configuration: configuration
-        )
-        var promptTokens: [Int]?
-        if let prompt, !prompt.isEmpty {
-            promptTokens = runtime.tokenizer?.encode(text: prompt)
-        }
-        let options = DecodingOptions(
-            language: "en",
-            temperature: 0,
-            temperatureFallbackCount: 2,
-            topK: 5,
-            usePrefillPrompt: true,
-            skipSpecialTokens: true,
-            withoutTimestamps: true,
-            wordTimestamps: false,
-            promptTokens: promptTokens,
-            concurrentWorkerCount: 4,
-            chunkingStrategy: .vad
-        )
-        do {
-            let results = try await runtime.transcribe(
-                audioPath: audio.url.path,
-                decodeOptions: options
-            )
-            try Task.checkCancellation()
-            let transcript = results.map(\.text).joined(separator: " ")
-            let cleaned = try cleanedTranscript(transcript)
-            if !keepLoaded {
-                await runtime.unloadModels()
-                whisperKitRuntime = nil
-                activeConfiguration = nil
-                readiness = .idle
-            }
-            return cleaned
-        } catch is CancellationError {
-            if !keepLoaded {
-                await releaseWhisperKit(runtime)
-            }
-            throw CancellationError()
-        } catch let error as WhisperASRError {
-            if !keepLoaded {
-                await releaseWhisperKit(runtime)
-            }
-            throw error
-        } catch {
-            if !keepLoaded {
-                await releaseWhisperKit(runtime)
-            }
-            readiness = .failed
-            throw WhisperASRError.helperFailed("WhisperKit transcription failed")
         }
     }
 
@@ -910,15 +744,6 @@ public actor WhisperRecognizer {
         }
     }
 
-    private func releaseWhisperKit(_ runtime: WhisperKit) async {
-        await runtime.unloadModels()
-        if whisperKitRuntime === runtime {
-            whisperKitRuntime = nil
-            activeConfiguration = nil
-            readiness = .idle
-        }
-    }
-
     private func resolvedConfiguration() throws -> WhisperRuntimeConfiguration {
         if let activeConfiguration {
             return activeConfiguration
@@ -976,9 +801,6 @@ public actor WhisperRecognizer {
             processController.finish(lease, wait: true)
         }
         activeSession?.terminate(wait: true)
-        if let whisperKitRuntime {
-            await whisperKitRuntime.unloadModels()
-        }
         if let parakeetRuntime {
             await parakeetRuntime.release()
         }
@@ -992,7 +814,6 @@ public actor WhisperRecognizer {
         activeLease = nil
         preloadTask = nil
         helperSession = nil
-        whisperKitRuntime = nil
         parakeetRuntime = nil
         cohereRuntime = nil
         cachedHelperFailure = nil

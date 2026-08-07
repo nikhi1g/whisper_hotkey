@@ -206,8 +206,6 @@ Every model ships inside the app. Nothing is fetched at runtime.
 ./run.sh --model base
 ./run.sh --model turbo
 ./run.sh --engine parakeet
-./run.sh --model turbo --engine coreml
-./run.sh --model turbo --engine whisperkit
 ```
 
 Any explicit `--model` or `--engine` choice is persisted before the newly built
@@ -221,7 +219,7 @@ anything:
 
 ```sh
 ./run.sh --check
-./run.sh --check --model turbo --engine coreml
+./run.sh --check --model turbo --engine parakeet
 ```
 
 Common recovery commands:

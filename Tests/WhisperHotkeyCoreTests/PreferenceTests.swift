@@ -295,19 +295,17 @@ final class PreferenceTests: XCTestCase {
             RecognitionEngine.allCases,
             [
                 .whisperCppMetal,
-                .whisperCppCoreML,
-                .whisperKitCoreML,
                 .parakeetCoreML,
                 .cohereCoreML,
             ]
         )
         defaults.set(
-            RecognitionEngine.whisperKitCoreML.rawValue,
+            RecognitionEngine.parakeetCoreML.rawValue,
             forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
         )
         XCTAssertEqual(
             RecognitionEngine.selected(defaults: defaults),
-            .whisperKitCoreML
+            .parakeetCoreML
         )
         defaults.set(
             "unknown",

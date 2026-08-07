@@ -27,18 +27,41 @@ final class RecognitionChoiceTests: XCTestCase {
                         parakeetVariant: .accurate
                     )
                 )
-            case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+            case .whisperCppMetal:
+                // Whisper carries one option now, so every stored model has to
+                // resolve to it rather than leaving the picker blank.
                 for model in DictationModel.allCases {
-                    XCTAssertNotNil(
+                    XCTAssertEqual(
                         RecognitionChoice.matching(
                             engine: engine,
                             model: model,
                             parakeetVariant: .accurate
                         ),
+                        .whisperTurboMetal,
                         "no option for \(engine) with \(model)"
                     )
                 }
             }
+        }
+    }
+
+    /// The Core ML encoder and WhisperKit engines were retired in 3.6.0.
+    /// Neither could run in a shipped build, but a saved preference naming one
+    /// must still resolve to something rather than dropping to the default.
+    func testRetiredEnginesMigrateToMetal() {
+        let defaults = UserDefaults(
+            suiteName: "RecognitionChoiceTests.\(UUID().uuidString)"
+        )!
+        for rawValue in ["whisperCppCoreML", "whisperKitCoreML"] {
+            defaults.set(
+                rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+            )
+            XCTAssertEqual(
+                RecognitionEngine.selected(defaults: defaults),
+                .whisperCppMetal,
+                "\(rawValue) did not migrate"
+            )
         }
     }
 

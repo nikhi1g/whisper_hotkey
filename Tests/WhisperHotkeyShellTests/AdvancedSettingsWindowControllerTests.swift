@@ -391,10 +391,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testWhisperKitUsesNativeDecodingAndHidesTheProfileRow() {
+    func testCohereUsesNativeDecodingAndHidesTheProfileRow() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
-                engine: .whisperKitCoreML,
+                engine: .cohereCoreML,
                 decodingProfile: .adaptive,
                 availableEngines: Set(RecognitionEngine.allCases)
             )
@@ -510,7 +510,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.selectHotkeyForTesting(.leftShift)
         controller.selectModeForTesting(.toggle)
         controller.selectDecodingProfileForTesting(.adaptive)
-        controller.selectRecognitionChoiceForTesting(.whisperTurboWhisperKit)
+        controller.selectRecognitionChoiceForTesting(.whisperTurboMetal)
         controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(
             [" Codex ", "Claude Code", "codex"]
@@ -523,7 +523,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(selectedHotkeys, [.leftShift])
         XCTAssertEqual(selectedModes, [.toggle])
-        XCTAssertEqual(selectedChoices, [.whisperTurboWhisperKit])
+        XCTAssertEqual(selectedChoices, [.whisperTurboMetal])
         XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
         XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
         XCTAssertEqual(dictionaryAdditions, [["Codex", "Claude Code"]])
@@ -830,8 +830,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         // An option whose model is not installed is still listed, so there is
         // always a way back to one that is.
-        controller.selectRecognitionChoiceForTesting(.whisperBaseMetal)
-        XCTAssertEqual(selectedChoices, [.whisperBaseMetal])
+        controller.selectRecognitionChoiceForTesting(.whisperTurboMetal)
+        XCTAssertEqual(selectedChoices, [.whisperTurboMetal])
     }
 
     @MainActor

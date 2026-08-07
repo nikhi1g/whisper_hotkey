@@ -2006,7 +2006,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         switch choice.engine {
         case .parakeetCoreML:
             selectParakeetVariant(choice.parakeetVariant)
-        case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+        case .whisperCppMetal:
             selectModel(choice.model)
         case .cohereCoreML:
             break

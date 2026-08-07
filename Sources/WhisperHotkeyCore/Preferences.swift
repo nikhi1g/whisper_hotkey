@@ -448,21 +448,26 @@ public enum InternalDictionaryDraftParser {
 
 public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     case whisperCppMetal
-    case whisperCppCoreML
-    case whisperKitCoreML
     case parakeetCoreML
     case cohereCoreML
 
     public static let defaultEngine: Self = .whisperCppMetal
 
+    /// Engines retired in 3.6.0, kept only so a saved preference can be read
+    /// and migrated. Neither could ever run in a shipped build: the Core ML
+    /// encoder path is gated on a `CoreMLEnabled` marker the release bundle
+    /// does not contain, and WhisperKit needs a compiled model directory that
+    /// nothing ships or downloads. Both resolve to Metal, which runs the same
+    /// weights.
+    static let retiredRawValues: [String: Self] = [
+        "whisperCppCoreML": .whisperCppMetal,
+        "whisperKitCoreML": .whisperCppMetal,
+    ]
+
     public var displayName: String {
         switch self {
         case .whisperCppMetal:
             "Metal"
-        case .whisperCppCoreML:
-            "Core ML Encoder"
-        case .whisperKitCoreML:
-            "WhisperKit"
         case .parakeetCoreML:
             "Parakeet"
         case .cohereCoreML:
@@ -474,10 +479,6 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal:
             "whisper.cpp Metal (Current)"
-        case .whisperCppCoreML:
-            "whisper.cpp Core ML Encoder"
-        case .whisperKitCoreML:
-            "WhisperKit Core ML and Neural Engine"
         case .parakeetCoreML:
             "Parakeet Neural Engine"
         case .cohereCoreML:
@@ -490,9 +491,9 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     /// own decoder, and Parakeet is a transducer with no beam search at all.
     public var usesWhisperDecoding: Bool {
         switch self {
-        case .whisperCppMetal, .whisperCppCoreML:
+        case .whisperCppMetal:
             true
-        case .whisperKitCoreML, .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML, .cohereCoreML:
             false
         }
     }
@@ -501,9 +502,9 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     /// engines skip helper discovery, leases, and the command-line fallback.
     public var usesLocalHelper: Bool {
         switch self {
-        case .whisperCppMetal, .whisperCppCoreML:
+        case .whisperCppMetal:
             true
-        case .whisperKitCoreML, .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML, .cohereCoreML:
             false
         }
     }
@@ -512,7 +513,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     /// no prompt, so the dictionary and Pause Mode context are dropped.
     public var supportsPromptConditioning: Bool {
         switch self {
-        case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+        case .whisperCppMetal:
             true
         case .parakeetCoreML, .cohereCoreML:
             false
@@ -533,7 +534,10 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         ) else {
             return .defaultEngine
         }
-        return Self(rawValue: rawValue) ?? .defaultEngine
+        if let engine = Self(rawValue: rawValue) {
+            return engine
+        }
+        return retiredRawValues[rawValue] ?? .defaultEngine
     }
 }
 
@@ -1019,15 +1023,6 @@ public enum DictationModel: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var whisperKitFolderName: String {
-        switch self {
-        case .baseEnglish:
-            "openai_whisper-base.en"
-        case .largeV3TurboQ5:
-            "openai_whisper-large-v3-v20240930_626MB"
-        }
-    }
-
     public static func selected(
         defaults: UserDefaults = .standard
     ) -> Self {
@@ -1223,11 +1218,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     case parakeetFast
     case parakeetUnified
     case whisperTurboMetal
-    case whisperBaseMetal
-    case whisperTurboCoreML
-    case whisperBaseCoreML
-    case whisperTurboWhisperKit
-    case whisperBaseWhisperKit
     case cohereTranscribe
 
     public static let defaultChoice: Self = .parakeetAccurate
@@ -1252,9 +1242,7 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
         switch self {
         case .parakeetAccurate, .parakeetFast, .parakeetUnified:
             .parakeet
-        case .whisperTurboMetal, .whisperBaseMetal,
-             .whisperTurboCoreML, .whisperBaseCoreML,
-             .whisperTurboWhisperKit, .whisperBaseWhisperKit:
+        case .whisperTurboMetal:
             .whisper
         case .cohereTranscribe:
             .cohere
@@ -1267,11 +1255,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
         case .parakeetFast: "Fast"
         case .parakeetUnified: "Unified → most accurate"
         case .whisperTurboMetal: "Turbo"
-        case .whisperBaseMetal: "Base"
-        case .whisperTurboCoreML: "Turbo (Core ML encoder)"
-        case .whisperBaseCoreML: "Base (Core ML encoder)"
-        case .whisperTurboWhisperKit: "Turbo (WhisperKit)"
-        case .whisperBaseWhisperKit: "Base (WhisperKit)"
         case .cohereTranscribe: "Transcribe → slowest"
         }
     }
@@ -1280,12 +1263,8 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
         switch self {
         case .parakeetAccurate, .parakeetFast, .parakeetUnified:
             .parakeetCoreML
-        case .whisperTurboMetal, .whisperBaseMetal:
+        case .whisperTurboMetal:
             .whisperCppMetal
-        case .whisperTurboCoreML, .whisperBaseCoreML:
-            .whisperCppCoreML
-        case .whisperTurboWhisperKit, .whisperBaseWhisperKit:
-            .whisperKitCoreML
         case .cohereTranscribe:
             .cohereCoreML
         }
@@ -1293,13 +1272,12 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
 
     /// The whisper model this option runs. Parakeet and Cohere ignore it, but
     /// it still has to be a real value because the preference is shared.
+    ///
+    /// Base was offered here until 3.6.0. Parakeet Fast is smaller, faster and
+    /// more accurate, and it is bundled, so Base had no case left to make. The
+    /// model itself stays in `DictationModel` as the discovery fallback.
     public var model: DictationModel {
-        switch self {
-        case .whisperBaseMetal, .whisperBaseCoreML, .whisperBaseWhisperKit:
-            .baseEnglish
-        default:
-            .largeV3TurboQ5
-        }
+        .largeV3TurboQ5
     }
 
     public var parakeetVariant: ParakeetVariant {
@@ -1322,20 +1300,23 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     /// Which option a stored configuration represents. Returns nil when the
     /// combination is not one this list offers, which keeps the picker honest
     /// rather than snapping to a neighbour.
+    ///
+    /// The whisper family carries one entry now, so the stored model no longer
+    /// discriminates: a saved Base selection reads as Turbo rather than as
+    /// nothing at all, which would leave the picker blank.
     public static func matching(
         engine: RecognitionEngine,
         model: DictationModel,
         parakeetVariant: ParakeetVariant
     ) -> Self? {
-        allCases.first {
+        _ = model
+        return allCases.first {
             guard $0.engine == engine else { return false }
             switch engine {
             case .parakeetCoreML:
                 return $0.parakeetVariant == parakeetVariant
-            case .cohereCoreML:
+            case .cohereCoreML, .whisperCppMetal:
                 return true
-            case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
-                return $0.model == model
             }
         }
     }

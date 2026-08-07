@@ -1,9 +1,8 @@
 # Local models
 
-Version 3.5.5 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
-Metal and flash attention, whisper.cpp with a Core ML encoder, native
-WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
-Recognition is English-only and entirely local.
+Version 3.6.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Metal and flash attention, NVIDIA Parakeet on the Neural Engine, and Cohere
+Transcribe. Recognition is English-only and entirely local.
 
 | Menu choice | File | Size | Tradeoff |
 | --- | --- | ---: | --- |
@@ -11,7 +10,11 @@ Recognition is English-only and entirely local.
 | Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate and fastest; on-demand download |
 | Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
-| Base English | `ggml-base.en.bin` | 141 MB | Lightest whisper tier |
+| Cohere Transcribe | `cohere-transcribe-03-2026` | 2.4 GB | Best on clean speech; ~11x slower; on-demand download |
+
+Whisper Base English left the picker in 3.6.0: Parakeet Fast is smaller,
+faster and more accurate, and it is bundled. The file still ships as the
+discovery fallback when Turbo is unavailable.
 
 Small and Medium English were retired in 3.4.1. Parakeet Fast beats Small on
 size, speed, and accuracy at once, and Medium was the largest and slowest model
@@ -56,18 +59,16 @@ Settings presents one grouped list of named configurations rather than separate
 engine and model rows, so an invalid pairing cannot be selected. The engines
 behind that list are:
 
-- **Metal** is the default whisper.cpp GPU path.
-- **Core ML Encoder** runs the encoder through Core ML while whisper.cpp
-  performs decoding.
-- **WhisperKit** performs native Core ML recognition using Apple GPU and Neural
-  Engine compute units.
+- **Metal** is the whisper.cpp GPU path.
 - **Parakeet** runs NVIDIA Parakeet on the Neural Engine through
   [FluidAudio](https://github.com/FluidInference/FluidAudio), replacing whisper
   entirely rather than re-hosting it.
 
-Core ML choices are enabled only when the selected model's complete verified
-artifacts are installed. Add missing artifacts with `run.sh`; the app never
-silently switches engines.
+The whisper.cpp Core ML encoder and WhisperKit engines were retired in 3.6.0.
+Neither could run in a shipped build: the Core ML encoder path was gated on a
+`CoreMLEnabled` marker the release bundle never contained, and WhisperKit
+needed a compiled model directory nothing shipped or downloaded. A saved
+preference naming either now resolves to Metal, which runs the same weights.
 
 ### Parakeet
 
@@ -100,8 +101,8 @@ test-clean and test-other, Apple M5 Pro, warm model):
 Two behaviors differ from the whisper engines and are intentional:
 
 - **The Decoding row disappears.** A transducer has no beam search, so the row
-  is hidden rather than greyed out, and the same is now true for WhisperKit. The
-  stored profile survives, so returning to Metal restores it.
+  is hidden rather than greyed out. The stored profile survives, so returning
+  to Metal restores it.
 - **Prompts are dropped.** Parakeet accepts no text prompt, so the internal
   dictionary and the Pause Mode context tail cannot bias a Parakeet decode.
   Both still apply on every whisper engine.
@@ -114,8 +115,6 @@ Two behaviors differ from the whisper engines and are intentional:
 ./run.sh --model medium                       # install/select Medium + Metal
 ./run.sh --model turbo                        # install/select Turbo + Metal
 ./run.sh --all-models                         # install all; select Base + Metal
-./run.sh --model turbo --engine coreml        # install/select Core ML Encoder
-./run.sh --model turbo --engine whisperkit    # install/select WhisperKit
 ./run.sh --engine parakeet                    # select Parakeet (no download)
 ```
 
@@ -130,9 +129,8 @@ launches. Rerun the bootstrap whenever you want to add another model.
 **Smart Decode** uses a one-candidate greedy pass and accepts it only when its
 token confidence, no-speech probability, and repetition checks are strong. It
 automatically retries uncertain audio with the same five-beam Precision
-decoder. The setting is available for the whisper.cpp Metal and Core ML
-encoder engines. WhisperKit and Parakeet continue to use their native
-decoding behavior.
+decoder. The setting is available for the whisper.cpp Metal engine. Parakeet
+and Cohere continue to use their native decoding behavior.
 
 The app stores only the selected profile. Confidence values are used in memory
 for the current inference and are not logged or retained.

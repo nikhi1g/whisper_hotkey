@@ -1,14 +1,6 @@
 {
-  "originHash" : "3df0a74062b5262d6f07b26ed243f89a9c001f1801777086a61bdbda26aa5588",
+  "originHash" : "38ef7f0524958129e9550115037c36c7c334eca08b28df7d0fa1be864eb860bc",
   "pins" : [
-    {
-      "identity" : "argmax-oss-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/argmaxinc/argmax-oss-swift.git",
-      "state" : {
-        "revision" : "8fcbfed028415b0b90f0f10ee7b0303c53b600a0"
-      }
-    },
     {
       "identity" : "fluidaudio",
       "kind" : "remoteSourceControl",
@@ -16,15 +8,6 @@
       "state" : {
         "revision" : "19600a485baa4998812e4654b70d2bab8f2c9949",
         "version" : "0.15.5"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser.git",
-      "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
       }
     }
   ],
