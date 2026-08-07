@@ -46,6 +46,27 @@ struct Options {
     bool require_coreml = false;
     whisper_sampling_strategy strategy = WHISPER_SAMPLING_BEAM_SEARCH;
     bool adaptive = false;
+
+    int protocol_version = 1;
+    std::string request_id;
+    std::string request_pass = "primaryFullSession";
+    bool emit_timestamps = false;
+    bool emit_token_data = false;
+    long long sample_start = -1;
+    long long sample_end = -1;
+};
+
+struct TimedWordInfo {
+    std::string text;
+    float start_seconds = 0.0f;
+    float end_seconds = 0.0f;
+    float confidence = 0.0f;
+};
+
+struct SegmentInfo {
+    std::string text;
+    float start_seconds = 0.0f;
+    float end_seconds = 0.0f;
 };
 
 struct DecodeResult {
@@ -54,6 +75,8 @@ struct DecodeResult {
     float weak_token_fraction = 1.0f;
     float maximum_no_speech_probability = 1.0f;
     bool has_repetition = false;
+    std::vector<TimedWordInfo> words;
+    std::vector<SegmentInfo> segments;
 };
 
 std::string json_escape(const std::string & value) {
@@ -87,20 +110,115 @@ void emit_ready() {
 }
 
 void emit_result(
+    const Options & options,
     const DecodeResult & result,
-    bool adaptive_fallback
+    bool adaptive_fallback,
+    long long sample_start,
+    long long sample_end
 ) {
-    std::cout << "{\"event\":\"result\",\"text\":\""
-              << json_escape(result.text)
-              << "\",\"adaptiveFallback\":"
+    const float sequence_score = std::max(
+        0.0f,
+        1.0f - result.weak_token_fraction
+    );
+
+    std::cout << "{\"protocolVersion\":" << options.protocol_version << ","
+              << "\"event\":\"result\",";
+    std::cout << "\"requestID\":\""
+              << json_escape(options.request_id) << "\",";
+    std::cout << "\"engine\":\"whisperTurbo\",";
+    std::cout << "\"pass\":\""
+              << json_escape(options.request_pass) << "\",";
+    std::cout << "\"text\":\""
+              << json_escape(result.text) << "\",";
+    std::cout << "\"window\":{"
+              << "\"startSample\":" << sample_start << ","
+              << "\"endSample\":" << sample_end << ","
+              << "\"sampleRate\":16000},";
+    std::cout << "\"latencyMs\":0.0,";
+    std::cout << "\"sequenceScore\":" << sequence_score << ",";
+    std::cout << "\"averageLogProbability\":"
+              << result.average_log_probability << ",";
+    std::cout << "\"noSpeechProbability\":"
+              << result.maximum_no_speech_probability << ",";
+    std::cout << "\"repetitionDetected\":"
+              << (result.has_repetition ? "true" : "false") << ",";
+
+    std::cout << "\"words\":";
+    if (options.emit_token_data) {
+        std::cout << "[";
+        for (std::size_t index = 0; index < result.words.size(); ++index) {
+            const TimedWordInfo & word = result.words[index];
+            if (index > 0) {
+                std::cout << ",";
+            }
+            std::cout << "{\"text\":\"" << json_escape(word.text)
+                      << "\",";
+            if (std::isfinite(word.start_seconds)) {
+                std::cout << "\"startSeconds\":" << word.start_seconds << ",";
+            } else {
+                std::cout << "\"startSeconds\":null,";
+            }
+            if (std::isfinite(word.end_seconds)) {
+                std::cout << "\"endSeconds\":" << word.end_seconds << ",";
+            } else {
+                std::cout << "\"endSeconds\":null,";
+            }
+            if (std::isfinite(word.confidence)) {
+                std::cout << "\"confidence\":" << word.confidence;
+            } else {
+                std::cout << "\"confidence\":null";
+            }
+            std::cout << "}";
+        }
+        std::cout << "]";
+    } else {
+        std::cout << "[]";
+    }
+
+    std::cout << ",\"metadata\":{"
+              << "\"adaptiveFallback\":"
               << (adaptive_fallback ? "true" : "false")
-              << ",\"averageLogProbability\":"
-              << result.average_log_probability
-              << ",\"weakTokenFraction\":"
-              << result.weak_token_fraction
-              << ",\"maximumNoSpeechProbability\":"
-              << result.maximum_no_speech_probability
-              << "}" << std::endl;
+              << ",\"requestedStrategy\":\"";
+    const char * resolved_strategy = "beam";
+    if (options.adaptive) {
+        resolved_strategy = "adaptive";
+    } else if (options.strategy == WHISPER_SAMPLING_GREEDY) {
+        resolved_strategy = "greedy";
+    }
+    std::cout << resolved_strategy << "\",";
+    std::cout << "\"emitTimestamps\":"
+              << (options.emit_timestamps ? "true" : "false")
+              << ",\"emitTokenData\":"
+              << (options.emit_token_data ? "true" : "false");
+
+    if (options.emit_timestamps) {
+        std::cout << ",\"segments\":";
+        std::cout << "[";
+        for (std::size_t index = 0; index < result.segments.size(); ++index) {
+            const SegmentInfo & segment = result.segments[index];
+            if (index > 0) {
+                std::cout << ",";
+            }
+            std::cout << "{\"text\":\""
+                      << json_escape(segment.text) << "\",";
+            if (std::isfinite(segment.start_seconds)) {
+                std::cout << "\"startSeconds\":" << segment.start_seconds << ",";
+            } else {
+                std::cout << "\"startSeconds\":null,";
+            }
+            if (std::isfinite(segment.end_seconds)) {
+                std::cout << "\"endSeconds\":" << segment.end_seconds;
+            } else {
+                std::cout << "\"endSeconds\":null";
+            }
+            std::cout << "}";
+        }
+        std::cout << "]";
+    } else {
+        std::cout << ",\"segments\":null";
+    }
+
+    std::cout << "}}" << std::endl;
 }
 
 int emit_error(
@@ -129,6 +247,35 @@ bool parse_positive_int(const char * value, int * output) {
     }
     *output = static_cast<int>(parsed);
     return true;
+}
+
+bool parse_non_negative_long_long(const char * value, long long * output) {
+    if (value == nullptr || *value == '\0') {
+        return false;
+    }
+    char * end = nullptr;
+    errno = 0;
+    const long long parsed = std::strtoll(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed < 0) {
+        return false;
+    }
+    *output = parsed;
+    return true;
+}
+
+bool parse_bool_value(const char * value, bool * output) {
+    if (value == nullptr || *value == '\0') {
+        return false;
+    }
+    if (std::strcmp(value, "true") == 0 || std::strcmp(value, "1") == 0) {
+        *output = true;
+        return true;
+    }
+    if (std::strcmp(value, "false") == 0 || std::strcmp(value, "0") == 0) {
+        *output = false;
+        return true;
+    }
+    return false;
 }
 
 bool parse_options(int argc, char ** argv, Options * options) {
@@ -564,7 +711,10 @@ bool has_repeated_ngram(const std::string & text) {
     return false;
 }
 
-DecodeResult collect_result(whisper_context * context) {
+DecodeResult collect_result(
+    const Options & options,
+    whisper_context * context
+) {
     DecodeResult result;
     double log_probability_sum = 0;
     int token_count = 0;
@@ -588,6 +738,16 @@ DecodeResult collect_result(whisper_context * context) {
             context,
             segment
         );
+        if (options.emit_timestamps) {
+            const int segment_start = whisper_full_get_segment_t0(context, segment);
+            const int segment_end = whisper_full_get_segment_t1(context, segment);
+            result.segments.push_back({
+                std::string(text == nullptr ? "" : text),
+                static_cast<float>(segment_start) / 100.0f,
+                static_cast<float>(segment_end) / 100.0f,
+            });
+        }
+
         for (int token = 0; token < segment_tokens; ++token) {
             const whisper_token_data data = whisper_full_get_token_data(
                 context,
@@ -601,6 +761,21 @@ DecodeResult collect_result(whisper_context * context) {
             ++token_count;
             if (data.p < 0.20f) {
                 ++weak_token_count;
+            }
+            if (options.emit_token_data) {
+                const char * tokenText = whisper_full_get_token_text(
+                    context,
+                    segment,
+                    token
+                );
+                if (tokenText != nullptr && *tokenText != '\0') {
+                    result.words.push_back({
+                        tokenText,
+                        static_cast<float>(data.t0) / 100.0f,
+                        static_cast<float>(data.t1) / 100.0f,
+                        data.plog
+                    });
+                }
             }
         }
     }
@@ -681,7 +856,7 @@ bool decode(
     ) != 0) {
         return false;
     }
-    *result = collect_result(context);
+    *result = collect_result(options, context);
     return true;
 }
 
@@ -765,6 +940,127 @@ int main(int argc, char ** argv) {
             continue;
         }
 
+        options.request_id.clear();
+        options.request_pass = "primaryFullSession";
+        options.adaptive = false;
+        options.emit_timestamps = false;
+        options.emit_token_data = false;
+
+        const std::string protocol_version = command["protocolVersion"];
+        options.protocol_version = 2;
+        if (!protocol_version.empty()) {
+            long long parsed_protocol_version = 0;
+            if (!parse_non_negative_long_long(protocol_version.c_str(), &parsed_protocol_version)
+                || parsed_protocol_version <= 0) {
+                emit_error("invalid_command", "invalid protocolVersion", 65);
+                continue;
+            }
+            options.protocol_version = static_cast<int>(parsed_protocol_version);
+        }
+
+        options.request_id = command["requestID"];
+        const std::string requested_pass = command["pass"];
+        if (!requested_pass.empty()) {
+            options.request_pass = requested_pass;
+        }
+
+        const std::string requested_strategy = command["strategy"];
+        if (!requested_strategy.empty()) {
+            if (requested_strategy == "beam") {
+                options.strategy = WHISPER_SAMPLING_BEAM_SEARCH;
+                options.adaptive = false;
+            } else if (requested_strategy == "greedy") {
+                options.strategy = WHISPER_SAMPLING_GREEDY;
+                options.adaptive = false;
+            } else if (requested_strategy == "adaptive") {
+                options.strategy = WHISPER_SAMPLING_GREEDY;
+                options.adaptive = true;
+            } else {
+                emit_error("invalid_command", "unsupported strategy", 65);
+                continue;
+            }
+        }
+
+        const std::string requested_beam_size = command["beamSize"];
+        if (!requested_beam_size.empty()) {
+            int beam_size = 0;
+            if (!parse_positive_int(requested_beam_size.c_str(), &beam_size)
+                || beam_size < 1 || beam_size > 16) {
+                emit_error("invalid_command", "invalid beamSize", 65);
+                continue;
+            }
+            options.beam_size = beam_size;
+        }
+
+        if (!parse_bool_value(command["emitTimestamps"].c_str(),
+                             &options.emit_timestamps)) {
+            options.emit_timestamps = false;
+        }
+        if (!parse_bool_value(command["emitTokenData"].c_str(),
+                             &options.emit_token_data)) {
+            options.emit_token_data = false;
+        }
+
+        long long sample_start = -1;
+        if (!command["sampleStart"].empty()
+            && !parse_non_negative_long_long(
+                command["sampleStart"].c_str(),
+                &sample_start
+            )) {
+            emit_error("invalid_command", "invalid sampleStart", 65);
+            continue;
+        }
+        sample_start = -1;
+        if (!command["sampleStart"].empty()) {
+            parse_non_negative_long_long(
+                command["sampleStart"].c_str(),
+                &sample_start
+            );
+        }
+
+        long long sample_end = -1;
+        if (!command["sampleEnd"].empty()
+            && !parse_non_negative_long_long(
+                command["sampleEnd"].c_str(),
+                &sample_end
+            )) {
+            emit_error("invalid_command", "invalid sampleEnd", 65);
+            continue;
+        }
+        sample_end = -1;
+        if (!command["sampleEnd"].empty()) {
+            parse_non_negative_long_long(
+                command["sampleEnd"].c_str(),
+                &sample_end
+            );
+        }
+
+        std::vector<float> request_samples = samples;
+        if (sample_start >= 0 || sample_end >= 0) {
+            if (sample_start < 0) {
+                sample_start = 0;
+            }
+            if (sample_end < 0) {
+                sample_end = static_cast<long long>(samples.size());
+            }
+            if (sample_start >= sample_end
+                || sample_end > static_cast<long long>(samples.size())) {
+                emit_error("invalid_command", "sample range is out of bounds", 65);
+                continue;
+            }
+            request_samples.assign(
+                samples.begin() + sample_start,
+                samples.begin() + sample_end
+            );
+            options.sample_start = sample_start;
+            options.sample_end = sample_end;
+        } else {
+            options.sample_start = 0;
+            options.sample_end = static_cast<long long>(samples.size());
+        }
+
+        std::vector<float> & active_samples = request_samples;
+
         // Suppress the vocabulary-biasing prompt for clips that are too
         // quiet to plausibly contain recognizable speech. With no genuine
         // speech to bias, the prompt has nothing legitimate to help
@@ -772,7 +1068,7 @@ int main(int argc, char ** argv) {
         // by the decoder. See kMinimumPromptSignalRms.
         const std::string requested_prompt = command["prompt"];
         const std::string prompt =
-            signal_rms(samples) >= kMinimumPromptSignalRms
+            signal_rms(active_samples) >= kMinimumPromptSignalRms
                 ? requested_prompt
                 : std::string();
         DecodeResult result;
@@ -780,7 +1076,7 @@ int main(int argc, char ** argv) {
             context.get(),
             options,
             prompt,
-            samples,
+            active_samples,
             options.strategy,
             options.adaptive,
             &result
@@ -800,7 +1096,7 @@ int main(int argc, char ** argv) {
                 context.get(),
                 options,
                 prompt,
-                samples,
+                active_samples,
                 WHISPER_SAMPLING_BEAM_SEARCH,
                 false,
                 &result
@@ -813,15 +1109,14 @@ int main(int argc, char ** argv) {
                 continue;
             }
         }
-        if (result.text.empty()) {
-            emit_error(
-                "no_speech",
-                "no speech was detected",
-                67
-            );
-            continue;
-        }
-        emit_result(result, adaptive_fallback);
+
+        emit_result(
+            options,
+            result,
+            adaptive_fallback,
+            options.sample_start,
+            options.sample_end
+        );
     }
     return 0;
 }

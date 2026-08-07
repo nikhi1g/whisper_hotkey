@@ -178,7 +178,7 @@ public enum WhisperRuntimeDiscovery {
     }
 }
 
-enum WhisperDecodingStrategy: String, Equatable, Sendable {
+public enum WhisperDecodingStrategy: String, Equatable, Sendable {
     case beam
     case greedy
     case adaptive
@@ -242,6 +242,7 @@ enum WhisperCommandLineInvocation {
 enum WhisperHelperEvent: Equatable, Sendable {
     case ready
     case result(String)
+    case resultRich(RecognitionHypothesis)
     case error(code: String, message: String)
 }
 
@@ -251,12 +252,79 @@ enum WhisperHelperProtocol {
         let text: String?
         let code: String?
         let message: String?
+        let protocolVersion: Int?
+        let requestID: String?
+        let engine: String?
+        let modelID: String?
+        let pass: String?
+        let window: EventWindow?
+        let sequenceScore: Double?
+        let averageLogProbability: Double?
+        let noSpeechProbability: Double?
+        let repetitionDetected: Bool?
+        let latencyMs: Double?
+        let words: [EventWord]?
+        let segments: [EventSegment]?
+
+        struct EventWindow: Decodable {
+            let startSample: Int64
+            let endSample: Int64
+            let sampleRate: Int
+        }
+
+        struct EventWord: Decodable {
+            let text: String
+            let startSeconds: Double?
+            let endSeconds: Double?
+            let confidence: Double?
+        }
+
+        struct EventSegment: Decodable {
+            let text: String
+            let startSeconds: Double
+            let endSeconds: Double
+        }
     }
 
     private struct CommandEnvelope: Encodable {
         let command = "transcribe"
         let audioPath: String
         let prompt: String?
+        let protocolVersion: String
+        let requestID: String
+        let pass: String
+        let strategy: String
+        let beamSize: String
+        let sampleStart: String?
+        let sampleEnd: String?
+        let emitTimestamps: String
+        let emitTokenData: String
+
+        init(
+            audioPath: String,
+            prompt: String?,
+            protocolVersion: Int,
+            requestID: String,
+            pass: RecognitionPassKind,
+            strategy: String,
+            beamSize: Int,
+            sampleStart: Int64?,
+            sampleEnd: Int64?,
+            emitTimestamps: Bool,
+            emitTokenData: Bool
+        ) {
+            self.audioPath = audioPath
+            self.prompt = prompt
+            self.protocolVersion = String(protocolVersion)
+            self.requestID = requestID
+            self.pass = pass.rawValue
+            self.strategy = strategy
+            self.beamSize = String(beamSize)
+            self.sampleStart = sampleStart.map { String($0) }
+            self.sampleEnd = sampleEnd.map { String($0) }
+            self.emitTimestamps = emitTimestamps ? "true" : "false"
+            self.emitTokenData = emitTokenData ? "true" : "false"
+        }
     }
 
     static func parse(_ line: String) throws -> WhisperHelperEvent {
@@ -274,7 +342,55 @@ enum WhisperHelperProtocol {
             guard let text = envelope.text else {
                 throw WhisperASRError.helperProtocolFailure
             }
-            return .result(text)
+            guard let protocolVersion = envelope.protocolVersion,
+                  protocolVersion >= 2,
+                  let engine = envelope.engine,
+                  let window = envelope.window
+            else {
+                return .result(text)
+            }
+            let words = (envelope.words ?? []).map {
+                TimedWord(
+                    text: $0.text,
+                    startSeconds: $0.startSeconds,
+                    endSeconds: $0.endSeconds,
+                    confidence: $0.confidence
+                )
+            }
+            let segments = (envelope.segments ?? []).map {
+                TimedSegment(
+                    startSeconds: $0.startSeconds,
+                    endSeconds: $0.endSeconds,
+                    text: $0.text
+                )
+            }
+            return .resultRich(
+                RecognitionHypothesis(
+                    engine: RecognitionEngineID(rawValue: engine)
+                        ?? .whisperTurbo,
+                    pass: RecognitionPassKind(rawValue: envelope.pass ?? "")
+                        ?? .primaryFullSession,
+                    window: RecognitionWindow(
+                        startSample: window.startSample,
+                        endSample: window.endSample,
+                        sampleRate: window.sampleRate
+                    ),
+                    text: text,
+                    words: words,
+                    segments: segments,
+                    sequenceScore: envelope.sequenceScore,
+                    averageLogProbability: envelope.averageLogProbability,
+                    noSpeechProbability: envelope.noSpeechProbability,
+                    repetitionDetected: envelope.repetitionDetected ?? false,
+                    modelID: envelope.modelID,
+                    engineVersion: nil,
+                    metadata: [
+                        "protocolVersion": String(protocolVersion),
+                        "requestID": envelope.requestID ?? "",
+                    ],
+                    latencyMilliseconds: envelope.latencyMs
+                )
+            )
         case "error":
             guard let code = envelope.code else {
                 throw WhisperASRError.helperProtocolFailure
@@ -290,10 +406,31 @@ enum WhisperHelperProtocol {
 
     static func transcribeCommand(
         audioURL: URL,
-        prompt: String? = nil
+        prompt: String? = nil,
+        protocolVersion: Int = 1,
+        requestID: String = UUID().uuidString,
+        pass: RecognitionPassKind = .primaryFullSession,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitTimestamps: Bool = false,
+        emitTokenData: Bool = false
     ) throws -> Data {
         var data = try JSONEncoder().encode(
-            CommandEnvelope(audioPath: audioURL.path, prompt: prompt)
+            CommandEnvelope(
+                audioPath: audioURL.path,
+                prompt: prompt,
+                protocolVersion: protocolVersion,
+                requestID: requestID,
+                pass: pass,
+                strategy: strategy.rawValue,
+                beamSize: beamSize,
+                sampleStart: sampleStart,
+                sampleEnd: sampleEnd,
+                emitTimestamps: emitTimestamps,
+                emitTokenData: emitTokenData
+            )
         )
         data.append(0x0A)
         return data
@@ -385,12 +522,43 @@ public actor WhisperRecognizer {
 
     public func transcribe(
         _ audio: WhisperAudioFile,
-        prompt: String? = nil
+        prompt: String? = nil,
+        preserveAudio: Bool = false
     ) async throws -> String {
         try await transcribe(
             audio,
             keepHelperLoaded: false,
+            preserveAudio: preserveAudio,
             prompt: prompt
+        ).text
+    }
+
+    public func transcribeHypothesis(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil,
+        pass: RecognitionPassKind = .primaryFullSession,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        protocolVersion: Int = 1,
+        requestID: String = UUID().uuidString,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitMetadata: Bool = false,
+        preserveAudio: Bool = false
+    ) async throws -> RecognitionHypothesis {
+        try await transcribe(
+            audio,
+            keepHelperLoaded: false,
+            preserveAudio: preserveAudio,
+            prompt: prompt,
+            pass: pass,
+            strategy: strategy,
+            beamSize: beamSize,
+            protocolVersion: protocolVersion,
+            requestID: requestID,
+            sampleStart: sampleStart,
+            sampleEnd: sampleEnd,
+            emitMetadata: emitMetadata
         )
     }
 
@@ -398,12 +566,43 @@ public actor WhisperRecognizer {
     /// next chunk in the same active pause-mode session.
     public func transcribeChunk(
         _ audio: WhisperAudioFile,
-        prompt: String? = nil
+        prompt: String? = nil,
+        preserveAudio: Bool = false
     ) async throws -> String {
         try await transcribe(
             audio,
             keepHelperLoaded: true,
+            preserveAudio: preserveAudio,
             prompt: prompt
+        ).text
+    }
+
+    public func transcribeChunkHypothesis(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil,
+        pass: RecognitionPassKind = .provisional,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        protocolVersion: Int = 1,
+        requestID: String = UUID().uuidString,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitMetadata: Bool = false,
+        preserveAudio: Bool = false
+    ) async throws -> RecognitionHypothesis {
+        try await transcribe(
+            audio,
+            keepHelperLoaded: true,
+            preserveAudio: preserveAudio,
+            prompt: prompt,
+            pass: pass,
+            strategy: strategy,
+            beamSize: beamSize,
+            protocolVersion: protocolVersion,
+            requestID: requestID,
+            sampleStart: sampleStart,
+            sampleEnd: sampleEnd,
+            emitMetadata: emitMetadata
         )
     }
 
@@ -425,15 +624,38 @@ public actor WhisperRecognizer {
     private func transcribe(
         _ audio: WhisperAudioFile,
         keepHelperLoaded: Bool,
-        prompt: String? = nil
-    ) async throws -> String {
-        defer { audio.delete() }
+        preserveAudio: Bool = false,
+        prompt: String? = nil,
+        pass: RecognitionPassKind = .primaryFullSession,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        protocolVersion: Int = 1,
+        requestID: String = UUID().uuidString,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitMetadata: Bool = false
+    ) async throws -> RecognitionHypothesis {
+        if !preserveAudio {
+            defer { audio.delete() }
+        }
         let configuration = try resolvedConfiguration()
         if configuration.engine == .parakeetCoreML {
-            return try await transcribeWithParakeet(
+            let transcript = try await transcribeWithParakeet(
                 audio,
                 configuration: configuration,
                 keepLoaded: keepHelperLoaded || keepsModelReady
+            )
+            return RecognitionHypothesis(
+                engine: configuration.parakeetVariant.candidateEngineID,
+                pass: pass,
+                window: recognitionWindow(
+                    startSample: sampleStart,
+                    endSample: sampleEnd,
+                    audio: audio
+                ),
+                text: transcript,
+                modelID: configuration.parakeetVariant.rawValue,
+                engineVersion: "FluidAudio"
             )
         }
         let lease = try ensureLease()
@@ -445,16 +667,62 @@ public actor WhisperRecognizer {
         guard audio.speechPresence != .absent else {
             throw WhisperASRError.noSpeech
         }
+        var runtimeOptions = options
+        runtimeOptions.strategy = strategy
+        runtimeOptions.beamSize = beamSize
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             do {
-                let helper = try await preparedHelper()
-                let transcript = try await helper.transcribe(
+                let helper = try await preparedHelper(runtimeOptions: runtimeOptions)
+                let event = try await helper.transcribe(
                     audioURL: audio.url,
                     prompt: prompt,
-                    timeout: options.transcriptionTimeout
+                    timeout: options.transcriptionTimeout,
+                    protocolVersion: protocolVersion,
+                    requestID: requestID,
+                    pass: pass,
+                    strategy: strategy,
+                    beamSize: beamSize,
+                    sampleStart: sampleStart,
+                    sampleEnd: sampleEnd,
+                    emitMetadata: emitMetadata
                 )
-                return try cleanedTranscript(transcript)
+                switch event {
+                case .result(let text):
+                    let transcript = try cleanedTranscript(text)
+                    return try fallbackHypothesis(
+                        configuration: configuration,
+                        pass: pass,
+                        audio: audio,
+                        requestID: requestID,
+                        text: transcript,
+                        protocolVersion: protocolVersion,
+                        sampleStart: sampleStart,
+                        sampleEnd: sampleEnd
+                    )
+                case .resultRich(let hypothesis):
+                    let transcript = try cleanedTranscript(hypothesis.text)
+                    return RecognitionHypothesis(
+                        engine: hypothesis.engine,
+                        pass: hypothesis.pass,
+                        window: hypothesis.window,
+                        text: transcript,
+                        words: hypothesis.words,
+                        segments: hypothesis.segments,
+                        sequenceScore: hypothesis.sequenceScore,
+                        averageLogProbability: hypothesis.averageLogProbability,
+                        noSpeechProbability: hypothesis.noSpeechProbability,
+                        repetitionDetected: hypothesis.repetitionDetected,
+                        modelID: hypothesis.modelID,
+                        engineVersion: hypothesis.engineVersion,
+                        metadata: hypothesis.metadata,
+                        latencyMilliseconds: hypothesis.latencyMilliseconds
+                    )
+                case .error:
+                    throw helper.error(for: event)
+                case .ready:
+                    throw WhisperASRError.helperProtocolFailure
+                }
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as WhisperASRError where error == .noSpeech {
@@ -484,7 +752,16 @@ public actor WhisperRecognizer {
                     cachedHelperFailure = nil
                     readiness = .idle
                 }
-                return try cleanedTranscript(transcript)
+                return try fallbackHypothesis(
+                    configuration: configuration,
+                    pass: pass,
+                    audio: audio,
+                    requestID: requestID,
+                    text: cleanedTranscript(transcript),
+                    protocolVersion: protocolVersion,
+                    sampleStart: sampleStart,
+                    sampleEnd: sampleEnd
+                )
             }
         } onCancel: {
             self.processController.cancel(lease, wait: false)
@@ -505,7 +782,9 @@ public actor WhisperRecognizer {
         await resetRuntime()
     }
 
-    private func preparedHelper() async throws -> WhisperHelperSession {
+    private func preparedHelper(
+        runtimeOptions: WhisperRecognitionOptions? = nil
+    ) async throws -> WhisperHelperSession {
         let lease = try ensureLease()
         if let cachedHelperFailure,
            cachedHelperFailure.lease == lease {
@@ -538,11 +817,13 @@ public actor WhisperRecognizer {
             let newGeneration = UUID()
             generation = newGeneration
             taskGeneration = newGeneration
-            var configuredOptions = options
+            var configuredOptions = runtimeOptions ?? options
             configuredOptions.strategy =
-                configuration.decodingProfile == .adaptive
-                    ? .adaptive
-                    : .beam
+                runtimeOptions == nil
+                    ? (configuration.decodingProfile == .adaptive
+                        ? .adaptive
+                        : .beam)
+                    : configuredOptions.strategy
             let processController = processController
             task = Task.detached(priority: .userInitiated) {
                 try await WhisperHelperSession.start(
@@ -729,6 +1010,85 @@ public actor WhisperRecognizer {
         readiness = .idle
     }
 
+    private func fallbackHypothesis(
+        configuration: WhisperRuntimeConfiguration,
+        pass: RecognitionPassKind,
+        audio: WhisperAudioFile,
+        requestID: String,
+        text: String,
+        protocolVersion: Int,
+        sampleStart: Int64?,
+        sampleEnd: Int64?
+    ) throws -> RecognitionHypothesis {
+        let window = recognitionWindow(
+            startSample: sampleStart,
+            endSample: sampleEnd,
+            audio: audio
+        )
+        guard let cleaned = try? cleanedTranscript(text),
+              !cleaned.isEmpty else {
+            throw WhisperASRError.noSpeech
+        }
+        return RecognitionHypothesis(
+            engine: configuration.engine.primaryCandidateEngineID,
+            pass: pass,
+            window: window,
+            text: cleaned,
+            modelID: configuration.modelURL.lastPathComponent,
+            metadata: [
+                "requestID": requestID,
+                "protocolVersion": String(protocolVersion),
+            ]
+        )
+    }
+
+    private func recognitionWindow(
+        startSample: Int64?,
+        endSample: Int64?,
+        audio: WhisperAudioFile
+    ) -> RecognitionWindow {
+        let sampleRate = 16_000
+        let samples = estimateSampleCount(audio.url) ?? 0
+        let safeStart = min(
+            max(Int64(0), startSample ?? 0),
+            max(samples, Int64(0))
+        )
+        let safeEnd = endSample.map {
+            min(max(safeStart, $0), samples)
+        } ?? samples
+        return RecognitionWindow(
+            startSample: safeStart,
+            endSample: safeEnd > 0 ? safeEnd : samples,
+            sampleRate: sampleRate
+        )
+    }
+
+    private func estimateSampleCount(_ url: URL) -> Int64? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? handle.close() }
+
+        do {
+            guard let header = try handle.read(upToCount: 44),
+                  header.count >= 44,
+                  String(decoding: header[0..<4], as: UTF8.self) == "RIFF",
+                  String(decoding: header[8..<12], as: UTF8.self) == "WAVE",
+                  String(decoding: header[12..<16], as: UTF8.self) == "fmt ",
+                  String(decoding: header[36..<40], as: UTF8.self) == "data",
+                  Data(header[22...23]).toUInt16 == 1,
+                  Data(header[24...27]).toUInt32 == 16_000,
+                  Data(header[34...35]).toUInt16 == 16
+            else {
+                return nil
+            }
+            let dataSize = Int64(Data(header[40...43]).toUInt32)
+            return max(0, dataSize / 2)
+        } catch {
+            return nil
+        }
+    }
+
     private func cleanedTranscript(_ raw: String) throws -> String {
         let transcript = WhisperTranscriptSanitizer.clean(raw)
         guard !transcript.isEmpty else {
@@ -888,13 +1248,30 @@ private final class WhisperHelperSession: @unchecked Sendable {
     func transcribe(
         audioURL: URL,
         prompt: String?,
-        timeout: TimeInterval
-    ) async throws -> String {
+        timeout: TimeInterval,
+        protocolVersion: Int,
+        requestID: String,
+        pass: RecognitionPassKind,
+        strategy: WhisperDecodingStrategy,
+        beamSize: Int,
+        sampleStart: Int64?,
+        sampleEnd: Int64?,
+        emitMetadata: Bool
+    ) async throws -> WhisperHelperEvent {
         do {
             try inputHandle.write(
                 contentsOf: WhisperHelperProtocol.transcribeCommand(
                     audioURL: audioURL,
-                    prompt: prompt
+                    prompt: prompt,
+                    protocolVersion: protocolVersion,
+                    requestID: requestID,
+                    pass: pass,
+                    strategy: strategy,
+                    beamSize: beamSize,
+                    sampleStart: sampleStart,
+                    sampleEnd: sampleEnd,
+                    emitTimestamps: emitMetadata,
+                    emitTokenData: emitMetadata
                 )
             )
         } catch {
@@ -904,8 +1281,10 @@ private final class WhisperHelperSession: @unchecked Sendable {
 
         let event = try await nextEvent(timeout: timeout)
         switch event {
-        case .result(let text):
-            return text
+        case .result:
+            return event
+        case .resultRich:
+            return event
         case .error:
             throw error(for: event)
         case .ready:
@@ -956,7 +1335,7 @@ private final class WhisperHelperSession: @unchecked Sendable {
         throw WhisperASRError.recognitionTimedOut
     }
 
-    private func error(for event: WhisperHelperEvent) -> WhisperASRError {
+    func error(for event: WhisperHelperEvent) -> WhisperASRError {
         guard case .error(let code, _) = event else {
             return .helperProtocolFailure
         }
@@ -1111,5 +1490,20 @@ private extension NSLock {
         lock()
         defer { unlock() }
         return try body()
+    }
+}
+
+private extension Data {
+    var toUInt16: UInt16 {
+        guard count >= 2 else { return 0 }
+        return UInt16(self[0]) | (UInt16(self[1]) << 8)
+    }
+
+    var toUInt32: UInt32 {
+        guard count >= 4 else { return 0 }
+        return UInt32(self[0])
+            | (UInt32(self[1]) << 8)
+            | (UInt32(self[2]) << 16)
+            | (UInt32(self[3]) << 24)
     }
 }

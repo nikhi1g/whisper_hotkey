@@ -289,6 +289,8 @@ final class DictionaryPromptEchoTests: XCTestCase {
                     continue
                 case .result(let text):
                     resultText = text
+                case .resultRich(let hypothesis):
+                    resultText = hypothesis.text
                 case .error(let code, let message):
                     XCTFail("helper reported error \(code): \(message)")
                     resultText = ""
