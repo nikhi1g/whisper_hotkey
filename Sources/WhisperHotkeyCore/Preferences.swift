@@ -1263,16 +1263,16 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .parakeetAccurate: "Accurate — recommended"
+        case .parakeetAccurate: "Accurate → recommended"
         case .parakeetFast: "Fast"
-        case .parakeetUnified: "Unified — most accurate"
+        case .parakeetUnified: "Unified → most accurate"
         case .whisperTurboMetal: "Turbo"
         case .whisperBaseMetal: "Base"
         case .whisperTurboCoreML: "Turbo (Core ML encoder)"
         case .whisperBaseCoreML: "Base (Core ML encoder)"
         case .whisperTurboWhisperKit: "Turbo (WhisperKit)"
         case .whisperBaseWhisperKit: "Base (WhisperKit)"
-        case .cohereTranscribe: "Transcribe — slowest"
+        case .cohereTranscribe: "Transcribe → slowest"
         }
     }
 
