@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.7.0: 2026-08-07
+
+- Bundled Parakeet Unified and made it the default. It has won every accuracy
+  figure and both mean and median latency since 3.5.0, and was also the one
+  option a new user had to download 596 MB to try
+- Moved Whisper Turbo out of the bundle and onto the on-demand download path.
+  Shipping both would have taken the release asset past 1.8 GB against
+  GitHub's 2 GB ceiling; Turbo stays fully selectable, with the same progress
+  panel and pinned SHA-256 every other install uses. The download is no larger
+  than 3.6.2's
+- Stopped asking for Input Monitoring. Granting Accessibility already satisfies
+  the event tap's listen check, so it was never a separate action a user had to
+  take. The row appears only when the preflight still fails after Accessibility
+  has been granted, so an OS that changes this still surfaces the step instead
+  of leaving a hotkey that silently does nothing
+- Made Toggle the default activation mode. Press and Hold asked a new user to
+  hold a modifier for the length of a sentence before anything appeared to
+  work. Existing installations keep what they had: the old preference was read
+  with `defaults.bool(forKey:)`, which cannot tell "absent" from "false", so a
+  stored choice is now honoured as one
+- Sized the Settings window to its content and fixed its width. The empty band
+  above the controls was an unflipped document view, which pins content shorter
+  than the window to the bottom
+- Gave the dictation key menu the real modifier glyphs, and renamed the model
+  options so they say what distinguishes them rather than reading as three
+  kinds of "accurate"
+- Fixed `ParakeetModelInstaller.bundledDirectory`, which refused to look for
+  Unified at all and judged completeness differently from `isInstalled`.
+  Nothing depended on this before, because Unified was never bundled
+
 ## 3.6.2: 2026-08-07
 
 - Reverted the site download to `whisper_hotkey.zip`. 3.6.0 made the DMG the
