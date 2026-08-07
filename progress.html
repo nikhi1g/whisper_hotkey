@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Whisper Hotkey Progress</title>
+    <style>
+      :root {
+        --fg: #111827;
+        --muted: #6b7280;
+        --bg: #f9fafb;
+        --card: #ffffff;
+        --done: #10b981;
+        --wip: #f59e0b;
+        --todo: #ef4444;
+        --border: #e5e7eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      .page {
+        max-width: 920px;
+        margin: 24px auto;
+        padding: 16px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+      p.subtitle { color: var(--muted); margin-top: 0; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th, td { padding: 10px 8px; text-align: left; }
+      thead th {
+        border-bottom: 1px solid var(--border);
+        color: var(--muted);
+        font-weight: 600;
+      }
+      tbody tr + tr td {
+        border-top: 1px solid #f3f4f6;
+      }
+      .label { max-width: 460px; }
+      .bar-wrap {
+        width: 220px;
+        height: 10px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .bar {
+        height: 100%;
+        border-radius: inherit;
+      }
+      .bar.d10 { background: #10b981; }
+      .bar.d80 { background: #22c55e; }
+      .bar.d90 { background: #22c55e; }
+      .bar.wip { background: #f59e0b; }
+      .bar.todo { background: #ef4444; }
+      .pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .pill.done { background: var(--done); }
+      .pill.wip { background: var(--wip); }
+      .pill.todo { background: var(--todo); }
+      .status { width: 90px; }
+      .pct { width: 60px; text-align: right; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>whisper_hotkey — Progress Board</h1>
+      <p class="subtitle">Minimal static status page (table + progress bars).</p>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Progress</th>
+              <th>%</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="label">Smart-decoding/uncertainty pipeline integrated (phase-1)</td>
+              <td><div class="bar-wrap"><div class="bar d90" style="width: 100%;"></div></div></td>
+              <td class="pct">100%</td>
+              <td class="status"><span class="pill done">DONE</span></td>
+              <td>AccuracyCoordinator + uncertainty assessor + fallback flow are in place.</td>
+            </tr>
+            <tr>
+              <td class="label">Model-helper protocol v2 schema extended</td>
+              <td><div class="bar-wrap"><div class="bar d80" style="width: 100%;"></div></div></td>
+              <td class="pct">100%</td>
+              <td class="status"><span class="pill done">DONE</span></td>
+              <td>WhisperHelper sends richer result envelope (metadata, stats, words/segments).</td>
+            </tr>
+            <tr>
+              <td class="label">Adaptive flow passes token-metadata through</td>
+              <td><div class="bar-wrap"><div class="bar d80" style="width: 100%;"></div></div></td>
+              <td class="pct">100%</td>
+              <td class="status"><span class="pill done">DONE</span></td>
+              <td>adaptive fallback + weakTokenFraction parsing + metadata captured in hypothesis.</td>
+            </tr>
+            <tr>
+              <td class="label">Targeted regression coverage for new flow</td>
+              <td><div class="bar-wrap"><div class="bar d80" style="width: 85%;"></div></div></td>
+              <td class="pct">85%</td>
+              <td class="status"><span class="pill wip">IN PROGRESS</span></td>
+              <td>Accuracy and recognition parse tests exist; full suite still has fixture/runtime environment gaps.</td>
+            </tr>
+            <tr>
+              <td class="label">End-to-end rebuild + package signing</td>
+              <td><div class="bar-wrap"><div class="bar wip" style="width: 85%;"></div></div></td>
+              <td class="pct">85%</td>
+              <td class="status"><span class="pill wip">PARTIAL</span></td>
+              <td>Rebuild/repackage works; stable signing identity missing in this environment.</td>
+            </tr>
+            <tr>
+              <td class="label">Full project test pass</td>
+              <td><div class="bar-wrap"><div class="bar todo" style="width: 70%;"></div></div></td>
+              <td class="pct">70%</td>
+              <td class="status"><span class="pill todo">BLOCKED</span></td>
+              <td>Environment misses some parakeet fixture/model prerequisites for all selected tests.</td>
+            </tr>
+            <tr>
+              <td class="label">Install/launch verification on fresh system</td>
+              <td><div class="bar-wrap"><div class="bar todo" style="width: 15%;"></div></div></td>
+              <td class="pct">15%</td>
+              <td class="status"><span class="pill todo">PENDING</span></td>
+              <td>Not yet executed in this pass.</td>
+            </tr>
+            <tr>
+              <td class="label">Production rollout prep docs + handoff notes</td>
+              <td><div class="bar-wrap"><div class="bar todo" style="width: 20%;"></div></div></td>
+              <td class="pct">20%</td>
+              <td class="status"><span class="pill todo">PENDING</span></td>
+              <td>Ready for final release note and installer guidance pass.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>
