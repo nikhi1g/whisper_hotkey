@@ -23,15 +23,27 @@ public enum ModelDownloadError: Error, Equatable {
 
 /// Models the app can fetch after installation.
 ///
-/// Empty since 3.4.0: every model the app can select now ships inside it, so
-/// nothing is fetched at runtime. The mechanism is kept because it is the only
-/// verified install path, and a future model too large to bundle would use it
-/// again unchanged.
+/// Turbo returned here in 3.7.0. Parakeet Unified took its place in the bundle
+/// on the strength of a measured win in both accuracy and median latency, and
+/// shipping both would have pushed the download past 1.8 GB against GitHub's
+/// 2 GB asset ceiling. Turbo stays fully selectable; choosing it fetches the
+/// checkpoint through the progress panel and verifies the pinned checksum
+/// before installing.
 public enum ModelDownloadCatalog {
     static let baseURL =
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 
-    public static let downloadable: [DownloadableModel] = []
+    public static let downloadable: [DownloadableModel] = [
+        DownloadableModel(
+            model: .largeV3TurboQ5,
+            url: URL(
+                string: "\(baseURL)/ggml-large-v3-turbo-q5_0.bin"
+            )!,
+            sha256:
+                "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+            byteCount: 574_041_195
+        ),
+    ]
 
     public static func entry(for model: DictationModel) -> DownloadableModel? {
         downloadable.first { $0.model == model }

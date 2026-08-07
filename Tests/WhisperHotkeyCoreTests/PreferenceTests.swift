@@ -9,11 +9,13 @@ final class PreferenceTests: XCTestCase {
             physicalMemory: 4 * 1_024 * 1_024 * 1_024,
             availableModels: allModels
         )
-        // Base stopped being bundled in 3.6.0, so no profile points at it
-        // while Turbo is installed. Processing still steps down on a
-        // memory-constrained Mac, which is the part that governs footprint.
+        // No whisper checkpoint ships inside the app as of 3.7.0, so every
+        // profile has to start on Parakeet or the first dictation would look
+        // for a file that is not there. Both the variant and the processing
+        // mode step down on a memory-constrained Mac.
         XCTAssertEqual(constrained.model, .largeV3TurboQ5)
-        XCTAssertEqual(constrained.engine, .whisperCppMetal)
+        XCTAssertEqual(constrained.engine, .parakeetCoreML)
+        XCTAssertEqual(constrained.parakeetVariant, .fast)
         XCTAssertEqual(constrained.decodingProfile, .precision)
         XCTAssertEqual(constrained.processingMode, .afterRecording)
 
@@ -22,6 +24,7 @@ final class PreferenceTests: XCTestCase {
             availableModels: allModels
         )
         XCTAssertEqual(responsive.model, .largeV3TurboQ5)
+        XCTAssertEqual(responsive.parakeetVariant, .unified)
         XCTAssertEqual(responsive.processingMode, .modelReady)
 
         let highQuality = FirstRunPerformanceProfile.recommended(
@@ -285,14 +288,17 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
-    func testRecognitionEnginesDefaultToMetalAndPersist() {
+    /// An installation with nothing stored has to land on Parakeet: it is the
+    /// only engine whose checkpoints ship inside the app, so any other answer
+    /// points a first dictation at a file that has not been downloaded.
+    func testRecognitionEnginesDefaultToParakeetAndPersist() {
         let suite = "whisper_hotkey-engines-\(UUID().uuidString)"
         let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
         XCTAssertEqual(
             RecognitionEngine.selected(defaults: defaults),
-            .whisperCppMetal
+            .parakeetCoreML
         )
         XCTAssertEqual(
             RecognitionEngine.allCases,
@@ -315,7 +321,7 @@ final class PreferenceTests: XCTestCase {
         )
         XCTAssertEqual(
             RecognitionEngine.selected(defaults: defaults),
-            .whisperCppMetal
+            .parakeetCoreML
         )
     }
 

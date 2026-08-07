@@ -34,10 +34,12 @@ LOGIN_AGENT_BUNDLE_PROGRAM = f"Contents/MacOS/{LOGIN_LAUNCHER_NAME}"
 # could select it afterwards, so 141 MB of every download bought nothing.
 # Parakeet Fast is smaller, faster, more accurate, and also bundled, so the
 # low-memory first-run profile points there instead.
-BUNDLED_MODELS: dict[str, str] = {
-    "ggml-large-v3-turbo-q5_0.bin":
-        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
-}
+# Empty since 3.7.0. Parakeet Unified took Turbo's place in the bundle: it is
+# more accurate and faster on this project's own corpus, and both could not
+# ship without pushing the download past 1.8 GB. Turbo stays selectable and is
+# fetched on demand through ModelDownloadCatalog, which is the same verified
+# install path with a progress panel and a pinned checksum.
+BUNDLED_MODELS: dict[str, str] = {}
 
 # Parakeet checkpoints ship inside the app as of 3.4.0, so the best engine is
 # available on a fresh install with no download. Copied from FluidAudio's cache
@@ -48,6 +50,11 @@ PARAKEET_CACHE = (
 BUNDLED_PARAKEET_MODELS: tuple[str, ...] = (
     "parakeet-tdt-ctc-110m",
     "parakeet-tdt-0.6b-v2",
+    # Bundled as of 3.7.0 and now the default. It wins every accuracy figure
+    # and both mean and median latency against the other two, so making a new
+    # user download 596 MB to reach the option they should already be on was
+    # the wrong trade.
+    "parakeet-unified-en-0.6b",
 )
 
 

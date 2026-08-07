@@ -227,6 +227,11 @@ public final class AdvancedSettingsWindowController:
         action: nil
     )
     private let internalDictionaryExistingStack = NSStackView()
+    /// The one width the labelled two-column rows are laid out for.
+    static let settingsContentWidth: CGFloat = 620
+    /// Padding above and below the settings stack inside the document view.
+    private static let settingsContentInsets: CGFloat = 26 + 24
+
     private let internalDictionaryExistingScrollView = NSScrollView()
     private lazy var internalDictionaryControl = makeInternalDictionaryControl()
     private let keepLatestDictationToggle = NSButton(
@@ -297,8 +302,16 @@ public final class AdvancedSettingsWindowController:
         configureHelpButton()
 
         let window = SettingsWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 744),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: Self.settingsContentWidth,
+                height: 744
+            ),
+            // Not resizable: the content is a fixed-width column of labelled
+            // rows, so every width but one either stranded the controls or
+            // clipped them. The height is chosen to fit the content instead.
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -306,18 +319,17 @@ public final class AdvancedSettingsWindowController:
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.animationBehavior = .utilityWindow
-        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.collectionBehavior.insert(.fullScreenAuxiliary)
         // The controller is built once and reused, so without this the window
         // stays on whichever Space it was first opened on: activating the app
         // either yanked the user to that Space or appeared to do nothing at
         // all. Moving it to the active Space makes Settings open where the
         // user is looking.
         window.collectionBehavior.insert(.moveToActiveSpace)
-        window.minSize = NSSize(width: 620, height: 520)
-        window.center()
         window.delegate = self
         window.contentView = makeContentView()
         self.window = window
+        sizeWindowToFitContent()
 
         NotificationCenter.default.addObserver(
             self,
@@ -560,6 +572,7 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled && loginStatus != .unknown
         loginItemSettingsButton.isEnabled = state.configurationEnabled
         automaticUpdateCheckToggle.isEnabled = state.configurationEnabled
+        sizeWindowToFitContent()
     }
 
     public func windowWillClose(_ notification: Notification) {
@@ -760,6 +773,37 @@ public final class AdvancedSettingsWindowController:
         restoreCollapsedSettingsFrame()
     }
 
+    /// Fits the window to the settings content rather than to a fixed height.
+    ///
+    /// Rows appear and disappear with the selected engine, so a hardcoded
+    /// height was always wrong in one direction: empty space when rows were
+    /// hidden, a scrollbar when they were not. The scroll view stays as the
+    /// fallback for a display too short to show everything.
+    private func sizeWindowToFitContent() {
+        guard let window,
+              let stack = settingsStack,
+              collapsedSettingsFrame == nil,
+              !window.styleMask.contains(.fullScreen)
+        else {
+            return
+        }
+        window.contentView?.layoutSubtreeIfNeeded()
+        let content = stack.fittingSize.height + Self.settingsContentInsets
+        let available = (window.screen ?? NSScreen.main)?.visibleFrame.height
+        let height = min(content, (available ?? content) - 40)
+            .rounded(.up)
+        guard abs(height - window.contentLayoutRect.height) > 0.5 else {
+            return
+        }
+        let wasVisible = window.isVisible
+        window.setContentSize(
+            NSSize(width: Self.settingsContentWidth, height: height)
+        )
+        if !wasVisible {
+            window.center()
+        }
+    }
+
     private func expandSettingsWindowForEditor() {
         guard let window,
               !window.styleMask.contains(.fullScreen),
@@ -875,7 +919,7 @@ public final class AdvancedSettingsWindowController:
         configure(
             hotkeyPopup,
             values: HotkeyKey.allCases.map {
-                ($0.displayName, $0.rawValue)
+                ($0.menuTitle, $0.rawValue)
             },
             action: #selector(selectHotkey(_:))
         )
@@ -1499,7 +1543,11 @@ public final class AdvancedSettingsWindowController:
         root.addSubview(scrollView)
         settingsScrollView = scrollView
 
-        let documentView = NSView()
+        // A clip view is not flipped, so a document view shorter than the
+        // window is pinned to the bottom and the settings appeared to float
+        // under a band of empty space. Flipping it anchors the content to the
+        // top, which is where it belongs whether or not it scrolls.
+        let documentView = FlippedView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = documentView
         let stack = NSStackView()
@@ -1795,8 +1843,19 @@ public final class AdvancedSettingsWindowController:
         }
         return window.styleMask.contains(.closable)
             && window.styleMask.contains(.miniaturizable)
-            && window.styleMask.contains(.resizable)
-            && window.collectionBehavior.contains(.fullScreenPrimary)
+            && !window.styleMask.contains(.resizable)
+    }
+
+    /// The window fits its content when nothing has to be scrolled to reach it.
+    var settingsFitWithoutScrollingForTesting: Bool {
+        guard let scrollView = settingsScrollView,
+              let documentView = scrollView.documentView
+        else {
+            return false
+        }
+        scrollView.layoutSubtreeIfNeeded()
+        return documentView.fittingSize.height
+            <= scrollView.contentView.bounds.height + 0.5
     }
 
     var usesScrollableSettingsContentForTesting: Bool {
@@ -2241,6 +2300,11 @@ public final class AdvancedSettingsWindowController:
         }
         return Value(rawValue: rawValue)
     }
+}
+
+/// Top-anchored container for the settings scroll view's document view.
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 private final class SettingsWindow: NSWindow {

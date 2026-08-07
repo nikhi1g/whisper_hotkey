@@ -203,6 +203,7 @@ final class RecognitionTests: XCTestCase {
 
         let configuration = try WhisperRuntimeDiscovery.discover(
             model: .baseEnglish,
+            engine: .whisperCppMetal,
             environment: [
                 WhisperRuntimeDiscovery.helperEnvironmentKey: helper.path
             ],
@@ -236,6 +237,7 @@ final class RecognitionTests: XCTestCase {
 
         let configuration = try WhisperRuntimeDiscovery.discover(
             model: .largeV3TurboQ5,
+            engine: .whisperCppMetal,
             environment: [:],
             homeDirectory: root
         )
@@ -275,6 +277,7 @@ final class RecognitionTests: XCTestCase {
         let bundle = try XCTUnwrap(Bundle(url: bundleRoot))
         let configuration = try WhisperRuntimeDiscovery.discover(
             model: .baseEnglish,
+            engine: .whisperCppMetal,
             environment: [:],
             bundle: bundle,
             homeDirectory: root.appendingPathComponent("empty-home")
@@ -348,6 +351,7 @@ final class RecognitionTests: XCTestCase {
         XCTAssertThrowsError(
             try WhisperRuntimeDiscovery.discover(
                 model: .baseEnglish,
+                engine: .whisperCppMetal,
                 environment: [:],
                 homeDirectory: home
             )

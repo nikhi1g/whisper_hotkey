@@ -42,8 +42,6 @@ public enum ParakeetModelInstaller {
         for variant: ParakeetVariant,
         bundle: Bundle = .main
     ) -> URL? {
-        // Unified is never bundled, so there is nothing to look for.
-        guard variant != .unified else { return nil }
         guard let resources = bundle.resourceURL else { return nil }
         let candidate = resources
             .appendingPathComponent("ParakeetModels", isDirectory: true)
@@ -51,10 +49,7 @@ public enum ParakeetModelInstaller {
                 variant.cacheFolderName,
                 isDirectory: true
             )
-        guard AsrModels.modelsExist(
-            at: candidate,
-            version: version(for: variant)
-        ) else {
+        guard checkpointIsComplete(at: candidate, variant: variant) else {
             return nil
         }
         return candidate
@@ -64,26 +59,42 @@ public enum ParakeetModelInstaller {
         _ variant: ParakeetVariant,
         bundle: Bundle = .main
     ) -> Bool {
-        let directory = cacheDirectory(for: variant, bundle: bundle)
-        if variant == .unified {
-            // The offline path loads four bundles plus the vocabulary; the
-            // streaming encoders in the same repo are not fetched.
-            let names = ModelNames.ParakeetUnified.self
-            return [
-                names.offlineEncoderInt8File,
-                names.decoderFile,
-                names.jointDecisionFile,
-                names.vocab,
-            ].allSatisfy {
-                FileManager.default.fileExists(
-                    atPath: directory.appendingPathComponent($0).path
-                )
-            }
-        }
-        return AsrModels.modelsExist(
-            at: directory,
-            version: version(for: variant)
+        checkpointIsComplete(
+            at: cacheDirectory(for: variant, bundle: bundle),
+            variant: variant
         )
+    }
+
+    /// Whether `directory` holds every file the variant's loader opens.
+    ///
+    /// Unified is checked by name rather than through `AsrModels.modelsExist`
+    /// because it is a different manager with a different decoder, and the TDT
+    /// layout that function looks for does not describe it. Sharing this
+    /// between the bundled and downloaded paths keeps a checkpoint from being
+    /// judged complete in one and incomplete in the other.
+    private static func checkpointIsComplete(
+        at directory: URL,
+        variant: ParakeetVariant
+    ) -> Bool {
+        guard variant == .unified else {
+            return AsrModels.modelsExist(
+                at: directory,
+                version: version(for: variant)
+            )
+        }
+        // The offline path loads three compiled bundles plus the vocabulary;
+        // the streaming encoders in the same repo are not used.
+        let names = ModelNames.ParakeetUnified.self
+        return [
+            names.offlineEncoderInt8File,
+            names.decoderFile,
+            names.jointDecisionFile,
+            names.vocab,
+        ].allSatisfy {
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent($0).path
+            )
+        }
     }
 
     /// Downloads and compiles the checkpoint, reporting progress. Cancelling

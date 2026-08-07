@@ -29,6 +29,7 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
 
     public let model: DictationModel
     public let engine: RecognitionEngine
+    public let parakeetVariant: ParakeetVariant
     public let decodingProfile: DecodingProfile
     public let processingMode: ModelProcessingMode
 
@@ -36,14 +37,21 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
         physicalMemory: UInt64,
         availableModels: Set<DictationModel>
     ) -> Self {
-        // Base stopped being bundled in 3.6.0, so a low-memory Mac can no
-        // longer be pointed at it. Both tiers resolve to Turbo when it is
-        // installed; the engine below is what actually governs memory, and
-        // Parakeet -- which ignores this model entirely -- is the default.
+        // No whisper model is bundled as of 3.7.0, so a first run must not be
+        // pointed at one: it would land on a missing checkpoint and dictate
+        // nothing. Parakeet ignores this value entirely and every one of its
+        // checkpoints ships inside the app, so the first dictation works with
+        // no download. The stored model still has to be a real case because
+        // the preference is shared with the whisper engines.
         let preferredModels: [DictationModel] = [.largeV3TurboQ5, .baseEnglish]
         let model = preferredModels.first(where: availableModels.contains)
             ?? DictationModel.allCases.first(where: availableModels.contains)
-            ?? .baseEnglish
+            ?? .largeV3TurboQ5
+        // Unified is the most accurate and the fastest by median, but it is
+        // also the largest resident checkpoint. A Mac under the responsive
+        // threshold gets Fast, which is a third of the size.
+        let parakeetVariant: ParakeetVariant =
+            physicalMemory >= responsiveMemoryThreshold ? .unified : .fast
         // Model Ready keeps a whole-recording decode, so it is as accurate as
         // Decode After Speaking, and the resident model removes the load
         // latency.
@@ -54,7 +62,8 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
                 : .afterRecording
         return Self(
             model: model,
-            engine: .whisperCppMetal,
+            engine: .parakeetCoreML,
+            parakeetVariant: parakeetVariant,
             decodingProfile: .precision,
             processingMode: processingMode
         )
@@ -450,7 +459,15 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     case whisperCppMetal
     case parakeetCoreML
 
+    /// The engine `WhisperRuntimeDiscovery` resolves against when a caller
+    /// names none. This is a whisper engine because discovery is written in
+    /// terms of whisper's model files; it is not what a fresh install runs.
     public static let defaultEngine: Self = .whisperCppMetal
+
+    /// What an installation with nothing stored runs. Parakeet since 3.7.0:
+    /// no whisper checkpoint ships inside the app any more, so falling back to
+    /// a whisper engine would point a first dictation at a missing file.
+    public static let defaultPreference: Self = .parakeetCoreML
 
     /// Engines retired in 3.5.7 and 3.5.9, kept only so a saved preference can
     /// be read and migrated.
@@ -532,12 +549,12 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         guard let rawValue = defaults.string(
             forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
         ) else {
-            return .defaultEngine
+            return .defaultPreference
         }
         if let engine = Self(rawValue: rawValue) {
             return engine
         }
-        return retiredRawValues[rawValue] ?? .defaultEngine
+        return retiredRawValues[rawValue] ?? .defaultPreference
     }
 }
 
@@ -913,7 +930,11 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
     /// transcribes with overlapping windows.
     case unified
 
-    public static let defaultVariant: Self = .accurate
+    /// Unified since 3.7.0, when it started shipping inside the app. It wins
+    /// every accuracy figure and both mean and median latency against Accurate
+    /// on this project's corpus; its only regression is audio past 15 seconds,
+    /// which a dictation phrase is not.
+    public static let defaultVariant: Self = .unified
 
     /// Chip label. These are the only two Parakeet offers, so they describe the
     /// tradeoff directly instead of borrowing whisper's size names.
@@ -965,12 +986,11 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Whether the checkpoint ships inside the app. Unified is downloaded on
-    /// demand: bundling it as well would take the release asset close enough
-    /// to GitHub's 2 GB ceiling to be reckless.
-    public var shipsInsideTheApp: Bool {
-        self != .unified
-    }
+    /// Every Parakeet checkpoint ships inside the app as of 3.7.0. Unified was
+    /// the on-demand download until it took the bundled whisper model's place:
+    /// it wins on both accuracy and median latency, so the option a new user
+    /// should already be on no longer costs them a 596 MB wait.
+    public var shipsInsideTheApp: Bool { true }
 
     public static func selected(
         defaults: UserDefaults = .standard
@@ -1223,7 +1243,7 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     case parakeetUnified
     case whisperTurboMetal
 
-    public static let defaultChoice: Self = .parakeetAccurate
+    public static let defaultChoice: Self = .parakeetUnified
 
     /// Heading this option sits under in the picker. Bundled families come
     /// first so the options that work with no download lead.
@@ -1250,9 +1270,11 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .parakeetAccurate: "Accurate → recommended"
-        case .parakeetFast: "Fast"
-        case .parakeetUnified: "Unified → most accurate"
+        // Each option names what sets it apart. "Accurate" beside "most
+        // accurate" made the two bundled choices read as the same thing.
+        case .parakeetAccurate: "Balanced → recommended"
+        case .parakeetFast: "Fast → smallest"
+        case .parakeetUnified: "Unified → best quality"
         case .whisperTurboMetal: "Turbo"
         }
     }
@@ -1287,7 +1309,7 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     /// Size quoted in the picker when the option is not already on disk.
     public var downloadDescription: String? {
         switch self {
-        case .parakeetUnified: "594 MB"
+        case .whisperTurboMetal: "547 MB"
         default: nil
         }
     }

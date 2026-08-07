@@ -354,8 +354,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(controller.loginItemIsOnForTesting)
         XCTAssertEqual(controller.loginStatusTextForTesting, "Enabled")
         XCTAssertEqual(
-            controller.window?.contentView?.frame.size,
-            CGSize(width: 620, height: 744)
+            controller.window?.contentView?.frame.width,
+            AdvancedSettingsWindowController.settingsContentWidth
         )
         XCTAssertEqual(
             controller.window?.title,
@@ -363,6 +363,9 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertTrue(controller.supportsStandardWindowCommandsForTesting)
         XCTAssertTrue(controller.usesScrollableSettingsContentForTesting)
+        // The height follows the content: no empty band, and nothing the user
+        // has to scroll to reach.
+        XCTAssertTrue(controller.settingsFitWithoutScrollingForTesting)
     }
 
     @MainActor

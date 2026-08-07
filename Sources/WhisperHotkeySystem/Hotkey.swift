@@ -58,6 +58,35 @@ public enum HotkeyKey: String, CaseIterable, Codable, Equatable, Hashable, Senda
         }
     }
 
+    /// Apple's canonical modifier glyph, matched to how macOS itself labels
+    /// these keys in menus and System Settings. `function` has no single
+    /// standard glyph, so it is left textual.
+    public var glyph: String? {
+        switch self {
+        case .rightCommand, .leftCommand:
+            "\u{2318}"
+        case .rightShift, .leftShift:
+            "\u{21E7}"
+        case .rightOption, .leftOption:
+            "\u{2325}"
+        case .rightControl, .leftControl:
+            "\u{2303}"
+        case .capsLock:
+            "\u{21EA}"
+        case .function:
+            nil
+        }
+    }
+
+    /// The popup menu wants the glyph prefixed; other call sites (user guide
+    /// prose, cross-references) want `displayName` alone.
+    public var menuTitle: String {
+        guard let glyph else {
+            return displayName
+        }
+        return "\(glyph) \(displayName)"
+    }
+
     public var virtualKeyCode: Int64 {
         switch self {
         case .rightCommand:

@@ -103,9 +103,11 @@ final class ParakeetRecognitionTests: XCTestCase {
         }
     }
 
-    func testUnifiedIsNotBundledAndHasItsOwnDirectory() {
-        XCTAssertFalse(ParakeetVariant.unified.shipsInsideTheApp)
-        XCTAssertNil(ParakeetModelInstaller.bundledDirectory(for: .unified))
+    /// Unified became a bundled checkpoint in 3.7.0 and is now the default, so
+    /// a first dictation must not depend on a download. It still needs its own
+    /// directory: it is a different manager with a different decoder.
+    func testUnifiedIsBundledAndHasItsOwnDirectory() {
+        XCTAssertTrue(ParakeetVariant.unified.shipsInsideTheApp)
         XCTAssertNotEqual(
             ParakeetModelInstaller.cacheDirectory(for: .unified),
             ParakeetModelInstaller.cacheDirectory(for: .accurate)

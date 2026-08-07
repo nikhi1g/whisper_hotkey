@@ -192,18 +192,20 @@ reports **Custom**.
 
 | Option | Model | Size | Reason to choose it |
 | --- | --- | ---: | --- |
-| Parakeet Accurate | `parakeet-tdt-0.6b-v2` | 443 MB | Default; best on both axes |
+| Parakeet Unified | `parakeet-unified-en-0.6b` | 596 MB | Default; best accuracy and best median latency |
+| Parakeet Balanced | `parakeet-tdt-0.6b-v2` | 443 MB | Shortest tail on audio past 15 seconds |
 | Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
-| Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate; on-demand download |
-| Whisper Turbo | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Supports the internal dictionary |
+| Whisper Turbo | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Supports the internal dictionary; on-demand download |
 
 Whisper Turbo remains because Parakeet is a transducer: it accepts no prompt,
 so the internal dictionary and Pause Mode context only bias Whisper. Whisper
 Base left the list in 3.5.7 — Parakeet Fast is smaller, faster and more
 accurate, and it is bundled. Small and Medium English were retired in 3.4.1.
 
-The bundled options ship inside the app; Unified is fetched only when
-selected.
+Every Parakeet checkpoint ships inside the app, so a fresh install dictates
+with no download at all. Turbo swapped places with Unified in 3.7.0: shipping
+both would have pushed the download past 1.8 GB against GitHub's 2 GB asset
+ceiling, and Unified is the one that wins on measurement.
 
 ```sh
 ./run.sh --model base

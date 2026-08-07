@@ -83,10 +83,21 @@ final class RecognitionChoiceTests: XCTestCase {
         XCTAssertEqual(Set(names).count, names.count)
     }
 
-    func testBundledOptionsQuoteNoDownload() {
-        XCTAssertNil(RecognitionChoice.parakeetAccurate.downloadDescription)
-        XCTAssertNil(RecognitionChoice.whisperTurboMetal.downloadDescription)
-        XCTAssertNotNil(RecognitionChoice.parakeetUnified.downloadDescription)
+    /// Every Parakeet checkpoint ships inside the app as of 3.7.0 and Turbo is
+    /// the one fetched on demand, so the size has to be quoted on Turbo and
+    /// nowhere else. Quoting it on an option that needs no download would send
+    /// a user looking for a transfer that never happens.
+    func testOnlyTheUnbundledOptionQuotesADownload() {
+        for choice in RecognitionChoice.allCases
+        where choice.engine == .parakeetCoreML {
+            XCTAssertNil(
+                choice.downloadDescription,
+                "\(choice) ships inside the app but quoted a download"
+            )
+        }
+        XCTAssertNotNil(
+            RecognitionChoice.whisperTurboMetal.downloadDescription
+        )
     }
 
     func testDefaultIsABundledParakeetOption() {

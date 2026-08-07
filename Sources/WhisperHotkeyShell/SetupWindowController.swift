@@ -35,6 +35,17 @@ public struct SetupReadiness: Equatable, Sendable {
             && modelAvailable
             && helperAvailable
     }
+
+    /// Whether Input Monitoring is worth showing as its own setup step.
+    ///
+    /// Granting Accessibility already satisfies the event tap's listen check,
+    /// so on a normal machine this is never a separate action the user has to
+    /// take -- listing it up front turned a two-permission app into a
+    /// three-permission one. It surfaces only in the case that proves the
+    /// assumption wrong: Accessibility granted and the preflight still failing.
+    public var requiresInputMonitoringStep: Bool {
+        accessibilityGranted && !inputMonitoringGranted
+    }
 }
 
 @MainActor
@@ -108,6 +119,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let loginItemManager: LoginItemManager
     private let completionStore: any SetupCompletionStoring
     private var rowControls: [Row: RowControls] = [:]
+    private var gridRows: [Row: NSGridRow] = [:]
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private var attemptedAutomaticLoginRegistration = false
 
@@ -202,6 +214,8 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             missingText: "Permission needed",
             actionTitle: "Open Settings"
         )
+        gridRows[.inputMonitoring]?.isHidden =
+            !readiness.requiresInputMonitoringStep
         update(
             .inputMonitoring,
             ready: readiness.inputMonitoringGranted,
@@ -401,7 +415,7 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             button.bezelStyle = .rounded
             button.tag = row.rawValue
             button.controlSize = .small
-            grid.addRow(with: [nameLabel, statusLabel, button])
+            gridRows[row] = grid.addRow(with: [nameLabel, statusLabel, button])
             rowControls[row] = RowControls(
                 name: nameLabel,
                 status: statusLabel,

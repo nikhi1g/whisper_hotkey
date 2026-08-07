@@ -33,10 +33,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 forKey: "dictationHotkey"
             )
             defaults.set(
-                HotkeyActivationMode.hold.rawValue,
+                HotkeyActivationMode.toggle.rawValue,
                 forKey: WhisperHotkeyPreferenceKeys.dictationMode
             )
-            defaults.set(false, forKey: "toggleDictationEnabled")
+            defaults.set(true, forKey: "toggleDictationEnabled")
             defaults.set(
                 profile.model.rawValue,
                 forKey: WhisperHotkeyPreferenceKeys.dictationModel
@@ -44,6 +44,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             defaults.set(
                 profile.engine.rawValue,
                 forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
+            )
+            defaults.set(
+                profile.parakeetVariant.rawValue,
+                forKey: WhisperHotkeyPreferenceKeys.parakeetModel
             )
             defaults.set(
                 profile.decodingProfile.rawValue,
@@ -55,7 +59,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }()
     private static let unavailableAdvancedSettingsState = AdvancedSettingsState(
         selectedHotkey: .rightOption,
-        activationMode: .hold,
+        activationMode: .toggle,
         selectedModel: .baseEnglish,
         selectedEngine: .whisperCppMetal,
         decodingProfile: .precision,
@@ -1836,6 +1840,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             forKey: WhisperHotkeyPreferenceKeys.dictationMode
         ), let mode = HotkeyActivationMode(rawValue: rawValue) {
             return mode
+        }
+        // The older boolean is still honoured for anyone who set it before
+        // `dictationMode` existed. Only when neither key was ever written does
+        // this fall through to the current default, which is Toggle: holding a
+        // modifier for the length of a sentence is the step new users most
+        // often fail to discover.
+        guard defaults.object(forKey: "toggleDictationEnabled") != nil else {
+            return .toggle
         }
         return defaults.bool(forKey: "toggleDictationEnabled")
             ? .toggle
