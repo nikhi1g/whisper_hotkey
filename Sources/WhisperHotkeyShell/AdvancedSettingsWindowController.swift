@@ -231,6 +231,8 @@ public final class AdvancedSettingsWindowController:
     static let settingsContentWidth: CGFloat = 620
     /// Padding above and below the settings stack inside the document view.
     private static let settingsContentInsets: CGFloat = 26 + 24
+    /// Breathing room kept between the window and the edges of the display.
+    private static let settingsScreenMargin: CGFloat = 40
 
     private let internalDictionaryExistingScrollView = NSScrollView()
     private lazy var internalDictionaryControl = makeInternalDictionaryControl()
@@ -788,10 +790,17 @@ public final class AdvancedSettingsWindowController:
             return
         }
         window.contentView?.layoutSubtreeIfNeeded()
-        let content = stack.fittingSize.height + Self.settingsContentInsets
-        let available = (window.screen ?? NSScreen.main)?.visibleFrame.height
-        let height = min(content, (available ?? content) - 40)
+        var height = (stack.fittingSize.height + Self.settingsContentInsets)
             .rounded(.up)
+        // The screen only ever shrinks the window, and only once there is a
+        // screen to measure against. Folding the margin into the unclamped
+        // case made the window 40pt shorter than its own content wherever no
+        // display was reported, which put the footer outside the frame.
+        if window.isVisible,
+           let visible = (window.screen ?? NSScreen.main)?.visibleFrame.height,
+           height > visible - Self.settingsScreenMargin {
+            height = visible - Self.settingsScreenMargin
+        }
         guard abs(height - window.contentLayoutRect.height) > 0.5 else {
             return
         }

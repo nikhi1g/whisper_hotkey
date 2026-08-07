@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.7.1: 2026-08-07
+
+- Fixed the Settings window sizing 40pt shorter than its own content wherever
+  no display was reported, which put the footer outside the frame. The screen
+  margin was being folded into the unclamped case; the screen can now only
+  ever shrink the window, and only once there is a screen to measure against
+
 ## 3.7.0: 2026-08-07
 
 - Bundled Parakeet Unified and made it the default. It has won every accuracy
