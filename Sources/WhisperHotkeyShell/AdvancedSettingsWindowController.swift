@@ -182,9 +182,6 @@ public final class AdvancedSettingsWindowController:
     /// A labelled button rather than a disclosure triangle: a bare triangle
     /// renders as a stray glyph beside the preset chips and says nothing about
     /// what it opens.
-    private let advancedDisclosure = NSButton()
-    private var advancedRows: [NSGridRow] = []
-    private var showsAdvancedRecognition = false
     private let decodingControl = NSSegmentedControl()
     /// Held so the Decoding row can be hidden outright on engines that have no
     /// beam search. A disabled segmented control still paints its selection,
@@ -368,18 +365,6 @@ public final class AdvancedSettingsWindowController:
             presetControl.selectedSegment = index
         }
         presetControl.isEnabled = state.configurationEnabled
-        advancedDisclosure.title = preset == .custom
-            ? "Advanced Options (in use)"
-            : "Advanced Options"
-        // Custom cannot be folded away: it exists only because the advanced
-        // controls are doing something, so they have to be visible.
-        let showsAdvanced = showsAdvancedRecognition || preset == .custom
-        advancedDisclosure.state = showsAdvanced ? .on : .off
-        advancedDisclosure.isEnabled = state.configurationEnabled
-            && preset != .custom
-        for row in advancedRows {
-            row.isHidden = !showsAdvanced
-        }
         select(decodingProfile: state.decodingProfile)
         select(processingMode: state.processingMode)
         rebuildInternalDictionaryEntries(state.internalDictionaryEntries)
@@ -513,12 +498,6 @@ public final class AdvancedSettingsWindowController:
         )
         refresh()
     }
-
-    @objc private func toggleAdvancedRecognition(_ sender: NSButton) {
-        showsAdvancedRecognition = sender.state == .on
-        refresh()
-    }
-
 
 
     @objc private func selectDecodingProfile(
@@ -796,19 +775,6 @@ public final class AdvancedSettingsWindowController:
         recognitionChoicePopup.target = self
         recognitionChoicePopup.action = #selector(selectRecognitionChoice(_:))
         recognitionChoicePopup.setAccessibilityLabel("Recognition model")
-        advancedDisclosure.setButtonType(.pushOnPushOff)
-        advancedDisclosure.bezelStyle = .rounded
-        advancedDisclosure.controlSize = .small
-        advancedDisclosure.title = "Advanced Options"
-        advancedDisclosure.image = NSImage(
-            systemSymbolName: "gearshape",
-            accessibilityDescription: nil
-        )
-        advancedDisclosure.imagePosition = .imageLeading
-        advancedDisclosure.imageHugsTitle = true
-        advancedDisclosure.target = self
-        advancedDisclosure.action = #selector(toggleAdvancedRecognition(_:))
-        advancedDisclosure.setAccessibilityLabel("Advanced Options")
         configure(
             decodingControl,
             labels: DecodingProfile.allCases.map(\.displayName),
@@ -1431,31 +1397,14 @@ public final class AdvancedSettingsWindowController:
             "Quality", "Model", "Decoding", "Processing",
             "Internal dictionary", "Recording limit",
         ]
-        // The disclosure shares the preset's row rather than taking one of its
-        // own: the section has a fixed height budget, and a row spent on a
-        // single toggle is a row not spent on a setting.
-        // A flexible spacer pushes the button to the trailing edge, so the two
-        // presets read as the row's content and the escape hatch sits apart.
-        let recognitionSpacer = NSView()
-        recognitionSpacer.translatesAutoresizingMaskIntoConstraints = false
-        recognitionSpacer.setContentHuggingPriority(
-            .defaultLow,
-            for: .horizontal
-        )
-        let recognitionControls = NSStackView(
-            views: [presetControl, recognitionSpacer, advancedDisclosure]
-        )
-        recognitionControls.orientation = .horizontal
-        recognitionControls.spacing = 8
-        recognitionControls.alignment = .centerY
         // "Quality" rather than "Recognition": the row sat inside a section
         // already called RECOGNITION and repeated it.
         addRow(
             to: recognitionGrid,
             title: "Quality",
-            control: recognitionControls
+            control: presetControl
         )
-        let choiceRow = addRow(
+        addRow(
             to: recognitionGrid,
             title: "Model",
             control: recognitionChoicePopup
@@ -1465,15 +1414,11 @@ public final class AdvancedSettingsWindowController:
             title: "Decoding",
             control: decodingControl
         )
-        let processingRow = addRow(
+        addRow(
             to: recognitionGrid,
             title: "Processing",
             control: processingModeControl
         )
-        // Engine, model, decoding, and processing all exist to serve one of
-        // the two presets. They stay reachable, but folded away by default so
-        // the common choice is the visible one.
-        advancedRows = [choiceRow, decodingRow, processingRow].compactMap { $0 }
         internalDictionaryRow = addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
@@ -1734,10 +1679,6 @@ public final class AdvancedSettingsWindowController:
 
     var modeControlEnabledForTesting: Bool {
         modeControl.isEnabled
-    }
-
-    var advancedRecognitionVisibleForTesting: Bool {
-        advancedRows.contains { !$0.isHidden }
     }
 
     var presetChipLabelsForTesting: [String] {

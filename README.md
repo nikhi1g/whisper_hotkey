@@ -163,7 +163,7 @@ human-in-the-loop verification gate.
 ## Recognition
 
 Recognition leads with one choice, not four. Settings offers **Fast** and
-**Accurate**; everything else folds behind an Advanced disclosure.
+**Accurate**, with the individual controls behind them shown alongside.
 
 | Preset | Runs | Word error rate | Latency |
 | --- | --- | ---: | ---: |
@@ -180,27 +180,29 @@ There are only two presets because a third would have nowhere to sit. Parakeet
 tenth of a second, so a "balanced" tier would resolve to the same
 configuration as an "most accurate" one.
 
-### Advanced
+### Individual controls
 
-The Advanced disclosure exposes the engine, model, decoding profile, and
-processing mode directly. A configuration that matches neither preset reports
-**Custom** and keeps those controls open, because they are the only
-explanation for the state.
+Model, decoding profile, and processing mode sit directly below the presets.
+They used to fold behind an "Advanced Options" disclosure; the fold hid the
+only explanation for what a preset had done, and a setting a user cannot see
+is a setting they cannot trust. A configuration matching neither preset
+reports **Custom**.
 
 | Option | Model | Size | Reason to choose it |
 | --- | --- | ---: | --- |
 | Parakeet Accurate | `parakeet-tdt-0.6b-v2` | 443 MB | Default; best on both axes |
 | Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
-| `turbo` | Large-v3 Turbo Q5 | 547 MB | Whisper, supports the internal dictionary |
-| `base` | Base English | 141 MB | Lightest whisper tier |
+| Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate; on-demand download |
+| Whisper Turbo | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Supports the internal dictionary |
+| Cohere Transcribe | `cohere-transcribe-03-2026` | 2.4 GB | Best on clean speech; ~11x slower |
 
-Both Whisper models remain because Parakeet is a transducer: it accepts no
-prompt, so the internal dictionary and Pause Mode context only bias Whisper.
-Small and Medium English were retired in 3.4.1 — Parakeet Fast beats Small on
-size, speed, and accuracy at once, and Medium was the largest and slowest model
-in the app without being more accurate than Turbo.
+Whisper Turbo remains because Parakeet is a transducer: it accepts no prompt,
+so the internal dictionary and Pause Mode context only bias Whisper. Whisper
+Base left the list in 3.6.0 — Parakeet Fast is smaller, faster and more
+accurate, and it is bundled. Small and Medium English were retired in 3.4.1.
 
-Every model ships inside the app. Nothing is fetched at runtime.
+The bundled options ship inside the app; Unified and Cohere are fetched only
+when selected.
 
 ```sh
 ./run.sh --model base

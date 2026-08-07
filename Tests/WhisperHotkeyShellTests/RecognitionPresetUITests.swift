@@ -64,7 +64,7 @@ final class RecognitionPresetUITests: XCTestCase {
     }
 
     @MainActor
-    func testAPresetConfigurationHidesTheAdvancedControls() {
+    func testAPresetConfigurationStillReportsItsPreset() {
         for (variant, expected) in [
             (ParakeetVariant.fast, RecognitionPreset.fast),
             (ParakeetVariant.accurate, RecognitionPreset.accurate),
@@ -75,24 +75,20 @@ final class RecognitionPresetUITests: XCTestCase {
                 processing: .modelReady
             )
             XCTAssertEqual(controller.selectedPresetForTesting, expected)
-            XCTAssertFalse(
-                controller.advancedRecognitionVisibleForTesting,
-                "\(expected) should fold the advanced controls away"
-            )
         }
     }
 
-    /// A configuration that matches no preset must not leave one highlighted,
-    /// and must show the controls responsible for the divergence.
+    /// A configuration that matches no preset must not leave one highlighted.
+    /// The rows that caused the divergence are always visible now, so there is
+    /// nothing left to reveal -- only a preset to stop claiming.
     @MainActor
-    func testCustomShowsAdvancedAndSelectsNoPreset() {
+    func testCustomSelectsNoPreset() {
         let controller = controller(
             engine: .whisperCppMetal,
             variant: .accurate,
             processing: .afterRecording
         )
         XCTAssertEqual(controller.selectedPresetForTesting, .custom)
-        XCTAssertTrue(controller.advancedRecognitionVisibleForTesting)
     }
 
     @MainActor
