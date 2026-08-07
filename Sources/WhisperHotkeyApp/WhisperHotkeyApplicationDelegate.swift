@@ -241,6 +241,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var insertionContext: DictationInsertionContext?
     private var deliversToInternalDictionaryDraft = false
     private var completionBehavior = CompletionBehavior.insert
+    private var hasRequestedInputMonitoringRegistration = false
     private var badgeCaretRect: CGRect?
     private var badgeFieldRect: CGRect?
     private var pauseSessionTranscript: String?
@@ -499,6 +500,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reconcileRuntime(showSetupIfNeeded: Bool) {
+        registerForInputMonitoringIfNeeded()
         let readiness = setupReadiness
         var forceSetup = false
         if readiness.isReady {
@@ -2588,6 +2590,25 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func requestAccessibilityPermission() {
         _ = SystemPermissionController.requestAccessibility()
         openSystemSettings("Privacy_Accessibility")
+    }
+
+    /// Registers the app with TCC for `kTCCServiceListenEvent`.
+    ///
+    /// An app has no row in the Input Monitoring list until it asks for the
+    /// permission at least once, and there is no row to switch on for an app
+    /// that never asked. Nothing called this outside the setup window's
+    /// button, so an install that had never pressed that button could not be
+    /// granted the permission from System Settings at all. Asking here makes
+    /// the row exist. The system prompts at most once and the call is cheap
+    /// after that, so running it on every reconcile is safe.
+    private func registerForInputMonitoringIfNeeded() {
+        guard !hasRequestedInputMonitoringRegistration,
+              SystemPermissionController.preflight().inputMonitoring != .granted
+        else {
+            return
+        }
+        hasRequestedInputMonitoringRegistration = true
+        _ = SystemPermissionController.requestInputMonitoring()
     }
 
     private func requestInputMonitoringPermission() {

@@ -34,6 +34,7 @@ final class ContractsTests: XCTestCase {
             \.running,
             \.microphoneGranted,
             \.accessibilityGranted,
+            \.inputMonitoringGranted,
             \.loginItemEnabled,
             \.helperAvailable,
             \.modelAvailable,
@@ -43,23 +44,5 @@ final class ContractsTests: XCTestCase {
             missing[keyPath: requirement] = false
             XCTAssertFalse(missing.setupIsVerified)
         }
-    }
-
-    /// Input Monitoring is reported but not required, matching
-    /// `SetupReadiness.isReady`. The event tap runs on the Accessibility
-    /// grant, and requiring listen access here made `verify-setup` -- which
-    /// `run.sh` blocks on until it succeeds -- unable to ever return.
-    func testSetupVerificationDoesNotRequireInputMonitoring() {
-        let status = RuntimeStatus(
-            running: true,
-            phase: .idle,
-            microphoneGranted: true,
-            accessibilityGranted: true,
-            inputMonitoringGranted: false,
-            loginItemEnabled: true,
-            helperAvailable: true,
-            modelAvailable: true
-        )
-        XCTAssertTrue(status.setupIsVerified)
     }
 }

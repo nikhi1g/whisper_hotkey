@@ -1,9 +1,12 @@
 import XCTest
 @testable import WhisperHotkeyShell
 
-/// Every permission the setup window lists is one more thing a new user has to
-/// understand before dictating once, so a step that is never actually required
-/// must not be shown.
+/// 3.7.0 dropped Input Monitoring from the setup window on the theory that
+/// granting Accessibility already covered the event tap. Accessibility covers
+/// *creating* the tap and delivers `flagsChanged`, which is why the dictation
+/// modifier kept working and setup still reported ready. `keyDown` is only
+/// delivered to a tap holding `kTCCServiceListenEvent`, and Return and Escape
+/// are `keyDown`, so the completion shortcuts silently stopped working.
 final class SetupReadinessTests: XCTestCase {
     private func readiness(
         accessibility: Bool,
@@ -18,43 +21,27 @@ final class SetupReadinessTests: XCTestCase {
         )
     }
 
-    /// The normal machine: Accessibility satisfies the event tap's listen
-    /// check, so Input Monitoring resolves itself and is never its own step.
-    func testInputMonitoringIsNotAStepWhenAccessibilitySatisfiesIt() {
+    /// The row is unconditional. Hiding it removed the only place the
+    /// permission could be granted from, and an app with no row in the Input
+    /// Monitoring list has nothing for the user to switch on.
+    func testInputMonitoringIsAlwaysItsOwnStep() {
+        for accessibility in [true, false] {
+            for inputMonitoring in [true, false] {
+                XCTAssertTrue(
+                    readiness(
+                        accessibility: accessibility,
+                        inputMonitoring: inputMonitoring
+                    ).requiresInputMonitoringStep
+                )
+            }
+        }
+    }
+
+    /// Setup is not complete without listen access, however healthy the rest
+    /// of the window looks. This is the check whose removal let a build ship
+    /// reporting "Setup verified" with Return doing nothing.
+    func testListenAccessIsRequiredForReadiness() {
         XCTAssertFalse(
-            readiness(accessibility: true, inputMonitoring: true)
-                .requiresInputMonitoringStep
-        )
-    }
-
-    /// Before Accessibility is granted the preflight fails too, but the fix is
-    /// the Accessibility row. Showing both asks for two permissions to solve
-    /// one problem.
-    func testInputMonitoringIsNotAStepBeforeAccessibilityIsGranted() {
-        XCTAssertFalse(
-            readiness(accessibility: false, inputMonitoring: false)
-                .requiresInputMonitoringStep
-        )
-    }
-
-    /// The case that justifies keeping the check: an OS where Accessibility no
-    /// longer implies listen access. The step has to reappear, or the hotkey
-    /// silently does nothing with no way to fix it from the window.
-    func testInputMonitoringBecomesAStepWhenItStillFailsAfterAccessibility() {
-        XCTAssertTrue(
-            readiness(accessibility: true, inputMonitoring: false)
-                .requiresInputMonitoringStep
-        )
-    }
-
-    /// Listen access is not a precondition for readiness. The event tap is a
-    /// `.defaultTap`, which Accessibility authorises; `kTCCServiceListenEvent`
-    /// is a separate grant the app never registers for, so requiring it here
-    /// left setup permanently incomplete on a Mac where the hotkey worked.
-    /// Whether the tap can actually be created is settled by creating it, and
-    /// `reconcileRuntime` reopens setup when that fails.
-    func testAccessibilityAloneIsEnoughForSetupToBeReady() {
-        XCTAssertTrue(
             readiness(accessibility: true, inputMonitoring: false).isReady
         )
         XCTAssertTrue(
@@ -62,9 +49,9 @@ final class SetupReadinessTests: XCTestCase {
         )
     }
 
-    /// Accessibility remains mandatory; dropping the listen check must not
-    /// have made the permission that authorises the tap optional too.
-    func testAccessibilityIsStillRequired() {
+    /// Accessibility remains mandatory too: it is what authorises the tap and
+    /// the synthetic paste.
+    func testAccessibilityIsRequiredForReadiness() {
         XCTAssertFalse(
             readiness(accessibility: false, inputMonitoring: true).isReady
         )

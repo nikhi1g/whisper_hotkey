@@ -595,15 +595,15 @@ public final class GlobalHotkeyMonitor {
             callback: globalHotkeyEventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            // Creating the tap is the only authoritative check. This is a
-            // `.defaultTap` on the session tap, which Accessibility
-            // authorises; `CGPreflightListenEventAccess` reports
-            // kTCCServiceListenEvent, which governs listen-only taps and is a
-            // separate grant the app never registers for. Preflighting it as a
-            // precondition refused to start on a Mac that had everything the
-            // tap actually needs. It still tells the two failures apart, so
-            // the setup window can name the missing permission when that
-            // genuinely is the cause.
+            // Creating the tap is the authoritative check, so it is the one
+            // this guards on. Accessibility alone is enough to create the tap
+            // and to receive `flagsChanged`, so a preflight of
+            // `kTCCServiceListenEvent` refused to start on a Mac whose
+            // dictation modifier would have worked. Listen access is still
+            // required -- it is what delivers `keyDown`, and so what makes
+            // Return and Escape work -- but that is `SetupReadiness`'s
+            // precondition to enforce, not this one. The preflight survives
+            // only to name which of the two failures happened.
             throw CGPreflightListenEventAccess()
                 ? GlobalHotkeyMonitorError.eventTapCreationFailed
                 : GlobalHotkeyMonitorError.inputMonitoringNotGranted

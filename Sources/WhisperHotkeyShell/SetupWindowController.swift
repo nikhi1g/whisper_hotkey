@@ -28,28 +28,29 @@ public struct SetupReadiness: Equatable, Sendable {
         self.engine = engine
     }
 
-    /// Input Monitoring is deliberately absent. The event tap is authorised by
-    /// Accessibility, and `kTCCServiceListenEvent` is a separate grant the app
-    /// never registers for, so requiring it here left setup permanently
-    /// incomplete on a Mac where the hotkey would have worked. When the tap
-    /// really cannot be created, `reconcileRuntime` forces setup open and
-    /// `requiresInputMonitoringStep` surfaces the row.
+    /// Input Monitoring is required again, as it was before 3.7.0.
+    ///
+    /// The two grants do different jobs and only one of them is optional-
+    /// looking. Accessibility lets the app create the event tap and post the
+    /// paste, and a tap holding only that grant does receive `flagsChanged`,
+    /// so the dictation modifier works and setup looks finished.
+    /// `kTCCServiceListenEvent` is what actually delivers `keyDown` to a tap,
+    /// and Return and Escape are `keyDown`. Dropping this made the completion
+    /// shortcuts silently do nothing while everything else reported ready.
     public var isReady: Bool {
         microphoneGranted
             && accessibilityGranted
+            && inputMonitoringGranted
             && modelAvailable
             && helperAvailable
     }
 
-    /// Whether Input Monitoring is worth showing as its own setup step.
-    ///
-    /// Granting Accessibility already satisfies the event tap's listen check,
-    /// so on a normal machine this is never a separate action the user has to
-    /// take -- listing it up front turned a two-permission app into a
-    /// three-permission one. It surfaces only in the case that proves the
-    /// assumption wrong: Accessibility granted and the preflight still failing.
+    /// Always a step. 3.7.0 hid this behind `accessibilityGranted &&
+    /// !inputMonitoringGranted` on the theory that Accessibility covers the
+    /// tap. It covers creating the tap, not the key events the tap is for, so
+    /// hiding it removed the only place the permission could be granted from.
     public var requiresInputMonitoringStep: Bool {
-        accessibilityGranted && !inputMonitoringGranted
+        true
     }
 }
 

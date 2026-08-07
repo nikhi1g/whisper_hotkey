@@ -83,14 +83,15 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.lastError = lastError
     }
 
-    /// Input Monitoring is reported in `inputMonitoringGranted` but is not
-    /// required here, matching `SetupReadiness.isReady`: the event tap runs on
-    /// the Accessibility grant. Requiring it made `verify-setup` -- which
-    /// `run.sh` blocks on -- unable to ever succeed.
+    /// Input Monitoring is required, matching `SetupReadiness.isReady`. A tap
+    /// holding only the Accessibility grant receives `flagsChanged` but not
+    /// `keyDown`, so without this the dictation modifier works while Return
+    /// and Escape silently do nothing.
     public var setupIsVerified: Bool {
         running
             && microphoneGranted
             && accessibilityGranted
+            && inputMonitoringGranted
             && loginItemEnabled
             && helperAvailable
             && modelAvailable
