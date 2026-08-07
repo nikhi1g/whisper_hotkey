@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.6.2: 2026-08-07
+
+- Reverted the site download to `whisper_hotkey.zip`. 3.6.0 made the DMG the
+  human download on the strength of a terminal test that mounted a quarantined
+  image with `hdiutil`. That test was invalid: `hdiutil` does not go through
+  Gatekeeper's verification path. Finder refuses the same file outright, with
+  only Move to Trash and Done and no Open Anyway, because an unnotarized disk
+  image cannot be overridden the way an unnotarized app can
+- Restored the ZIP to the release workflow and to every published install
+  instruction. The DMG is still published and is still what the in-app updater
+  downloads, since it fetches directly and is never quarantined
+- Added `fresh_restart_application_test.sh`, which returns a Mac to a new
+  user's state -- no app, no preferences, no model caches, no permission
+  grants -- so the first-run path can be tested against the real download
+
 ## 3.6.0: 2026-08-07
 
 - Moved model install progress into the Settings window. It was a floating

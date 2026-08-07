@@ -109,6 +109,11 @@ jobs:
       - name: Create DMG
         run: python3 tools/package_dmg.py --unnotarized
 
+      # The ZIP is the download the site offers. An unnotarized DMG is refused
+      # by Finder with no Open Anyway override; the app inside a ZIP is not.
+      - name: Create ZIP
+        run: python3 tools/package_zip.py
+
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -117,6 +122,8 @@ jobs:
             gh release create "${GITHUB_REF_NAME}" --title "whisper_hotkey $(cat VERSION)" --notes-file RELEASE_NOTES.md
           fi
           gh release upload "${GITHUB_REF_NAME}" --clobber \
+            dist/release/whisper_hotkey.zip \
+            dist/release/whisper_hotkey.zip.sha256 \
             dist/release/whisper_hotkey.dmg \
             dist/release/whisper_hotkey.dmg.sha256 \
             dist/release/whisper_hotkey-*-source.tar.gz \

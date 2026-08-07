@@ -173,14 +173,18 @@ const refreshStableDownload = async () => {
     if (!response.ok) return;
     const release = await response.json();
     const assets = Array.isArray(release.assets) ? release.assets : [];
-    // The DMG is the human download as of 3.6.0. A quarantined unnotarized
-    // disk image does mount -- that was tested -- and the app copied out of it
-    // carries only com.apple.provenance rather than com.apple.quarantine,
-    // which the ZIP path did propagate. The ZIP stays as the fallback so links
-    // to older releases keep working.
+    // The ZIP is the human download. 3.6.0 tried the DMG on the strength of a
+    // test that mounted a quarantined image with `hdiutil` from the terminal.
+    // That test was invalid: hdiutil does not go through Gatekeeper's
+    // verification path. A Finder double-click on the same image is refused
+    // outright -- "Apple could not verify ... is free of malware" with only
+    // Move to Trash and Done, no Open Anyway -- because an unnotarized disk
+    // image cannot be overridden the way an unnotarized app can. 3.6.2 reverts
+    // to the ZIP, whose app does offer Open Anyway. The DMG stays as the
+    // fallback and is still what the in-app updater consumes.
     const asset =
-      assets.find(candidate => candidate.name === 'whisper_hotkey.dmg') ??
-      assets.find(candidate => candidate.name === 'whisper_hotkey.zip');
+      assets.find(candidate => candidate.name === 'whisper_hotkey.zip') ??
+      assets.find(candidate => candidate.name === 'whisper_hotkey.dmg');
     if (!asset || typeof asset.browser_download_url !== 'string') return;
 
     downloadButton.href = asset.browser_download_url;

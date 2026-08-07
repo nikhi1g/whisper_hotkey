@@ -55,9 +55,9 @@ re-downloads them, which is usually the point of having run the test.
 
 ## What a correct first run looks like
 
-1. The site's download button resolves to the DMG from the latest release.
-2. The DMG mounts despite carrying `com.apple.quarantine`. The app copied out
-   of it should carry only `com.apple.provenance`.
+1. The site's download button resolves to `whisper_hotkey.zip` from the latest
+   release.
+2. Unzipping and dragging the app into `/Applications` works normally.
 3. First launch is blocked. One approval through **System Settings > Privacy &
    Security > Open Anyway** is expected — the app is signed with a stable Apple
    Development identity and is deliberately not notarized.
@@ -69,10 +69,22 @@ re-downloads them, which is usually the point of having run the test.
 Step 3 is expected, not a bug, and will remain so without a paid Apple
 Developer membership.
 
-## Testing the Finder path specifically
+## Always test through Finder, never through the terminal
 
-`--download` deliberately stamps a real `com.apple.quarantine` value on the DMG
-before mounting, because `curl` alone does not set one and `hdiutil` on a clean
-file proves nothing. Copy the app out with **Finder drag-and-drop rather than
-`cp`** — the quarantine propagation rules differ between them, and Finder is
-what a user does.
+This is the lesson of 3.6.0, and it is worth stating plainly because getting it
+wrong shipped a download nobody could open.
+
+3.6.0 switched the site to the DMG on the strength of a terminal test: a DMG
+stamped with a real `com.apple.quarantine` value mounted fine under `hdiutil`,
+and the app copied out of it carried only `com.apple.provenance`. Every
+observation was true and the conclusion was still wrong. **`hdiutil` does not
+go through Gatekeeper's verification path at all.** A Finder double-click on
+the exact same file is refused with *"Apple could not verify
+'whisper_hotkey.dmg' is free of malware"* and only two buttons, **Move to
+Trash** and **Done** — no Open Anyway, because an unnotarized disk image cannot
+be overridden the way an unnotarized app can. 3.6.2 reverted to the ZIP.
+
+So: `curl`, `hdiutil`, `unzip`, and `open` from a shell all prove nothing about
+what a user experiences. Download through a browser, open through Finder,
+drag through Finder. `--download` exists only to stage the file quickly; the
+opening is still yours to do by hand.
