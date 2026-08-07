@@ -851,35 +851,56 @@ public final class AdvancedSettingsWindowController:
         )
     }
 
+    /// Adds a non-selectable section heading to a grouped popup.
+    ///
+    /// `isEnabled = false` alone is not enough: `NSMenu.autoenablesItems`
+    /// defaults to true, which makes AppKit recompute every item's state from
+    /// its target and action and discard what was set here. A heading with no
+    /// action came back enabled, so it highlighted on hover and could be
+    /// clicked, which read as a model that silently refused to be chosen.
+    /// Callers must also turn autoenabling off on the menu.
+    ///
+    /// The title is styled rather than merely disabled so the heading reads as
+    /// a category at a glance instead of as an unavailable option.
+    private func addSectionHeading(
+        _ title: String,
+        to popup: NSPopUpButton
+    ) {
+        let heading = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        heading.attributedTitle = NSAttributedString(
+            string: title.uppercased(),
+            attributes: [
+                .font: NSFont.systemFont(
+                    ofSize: NSFont.smallSystemFontSize,
+                    weight: .semibold
+                ),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .kern: 0.6,
+            ]
+        )
+        popup.menu?.addItem(heading)
+    }
+
     private func rebuildThemePopup(using state: AdvancedSettingsState) {
         themePopup.removeAllItems()
+        themePopup.menu?.autoenablesItems = false
         for (modeIndex, mode) in BadgeThemeMode.allCases.enumerated() {
             if modeIndex > 0 {
                 themePopup.menu?.addItem(.separator())
             }
-            let heading = NSMenuItem(
-                title: mode.displayName,
-                action: nil,
-                keyEquivalent: ""
-            )
-            heading.isEnabled = false
-            themePopup.menu?.addItem(heading)
+            addSectionHeading(mode.displayName, to: themePopup)
             for theme in BadgeTheme.allCases where theme.mode == mode {
                 themePopup.addItem(withTitle: theme.displayName)
                 themePopup.lastItem?.representedObject = theme.rawValue
+                themePopup.lastItem?.indentationLevel = 1
             }
         }
         guard !state.customThemes.isEmpty else {
             return
         }
         themePopup.menu?.addItem(.separator())
-        let heading = NSMenuItem(
-            title: "Custom",
-            action: nil,
-            keyEquivalent: ""
-        )
-        heading.isEnabled = false
-        themePopup.menu?.addItem(heading)
+        addSectionHeading("Custom", to: themePopup)
         for theme in state.customThemes.sorted(by: {
             $0.name.localizedCaseInsensitiveCompare($1.name)
                 == .orderedAscending
@@ -887,6 +908,7 @@ public final class AdvancedSettingsWindowController:
             themePopup.addItem(withTitle: theme.name)
             themePopup.lastItem?.representedObject =
                 BadgeThemeSelection.custom(theme).identifier
+            themePopup.lastItem?.indentationLevel = 1
         }
     }
 
@@ -1178,17 +1200,12 @@ public final class AdvancedSettingsWindowController:
         for state: AdvancedSettingsState
     ) {
         recognitionChoicePopup.removeAllItems()
+        recognitionChoicePopup.menu?.autoenablesItems = false
         for (index, group) in RecognitionChoice.Group.allCases.enumerated() {
             if index > 0 {
                 recognitionChoicePopup.menu?.addItem(.separator())
             }
-            let heading = NSMenuItem(
-                title: group.displayName,
-                action: nil,
-                keyEquivalent: ""
-            )
-            heading.isEnabled = false
-            recognitionChoicePopup.menu?.addItem(heading)
+            addSectionHeading(group.displayName, to: recognitionChoicePopup)
             for choice in RecognitionChoice.allCases where choice.group == group {
                 let available = state.availableEngines.contains(choice.engine)
                 var title = choice.displayName
@@ -1201,6 +1218,9 @@ public final class AdvancedSettingsWindowController:
                 let item = recognitionChoicePopup.lastItem
                 item?.representedObject = choice.rawValue
                 item?.isEnabled = available && state.configurationEnabled
+                // Indented under its heading so the two levels read as
+                // category and member rather than as a flat list.
+                item?.indentationLevel = 1
                 item?.toolTip = available
                     ? nil
                     : "Required local files are not installed"
@@ -1721,6 +1741,32 @@ public final class AdvancedSettingsWindowController:
     var recognitionChoiceHeadingsForTesting: [String] {
         recognitionChoicePopup.itemArray
             .filter { $0.representedObject == nil && !$0.isSeparatorItem }
+            .map(\.title)
+    }
+
+    /// Headings that AppKit would still let a user click. Must always be
+    /// empty: a heading names a family, not something to select.
+    var selectableRecognitionHeadingsForTesting: [String] {
+        recognitionChoicePopup.itemArray
+            .filter {
+                $0.representedObject == nil
+                    && !$0.isSeparatorItem
+                    && $0.isEnabled
+            }
+            .map(\.title)
+    }
+
+    var recognitionChoiceSeparatorCountForTesting: Int {
+        recognitionChoicePopup.itemArray.filter(\.isSeparatorItem).count
+    }
+
+    var selectableThemeHeadingsForTesting: [String] {
+        themePopup.itemArray
+            .filter {
+                $0.representedObject == nil
+                    && !$0.isSeparatorItem
+                    && $0.isEnabled
+            }
             .map(\.title)
     }
 

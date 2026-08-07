@@ -60,9 +60,13 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.recognitionChoiceLabelsForTesting.count,
             RecognitionChoice.allCases.count
         )
+        // Upper-cased and dimmed, matching the section titles above them, so
+        // a heading does not read as one more option in the list.
         XCTAssertEqual(
             controller.recognitionChoiceHeadingsForTesting,
-            RecognitionChoice.Group.allCases.map(\.displayName)
+            RecognitionChoice.Group.allCases.map {
+                $0.displayName.uppercased()
+            }
         )
         XCTAssertEqual(
             controller.recognitionRowTitlesForTesting,
@@ -70,6 +74,41 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 "Quality", "Model", "Decoding", "Processing",
                 "Internal dictionary", "Recording limit",
             ]
+        )
+        controller.close()
+    }
+
+    /// Parakeet, Whisper and Cohere name families, not models. They used to
+    /// highlight on hover and accept a click that then did nothing, because
+    /// NSMenu.autoenablesItems recomputes item state from target and action
+    /// and threw away the isEnabled = false each heading was given.
+    @MainActor
+    func testFamilyHeadingsCannotBeSelected() {
+        let controller = makeController(
+            box: AdvancedSettingsStateBox(
+                makeAdvancedSettingsState(
+                    availableEngines: Set(RecognitionEngine.allCases)
+                )
+            ),
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+        controller.showWindow(nil)
+
+        XCTAssertEqual(controller.selectableRecognitionHeadingsForTesting, [])
+        XCTAssertEqual(controller.selectableThemeHeadingsForTesting, [])
+        // Every heading is still present; it is only unselectable.
+        // Upper-cased and dimmed, matching the section titles above them, so
+        // a heading does not read as one more option in the list.
+        XCTAssertEqual(
+            controller.recognitionChoiceHeadingsForTesting,
+            RecognitionChoice.Group.allCases.map {
+                $0.displayName.uppercased()
+            }
+        )
+        // A rule between each pair of families, so the groups read as groups.
+        XCTAssertEqual(
+            controller.recognitionChoiceSeparatorCountForTesting,
+            RecognitionChoice.Group.allCases.count - 1
         )
         controller.close()
     }
@@ -236,7 +275,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             controller.themeSectionTitlesForTesting,
-            ["Dark", "Light"]
+            ["DARK", "LIGHT"]
         )
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
         XCTAssertTrue(controller.keepsLatestDictationForTesting)
@@ -453,7 +492,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             controller.themeSectionTitlesForTesting,
-            ["Dark", "Light", "Custom"]
+            ["DARK", "LIGHT", "CUSTOM"]
         )
     }
 
