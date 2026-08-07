@@ -38,6 +38,7 @@ public actor AccuracyCoordinator {
     ) async throws -> AccuracyDecision {
         var weightedCandidates: [WeightedCandidate] = []
         var alternatives: [RecognitionHypothesis] = []
+        var rejectionReasons: [String] = []
 
         let primary = try await primaryProvider.primaryHypothesis(request: request)
         alternatives.append(primary)
@@ -45,7 +46,7 @@ public actor AccuracyCoordinator {
             .init(hypothesis: primary, reliabilityWeight: 1.0)
         )
 
-        if provisional.count > 0 {
+        if !provisional.isEmpty {
             alternatives.append(contentsOf: provisional)
             let provisionalWeight = max(
                 0.1,
@@ -63,24 +64,57 @@ public actor AccuracyCoordinator {
             }
         }
 
-        if let secondaryProvider {
-            let alternate: RecognitionHypothesis?
+        let uncertainty = UncertaintyDetector.assess(
+            hypothesis: primary,
+            policy: policy
+        )
+        if uncertainty.isUncertain {
+            rejectionReasons.append(contentsOf: uncertainty.reasons)
+        }
+
+        let shouldRetrySecondary = request.strategy == .adaptive
+            && uncertainty.isUncertain
+            && !primary.adaptiveFallback
+            && secondaryProvider != nil
+
+        if shouldRetrySecondary,
+           let secondaryProvider {
+            let beamRequest = RecognitionRequest(
+                requestID: request.requestID,
+                audioURL: request.audioURL,
+                prompt: request.prompt,
+                window: request.window,
+                strategy: .beam,
+                beamSize: request.beamSize,
+                emitTokenData: request.emitTokenData,
+                emitTimestamps: request.emitTimestamps,
+                protocolVersion: request.protocolVersion
+            )
             do {
-                alternate = try await secondaryProvider.alternateHypothesis(
+                let alternate = try await secondaryProvider.alternateHypothesis(
                     request: AlternateRecognitionRequest(
-                        base: request,
+                        base: beamRequest,
                         pass: .secondaryVerifier
                     )
                 )
-            } catch {
-                alternate = nil
-            }
-            if let alternate {
                 alternatives.append(alternate)
                 weightedCandidates.append(
-                    .init(hypothesis: alternate, reliabilityWeight: 0.6)
+                    .init(
+                        hypothesis: alternate,
+                        reliabilityWeight: 0.8
+                    )
+                )
+            } catch {
+                rejectionReasons.append(
+                    "secondary retry failed: \(String(describing: error))"
                 )
             }
+        }
+
+        let maximumCandidates = max(policy.maximumCandidates, 1)
+        if alternatives.count > maximumCandidates {
+            alternatives = Array(alternatives.suffix(maximumCandidates))
+            weightedCandidates = Array(weightedCandidates.suffix(maximumCandidates))
         }
 
         guard let chosen = CandidateSelector.weightedMedoid(weightedCandidates)
@@ -93,7 +127,8 @@ public actor AccuracyCoordinator {
             alternatives: alternatives,
             trace: TranscriptDecisionTrace(
                 selectedHypothesisID: chosen.hypothesis.id,
-                candidateCount: alternatives.count
+                candidateCount: alternatives.count,
+                rejectionReasons: rejectionReasons
             )
         )
     }

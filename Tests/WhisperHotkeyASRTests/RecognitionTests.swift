@@ -151,6 +151,40 @@ final class RecognitionTests: XCTestCase {
         )
     }
 
+    func testHelperProtocolParsesAdaptiveMetadataFromResultEvent() throws {
+        let event =
+            #"{"event":"result","text":"hello","protocolVersion":2,"requestID":"adaptive-1","engine":"whisperTurbo","pass":"primaryFullSession","window":{"startSample":0,"endSample":10,"sampleRate":16000},"averageLogProbability":-0.20,"noSpeechProbability":0.02,"weakTokenFraction":0.015,"repetitionDetected":false,"metadata":{"adaptiveFallback":true,"requestedStrategy":"adaptive","weakTokenFraction":0.03}}"#
+        let parsed = try WhisperHelperProtocol.parse(event)
+        guard case .resultRich(let hypothesis) = parsed else {
+            XCTFail("Expected resultRich")
+            return
+        }
+
+        XCTAssertTrue(hypothesis.adaptiveFallback)
+        XCTAssertEqual(hypothesis.metadata["adaptiveFallback"], "true")
+        XCTAssertEqual(hypothesis.metadata["requestedStrategy"], "adaptive")
+        XCTAssertEqual(hypothesis.averageLogProbability, -0.20)
+        XCTAssertEqual(hypothesis.noSpeechProbability, 0.02)
+        XCTAssertEqual(hypothesis.weakTokenFraction, 0.015)
+        XCTAssertEqual(hypothesis.repetitionDetected, false)
+
+        let fallbackEvent =
+            #"{"event":"result","text":"hello","protocolVersion":2,"requestID":"adaptive-2","engine":"whisperTurbo","pass":"primaryFullSession","window":{"startSample":0,"endSample":10,"sampleRate":16000},"averageLogProbability":-0.2,"maximumNoSpeechProbability":0.22,"repetitionDetected":false,"adaptiveFallback":false,"requestedStrategy":"beam","metadata":{"weakTokenFraction":0.04,"ignored":true}}"#
+        let fallbackParsed = try WhisperHelperProtocol.parse(fallbackEvent)
+        guard case .resultRich(let fallbackHypothesis) = fallbackParsed else {
+            XCTFail("Expected resultRich")
+            return
+        }
+
+        XCTAssertFalse(fallbackHypothesis.adaptiveFallback)
+        XCTAssertEqual(
+            fallbackHypothesis.metadata["requestedStrategy"],
+            "beam"
+        )
+        XCTAssertEqual(fallbackHypothesis.noSpeechProbability, 0.22)
+        XCTAssertEqual(fallbackHypothesis.weakTokenFraction, 0.04)
+    }
+
     func testTranscribeCommandIsOneJSONLineWithPrivatePath() throws {
         let data = try WhisperHelperProtocol.transcribeCommand(
             audioURL: URL(

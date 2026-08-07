@@ -261,10 +261,23 @@ enum WhisperHelperProtocol {
         let sequenceScore: Double?
         let averageLogProbability: Double?
         let noSpeechProbability: Double?
+        let maximumNoSpeechProbability: Double?
         let repetitionDetected: Bool?
+        let adaptiveFallback: Bool?
+        let requestedStrategy: String?
+        let weakTokenFraction: Double?
+        let metadata: EventMetadata?
         let latencyMs: Double?
         let words: [EventWord]?
         let segments: [EventSegment]?
+
+        struct EventMetadata: Decodable {
+            let adaptiveFallback: Bool?
+            let requestedStrategy: String?
+            let weakTokenFraction: Double?
+            let noSpeechProbability: Double?
+            let maximumNoSpeechProbability: Double?
+        }
 
         struct EventWindow: Decodable {
             let startSample: Int64
@@ -349,6 +362,17 @@ enum WhisperHelperProtocol {
             else {
                 return .result(text)
             }
+            let adaptiveFallback = envelope.adaptiveFallback
+                ?? envelope.metadata?.adaptiveFallback
+                ?? false
+            let requestedStrategy = envelope.requestedStrategy
+                ?? envelope.metadata?.requestedStrategy
+            let weakTokenFraction = envelope.weakTokenFraction
+                ?? envelope.metadata?.weakTokenFraction
+            let noSpeechProbability = envelope.noSpeechProbability
+                ?? envelope.maximumNoSpeechProbability
+                ?? envelope.metadata?.noSpeechProbability
+                ?? envelope.metadata?.maximumNoSpeechProbability
             let words = (envelope.words ?? []).map {
                 TimedWord(
                     text: $0.text,
@@ -380,13 +404,20 @@ enum WhisperHelperProtocol {
                     segments: segments,
                     sequenceScore: envelope.sequenceScore,
                     averageLogProbability: envelope.averageLogProbability,
-                    noSpeechProbability: envelope.noSpeechProbability,
+                    noSpeechProbability: noSpeechProbability,
+                    weakTokenFraction: weakTokenFraction,
                     repetitionDetected: envelope.repetitionDetected ?? false,
+                    adaptiveFallback: adaptiveFallback,
                     modelID: envelope.modelID,
                     engineVersion: nil,
                     metadata: [
                         "protocolVersion": String(protocolVersion),
                         "requestID": envelope.requestID ?? "",
+                        "adaptiveFallback": String(adaptiveFallback),
+                        "requestedStrategy": requestedStrategy ?? "",
+                        "weakTokenFraction": weakTokenFraction != nil
+                            ? String(weakTokenFraction!)
+                            : "",
                     ],
                     latencyMilliseconds: envelope.latencyMs
                 )

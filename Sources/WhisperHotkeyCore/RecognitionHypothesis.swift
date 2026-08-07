@@ -84,6 +84,8 @@ public struct RecognitionHypothesis: Codable, Hashable, Sendable {
     public let averageLogProbability: Double?
     public let noSpeechProbability: Double?
     public let repetitionDetected: Bool
+    public let weakTokenFraction: Double?
+    public let adaptiveFallback: Bool
     public let modelID: String?
     public let engineVersion: String?
     public let metadata: [String: String]
@@ -100,7 +102,9 @@ public struct RecognitionHypothesis: Codable, Hashable, Sendable {
         sequenceScore: Double? = nil,
         averageLogProbability: Double? = nil,
         noSpeechProbability: Double? = nil,
+        weakTokenFraction: Double? = nil,
         repetitionDetected: Bool = false,
+        adaptiveFallback: Bool = false,
         modelID: String? = nil,
         engineVersion: String? = nil,
         metadata: [String: String] = [:],
@@ -116,7 +120,9 @@ public struct RecognitionHypothesis: Codable, Hashable, Sendable {
         self.sequenceScore = sequenceScore
         self.averageLogProbability = averageLogProbability
         self.noSpeechProbability = noSpeechProbability
+        self.weakTokenFraction = weakTokenFraction
         self.repetitionDetected = repetitionDetected
+        self.adaptiveFallback = adaptiveFallback
         self.modelID = modelID
         self.engineVersion = engineVersion
         self.metadata = metadata

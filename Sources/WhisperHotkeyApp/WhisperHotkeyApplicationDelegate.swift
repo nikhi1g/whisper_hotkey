@@ -935,6 +935,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         let strategy: RecognitionDecodeStrategy =
             decodingProfile == .adaptive ? .adaptive : .beam
+        let emitTokenData = strategy == .adaptive
         let request = RecognitionRequest(
             requestID: UUID().uuidString,
             audioURL: audio.url,
@@ -945,10 +946,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 sampleRate: sampleMetadata.sampleRate
             ),
             strategy: strategy,
+            emitTokenData: emitTokenData,
             protocolVersion: 2
         )
+        let provider = WhisperTurboCandidateProvider()
         let coordinator = AccuracyCoordinator(
-            primaryProvider: WhisperTurboCandidateProvider()
+            primaryProvider: provider,
+            secondaryProvider: strategy == .adaptive ? provider : nil
         )
         let decision = try await coordinator.finalize(request: request)
         let cleaned = WhisperTranscriptSanitizer.clean(decision.selected.text)

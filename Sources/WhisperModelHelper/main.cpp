@@ -140,6 +140,8 @@ void emit_result(
               << result.average_log_probability << ",";
     std::cout << "\"noSpeechProbability\":"
               << result.maximum_no_speech_probability << ",";
+    std::cout << "\"weakTokenFraction\":"
+              << result.weak_token_fraction << ",";
     std::cout << "\"repetitionDetected\":"
               << (result.has_repetition ? "true" : "false") << ",";
 

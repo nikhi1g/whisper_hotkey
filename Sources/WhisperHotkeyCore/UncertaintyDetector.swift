@@ -1,5 +1,19 @@
 import Foundation
 
+public struct UncertaintyAssessment: Equatable, Sendable {
+    public let reasons: [String]
+    public let score: Double
+
+    public init(reasons: [String], score: Double) {
+        self.reasons = reasons
+        self.score = score
+    }
+
+    public var isUncertain: Bool {
+        !reasons.isEmpty
+    }
+}
+
 public struct UncertainSpanSelection: Equatable, Sendable {
     public let span: UncertainSpan
     public let reason: String
@@ -66,5 +80,93 @@ public enum UncertaintyBudget {
         }
 
         return selected.sorted { $0.startSample < $1.startSample }
+    }
+}
+
+public enum UncertaintyDetector {
+    public static func assess(
+        hypothesis: RecognitionHypothesis,
+        policy: AccuracyPolicy = .defaultPolicy
+    ) -> UncertaintyAssessment {
+        var reasons: [String] = []
+        var score: Double = 0.0
+
+        if hypothesis.adaptiveFallback {
+            reasons.append("adaptive fallback was already performed")
+            return .init(reasons: reasons, score: 1.0)
+        }
+
+        if let average = hypothesis.averageLogProbability {
+            let confidence = (average - policy.minimumAverageLogProbability) / 2.0
+            score = max(0.0, min(1.0, 1.0 - confidence))
+            if average < policy.minimumAverageLogProbability {
+                reasons.append(
+                    String(
+                        format:
+                            "averageLogProbability(%.3f) < %.3f",
+                        average,
+                        policy.minimumAverageLogProbability
+                    )
+                )
+            }
+        } else if policy.missingMetadataPenalty > 0 {
+            score = max(score, policy.missingMetadataPenalty)
+            reasons.append(
+                "averageLogProbability missing: requires full metadata"
+            )
+        }
+
+        if let noSpeech = hypothesis.noSpeechProbability {
+            if noSpeech > policy.maximumNoSpeechProbability {
+                reasons.append(
+                    String(
+                        format:
+                            "noSpeechProbability(%.3f) > %.3f",
+                        noSpeech,
+                        policy.maximumNoSpeechProbability
+                    )
+                )
+                score = max(score, 1.0)
+            }
+        } else if policy.missingMetadataPenalty > 0 {
+            score = max(score, policy.missingMetadataPenalty)
+        }
+
+        if let weak = hypothesis.weakTokenFraction {
+            if weak > policy.maximumWeakTokenFraction {
+                reasons.append(
+                    String(
+                        format:
+                            "weakTokenFraction(%.3f) > %.3f",
+                        weak,
+                        policy.maximumWeakTokenFraction
+                    )
+                )
+                score = max(score, 1.0)
+            }
+        } else if policy.missingMetadataPenalty > 0 {
+            score = max(score, policy.missingMetadataPenalty)
+        }
+
+        if policy.repeatPenaltyEnabled && hypothesis.repetitionDetected {
+            reasons.append("repeated phrase detected")
+            score = max(score, 1.0)
+        }
+
+        if reasons.isEmpty {
+            return .init(reasons: [], score: 0.0)
+        }
+
+        if score <= 0 {
+            score = 1.0
+        }
+        return .init(reasons: reasons, score: min(1.0, score))
+    }
+
+    public static func isUncertain(
+        _ hypothesis: RecognitionHypothesis,
+        policy: AccuracyPolicy = .defaultPolicy
+    ) -> Bool {
+        assess(hypothesis: hypothesis, policy: policy).isUncertain
     }
 }
