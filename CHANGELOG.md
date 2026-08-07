@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.6: 2026-08-07
+
+- Replaced the em dash between a model's name and its qualifier with an arrow.
+  At menu-item size a dash reads as part of the name rather than as
+  punctuation: "Accurate → recommended", "Unified → most accurate",
+  "Transcribe → slowest"
+
 ## 3.5.5: 2026-08-07
 
 Readable Settings release. Nothing is removed; every configuration stays
