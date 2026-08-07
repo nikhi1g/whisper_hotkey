@@ -19,14 +19,14 @@ final class PreferenceTests: XCTestCase {
             availableModels: allModels
         )
         XCTAssertEqual(responsive.model, .largeV3TurboQ5)
-        XCTAssertEqual(responsive.processingMode, .decodeWhileSpeaking)
+        XCTAssertEqual(responsive.processingMode, .modelReady)
 
         let highQuality = FirstRunPerformanceProfile.recommended(
             physicalMemory: 16 * 1_024 * 1_024 * 1_024,
             availableModels: allModels
         )
         XCTAssertEqual(highQuality.model, .largeV3TurboQ5)
-        XCTAssertEqual(highQuality.processingMode, .decodeWhileSpeaking)
+        XCTAssertEqual(highQuality.processingMode, .modelReady)
 
         let bundledOnly = FirstRunPerformanceProfile.recommended(
             physicalMemory: 64 * 1_024 * 1_024 * 1_024,

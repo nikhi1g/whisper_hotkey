@@ -45,9 +45,12 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
         let model = preferredModels.first(where: availableModels.contains)
             ?? DictationModel.allCases.first(where: availableModels.contains)
             ?? .baseEnglish
+        // Model Ready keeps a whole-recording decode, so it is as accurate as
+        // After Recording, and the resident model removes the load latency.
+        // Decode While Speaking is the one that trades accuracy for speed.
         let processingMode: ModelProcessingMode =
             physicalMemory >= responsiveMemoryThreshold
-                ? .decodeWhileSpeaking
+                ? .modelReady
                 : .afterRecording
         return Self(
             model: model,
@@ -1158,13 +1161,13 @@ public enum RecognitionPreset: String, CaseIterable, Codable, Sendable {
             RecognitionResolution(
                 engine: .parakeetCoreML,
                 parakeetVariant: .fast,
-                processingMode: .decodeWhileSpeaking
+                processingMode: .modelReady
             )
         case .accurate, .custom:
             RecognitionResolution(
                 engine: .parakeetCoreML,
                 parakeetVariant: .accurate,
-                processingMode: .decodeWhileSpeaking
+                processingMode: .modelReady
             )
         }
     }
@@ -1204,5 +1207,136 @@ public struct RecognitionResolution: Equatable, Sendable {
         self.engine = engine
         self.parakeetVariant = parakeetVariant
         self.processingMode = processingMode
+    }
+}
+
+/// Every recognition configuration a user can pick, as one flat list.
+///
+/// Engine and model used to be two controls, which asked the user to reason
+/// about a matrix whose cells were not all valid: decoding applies to only two
+/// engines, the model row means different things per engine, and several
+/// pairings cannot run. This names the real choices instead. It is a
+/// presentation type over the existing `recognitionEngine`, `dictationModel`
+/// and `parakeetModel` preferences, so nothing is migrated or rewritten.
+public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
+    case parakeetAccurate
+    case parakeetFast
+    case parakeetUnified
+    case whisperTurboMetal
+    case whisperBaseMetal
+    case whisperTurboCoreML
+    case whisperBaseCoreML
+    case whisperTurboWhisperKit
+    case whisperBaseWhisperKit
+    case cohereTranscribe
+
+    public static let defaultChoice: Self = .parakeetAccurate
+
+    /// Heading this option sits under in the picker. Bundled families come
+    /// first so the options that work with no download lead.
+    public enum Group: String, CaseIterable, Sendable {
+        case parakeet
+        case whisper
+        case cohere
+
+        public var displayName: String {
+            switch self {
+            case .parakeet: "Parakeet"
+            case .whisper: "Whisper"
+            case .cohere: "Cohere"
+            }
+        }
+    }
+
+    public var group: Group {
+        switch self {
+        case .parakeetAccurate, .parakeetFast, .parakeetUnified:
+            .parakeet
+        case .whisperTurboMetal, .whisperBaseMetal,
+             .whisperTurboCoreML, .whisperBaseCoreML,
+             .whisperTurboWhisperKit, .whisperBaseWhisperKit:
+            .whisper
+        case .cohereTranscribe:
+            .cohere
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .parakeetAccurate: "Accurate — recommended"
+        case .parakeetFast: "Fast"
+        case .parakeetUnified: "Unified — most accurate"
+        case .whisperTurboMetal: "Turbo"
+        case .whisperBaseMetal: "Base"
+        case .whisperTurboCoreML: "Turbo (Core ML encoder)"
+        case .whisperBaseCoreML: "Base (Core ML encoder)"
+        case .whisperTurboWhisperKit: "Turbo (WhisperKit)"
+        case .whisperBaseWhisperKit: "Base (WhisperKit)"
+        case .cohereTranscribe: "Transcribe — slowest"
+        }
+    }
+
+    public var engine: RecognitionEngine {
+        switch self {
+        case .parakeetAccurate, .parakeetFast, .parakeetUnified:
+            .parakeetCoreML
+        case .whisperTurboMetal, .whisperBaseMetal:
+            .whisperCppMetal
+        case .whisperTurboCoreML, .whisperBaseCoreML:
+            .whisperCppCoreML
+        case .whisperTurboWhisperKit, .whisperBaseWhisperKit:
+            .whisperKitCoreML
+        case .cohereTranscribe:
+            .cohereCoreML
+        }
+    }
+
+    /// The whisper model this option runs. Parakeet and Cohere ignore it, but
+    /// it still has to be a real value because the preference is shared.
+    public var model: DictationModel {
+        switch self {
+        case .whisperBaseMetal, .whisperBaseCoreML, .whisperBaseWhisperKit:
+            .baseEnglish
+        default:
+            .largeV3TurboQ5
+        }
+    }
+
+    public var parakeetVariant: ParakeetVariant {
+        switch self {
+        case .parakeetFast: .fast
+        case .parakeetUnified: .unified
+        default: .accurate
+        }
+    }
+
+    /// Size quoted in the picker when the option is not already on disk.
+    public var downloadDescription: String? {
+        switch self {
+        case .parakeetUnified: "594 MB"
+        case .cohereTranscribe: "2.4 GB"
+        default: nil
+        }
+    }
+
+    /// Which option a stored configuration represents. Returns nil when the
+    /// combination is not one this list offers, which keeps the picker honest
+    /// rather than snapping to a neighbour.
+    public static func matching(
+        engine: RecognitionEngine,
+        model: DictationModel,
+        parakeetVariant: ParakeetVariant
+    ) -> Self? {
+        allCases.first {
+            guard $0.engine == engine else { return false }
+            switch engine {
+            case .parakeetCoreML:
+                return $0.parakeetVariant == parakeetVariant
+            case .cohereCoreML:
+                return true
+            case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+                return $0.model == model
+            }
+        }
     }
 }
