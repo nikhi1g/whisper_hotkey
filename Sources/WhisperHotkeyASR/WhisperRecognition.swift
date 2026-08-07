@@ -635,136 +635,148 @@ public actor WhisperRecognizer {
         sampleEnd: Int64? = nil,
         emitMetadata: Bool = false
     ) async throws -> RecognitionHypothesis {
-        if !preserveAudio {
-            defer { audio.delete() }
-        }
-        let configuration = try resolvedConfiguration()
-        if configuration.engine == .parakeetCoreML {
-            let transcript = try await transcribeWithParakeet(
-                audio,
-                configuration: configuration,
-                keepLoaded: keepHelperLoaded || keepsModelReady
-            )
-            return RecognitionHypothesis(
-                engine: configuration.parakeetVariant.candidateEngineID,
-                pass: pass,
-                window: recognitionWindow(
-                    startSample: sampleStart,
-                    endSample: sampleEnd,
-                    audio: audio
-                ),
-                text: transcript,
-                modelID: configuration.parakeetVariant.rawValue,
-                engineVersion: "FluidAudio"
-            )
-        }
-        let lease = try ensureLease()
-        defer {
-            if !keepHelperLoaded && !keepsModelReady {
-                finishDictation(lease)
-            }
-        }
-        guard audio.speechPresence != .absent else {
-            throw WhisperASRError.noSpeech
-        }
-        var runtimeOptions = options
-        runtimeOptions.strategy = strategy
-        runtimeOptions.beamSize = beamSize
-        return try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            do {
-                let helper = try await preparedHelper(runtimeOptions: runtimeOptions)
-                let event = try await helper.transcribe(
-                    audioURL: audio.url,
-                    prompt: prompt,
-                    timeout: options.transcriptionTimeout,
-                    protocolVersion: protocolVersion,
-                    requestID: requestID,
-                    pass: pass,
-                    strategy: strategy,
-                    beamSize: beamSize,
-                    sampleStart: sampleStart,
-                    sampleEnd: sampleEnd,
-                    emitMetadata: emitMetadata
+        let transcribeOperation: () async throws -> RecognitionHypothesis = { [self] in
+            let configuration = try resolvedConfiguration()
+            if configuration.engine == .parakeetCoreML {
+                let transcript = try await transcribeWithParakeet(
+                    audio,
+                    configuration: configuration,
+                    keepLoaded: keepHelperLoaded || keepsModelReady
                 )
-                switch event {
-                case .result(let text):
-                    let transcript = try cleanedTranscript(text)
+                return RecognitionHypothesis(
+                    engine: configuration.parakeetVariant.candidateEngineID,
+                    pass: pass,
+                    window: recognitionWindow(
+                        startSample: sampleStart,
+                        endSample: sampleEnd,
+                        audio: audio
+                    ),
+                    text: transcript,
+                    modelID: configuration.parakeetVariant.rawValue,
+                    engineVersion: "FluidAudio"
+                )
+            }
+            let lease = try ensureLease()
+            defer {
+                if !keepHelperLoaded && !keepsModelReady {
+                    finishDictation(lease)
+                }
+            }
+            guard audio.speechPresence != .absent else {
+                throw WhisperASRError.noSpeech
+            }
+            var runtimeOptions = options
+            runtimeOptions.strategy = strategy
+            runtimeOptions.beamSize = beamSize
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                do {
+                    let helper = try await preparedHelper(runtimeOptions: runtimeOptions)
+                    let event = try await helper.transcribe(
+                        audioURL: audio.url,
+                        prompt: prompt,
+                        timeout: options.transcriptionTimeout,
+                        protocolVersion: protocolVersion,
+                        requestID: requestID,
+                        pass: pass,
+                        strategy: strategy,
+                        beamSize: beamSize,
+                        sampleStart: sampleStart,
+                        sampleEnd: sampleEnd,
+                        emitMetadata: emitMetadata
+                    )
+                    switch event {
+                    case .result(let text):
+                        let transcript = try cleanedTranscript(text)
+                        return try fallbackHypothesis(
+                            configuration: configuration,
+                            pass: pass,
+                            audio: audio,
+                            requestID: requestID,
+                            text: transcript,
+                            protocolVersion: protocolVersion,
+                            sampleStart: sampleStart,
+                            sampleEnd: sampleEnd
+                        )
+                    case .resultRich(let hypothesis):
+                        let transcript = try cleanedTranscript(hypothesis.text)
+                        return RecognitionHypothesis(
+                            engine: hypothesis.engine,
+                            pass: hypothesis.pass,
+                            window: hypothesis.window,
+                            text: transcript,
+                            words: hypothesis.words,
+                            segments: hypothesis.segments,
+                            sequenceScore: hypothesis.sequenceScore,
+                            averageLogProbability: hypothesis.averageLogProbability,
+                            noSpeechProbability: hypothesis.noSpeechProbability,
+                            repetitionDetected: hypothesis.repetitionDetected,
+                            modelID: hypothesis.modelID,
+                            engineVersion: hypothesis.engineVersion,
+                            metadata: hypothesis.metadata,
+                            latencyMilliseconds: hypothesis.latencyMilliseconds
+                        )
+                    case .error:
+                        throw helper.error(for: event)
+                    case .ready:
+                        throw WhisperASRError.helperProtocolFailure
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let error as WhisperASRError where error == .noSpeech {
+                    throw error
+                } catch {
+                    guard !processController.isCancelled(lease),
+                          !Task.isCancelled else {
+                        throw CancellationError()
+                    }
+                    helperSession?.terminate(wait: true)
+                    helperSession = nil
+                    preloadTask = nil
+                    readiness = .failed
+                    cachedHelperFailure = nil
+                    let configuration = try resolvedConfiguration()
+                    let transcript = try await Self.runCommandLineFallback(
+                        configuration: configuration,
+                        audioURL: audio.url,
+                        options: options,
+                        processController: processController,
+                        lease: lease
+                    )
+                    if keepHelperLoaded {
+                        readiness = .idle
+                    }
+                    if keepsModelReady {
+                        cachedHelperFailure = nil
+                        readiness = .idle
+                    }
                     return try fallbackHypothesis(
                         configuration: configuration,
                         pass: pass,
                         audio: audio,
                         requestID: requestID,
-                        text: transcript,
+                        text: cleanedTranscript(transcript),
                         protocolVersion: protocolVersion,
                         sampleStart: sampleStart,
                         sampleEnd: sampleEnd
                     )
-                case .resultRich(let hypothesis):
-                    let transcript = try cleanedTranscript(hypothesis.text)
-                    return RecognitionHypothesis(
-                        engine: hypothesis.engine,
-                        pass: hypothesis.pass,
-                        window: hypothesis.window,
-                        text: transcript,
-                        words: hypothesis.words,
-                        segments: hypothesis.segments,
-                        sequenceScore: hypothesis.sequenceScore,
-                        averageLogProbability: hypothesis.averageLogProbability,
-                        noSpeechProbability: hypothesis.noSpeechProbability,
-                        repetitionDetected: hypothesis.repetitionDetected,
-                        modelID: hypothesis.modelID,
-                        engineVersion: hypothesis.engineVersion,
-                        metadata: hypothesis.metadata,
-                        latencyMilliseconds: hypothesis.latencyMilliseconds
-                    )
-                case .error:
-                    throw helper.error(for: event)
-                case .ready:
-                    throw WhisperASRError.helperProtocolFailure
                 }
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as WhisperASRError where error == .noSpeech {
-                throw error
-            } catch {
-                guard !processController.isCancelled(lease),
-                      !Task.isCancelled else {
-                    throw CancellationError()
-                }
-                helperSession?.terminate(wait: true)
-                helperSession = nil
-                preloadTask = nil
-                readiness = .failed
-                cachedHelperFailure = nil
-                let configuration = try resolvedConfiguration()
-                let transcript = try await Self.runCommandLineFallback(
-                    configuration: configuration,
-                    audioURL: audio.url,
-                    options: options,
-                    processController: processController,
-                    lease: lease
-                )
-                if keepHelperLoaded {
-                    readiness = .idle
-                }
-                if keepsModelReady {
-                    cachedHelperFailure = nil
-                    readiness = .idle
-                }
-                return try fallbackHypothesis(
-                    configuration: configuration,
-                    pass: pass,
-                    audio: audio,
-                    requestID: requestID,
-                    text: cleanedTranscript(transcript),
-                    protocolVersion: protocolVersion,
-                    sampleStart: sampleStart,
-                    sampleEnd: sampleEnd
-                )
+            } onCancel: {
+                self.processController.cancel(lease, wait: false)
             }
-        } onCancel: {
-            self.processController.cancel(lease, wait: false)
+        }
+
+        if preserveAudio {
+            return try await transcribeOperation()
+        }
+
+        do {
+            let hypothesis = try await transcribeOperation()
+            audio.delete()
+            return hypothesis
+        } catch {
+            audio.delete()
+            throw error
         }
     }
 
