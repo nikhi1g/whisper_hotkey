@@ -104,15 +104,6 @@ public enum WhisperRuntimeDiscovery {
         // and are fetched on first use, so there is no path to validate and no
         // helper to locate. Parakeet also keeps its own selection, so the
         // whisper model argument is not consulted here.
-        if engine == .cohereCoreML {
-            return WhisperRuntimeConfiguration(
-                helperExecutableURL: nil,
-                commandLineExecutableURL: nil,
-                modelURL: CohereModelInstaller.cacheDirectory(),
-                engine: engine,
-                decodingProfile: decodingProfile
-            )
-        }
         if engine == .parakeetCoreML {
             return WhisperRuntimeConfiguration(
                 helperExecutableURL: nil,
@@ -145,7 +136,7 @@ public enum WhisperRuntimeDiscovery {
                         isDirectory: &isDirectory
                     ) && !isDirectory.boolValue
                 } ?? installedModelURL
-        case .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML:
             preconditionFailure("Handled before this switch")
         }
         var isDirectory: ObjCBool = false
@@ -320,7 +311,6 @@ public actor WhisperRecognizer {
     private var preloadTask: Task<WhisperHelperSession, Error>?
     private var helperSession: WhisperHelperSession?
     private var parakeetRuntime: ParakeetRuntime?
-    private var cohereRuntime: CohereRuntime?
     private var cachedHelperFailure: CachedHelperFailure?
     private var generation = UUID()
     private var keepsModelReady = false
@@ -350,8 +340,6 @@ public actor WhisperRecognizer {
         switch configuration.engine {
         case .parakeetCoreML:
             _ = try await preparedParakeet(configuration: configuration)
-        case .cohereCoreML:
-            _ = try await preparedCohere()
         case .whisperCppMetal:
             _ = try ensureLease()
             _ = try await preparedHelper()
@@ -420,12 +408,6 @@ public actor WhisperRecognizer {
     }
 
     public func finishContinuousSession() async {
-        if let cohereRuntime {
-            if !keepsModelReady {
-                await releaseCohere(cohereRuntime)
-            }
-            return
-        }
         if let parakeetRuntime {
             if !keepsModelReady {
                 await releaseParakeet(parakeetRuntime)
@@ -447,12 +429,6 @@ public actor WhisperRecognizer {
     ) async throws -> String {
         defer { audio.delete() }
         let configuration = try resolvedConfiguration()
-        if configuration.engine == .cohereCoreML {
-            return try await transcribeWithCohere(
-                audio,
-                keepLoaded: keepHelperLoaded || keepsModelReady
-            )
-        }
         if configuration.engine == .parakeetCoreML {
             return try await transcribeWithParakeet(
                 audio,
@@ -680,70 +656,6 @@ public actor WhisperRecognizer {
         }
     }
 
-    private func preparedCohere() async throws -> CohereRuntime {
-        if let cohereRuntime, readiness == .ready {
-            return cohereRuntime
-        }
-        readiness = .loading
-        let runtime = cohereRuntime ?? CohereRuntime()
-        do {
-            try await runtime.load()
-            try Task.checkCancellation()
-            cohereRuntime = runtime
-            readiness = .ready
-            return runtime
-        } catch is CancellationError {
-            readiness = .idle
-            throw CancellationError()
-        } catch let error as WhisperASRError {
-            readiness = .failed
-            throw error
-        } catch {
-            readiness = .failed
-            throw WhisperASRError.helperFailed("Cohere model load failed")
-        }
-    }
-
-    private func transcribeWithCohere(
-        _ audio: WhisperAudioFile,
-        keepLoaded: Bool
-    ) async throws -> String {
-        guard audio.speechPresence != .absent else {
-            throw WhisperASRError.noSpeech
-        }
-        let runtime = try await preparedCohere()
-        do {
-            // Cohere takes no prompt, so the dictionary and the Pause Mode
-            // context tail are deliberately not passed here.
-            let transcript = try await runtime.transcribe(audioURL: audio.url)
-            try Task.checkCancellation()
-            let cleaned = try cleanedTranscript(transcript)
-            if !keepLoaded {
-                await releaseCohere(runtime)
-            }
-            return cleaned
-        } catch is CancellationError {
-            if !keepLoaded { await releaseCohere(runtime) }
-            throw CancellationError()
-        } catch let error as WhisperASRError {
-            if !keepLoaded, error != .noSpeech { await releaseCohere(runtime) }
-            throw error
-        } catch {
-            if !keepLoaded { await releaseCohere(runtime) }
-            readiness = .failed
-            throw WhisperASRError.helperFailed("Cohere transcription failed")
-        }
-    }
-
-    private func releaseCohere(_ runtime: CohereRuntime) async {
-        await runtime.release()
-        if cohereRuntime === runtime {
-            cohereRuntime = nil
-            activeConfiguration = nil
-            readiness = .idle
-        }
-    }
-
     private func resolvedConfiguration() throws -> WhisperRuntimeConfiguration {
         if let activeConfiguration {
             return activeConfiguration
@@ -804,9 +716,6 @@ public actor WhisperRecognizer {
         if let parakeetRuntime {
             await parakeetRuntime.release()
         }
-        if let cohereRuntime {
-            await cohereRuntime.release()
-        }
         if let pendingPreload,
            let lateSession = try? await pendingPreload.value {
             lateSession.terminate(wait: true)
@@ -815,7 +724,6 @@ public actor WhisperRecognizer {
         preloadTask = nil
         helperSession = nil
         parakeetRuntime = nil
-        cohereRuntime = nil
         cachedHelperFailure = nil
         activeConfiguration = nil
         readiness = .idle

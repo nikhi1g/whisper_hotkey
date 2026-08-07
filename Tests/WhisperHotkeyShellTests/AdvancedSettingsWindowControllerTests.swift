@@ -78,7 +78,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.close()
     }
 
-    /// Parakeet, Whisper and Cohere name families, not models. They used to
+    /// Parakeet and Whisper name families, not models. They used to
     /// highlight on hover and accept a click that then did nothing, because
     /// NSMenu.autoenablesItems recomputes item state from target and action
     /// and threw away the isEnabled = false each heading was given.
@@ -430,10 +430,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testCohereUsesNativeDecodingAndHidesTheProfileRow() {
+    func testParakeetUsesNativeDecodingAndHidesTheProfileRow() {
         let box = AdvancedSettingsStateBox(
             makeAdvancedSettingsState(
-                engine: .cohereCoreML,
+                engine: .parakeetCoreML,
                 decodingProfile: .adaptive,
                 availableEngines: Set(RecognitionEngine.allCases)
             )

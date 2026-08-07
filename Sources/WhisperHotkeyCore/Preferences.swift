@@ -449,19 +449,24 @@ public enum InternalDictionaryDraftParser {
 public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
     case whisperCppMetal
     case parakeetCoreML
-    case cohereCoreML
 
     public static let defaultEngine: Self = .whisperCppMetal
 
-    /// Engines retired in 3.5.7, kept only so a saved preference can be read
-    /// and migrated. Neither could ever run in a shipped build: the Core ML
-    /// encoder path is gated on a `CoreMLEnabled` marker the release bundle
-    /// does not contain, and WhisperKit needs a compiled model directory that
-    /// nothing ships or downloads. Both resolve to Metal, which runs the same
-    /// weights.
+    /// Engines retired in 3.5.7 and 3.5.9, kept only so a saved preference can
+    /// be read and migrated.
+    ///
+    /// Neither Core ML engine could ever run in a shipped build: the encoder
+    /// path is gated on a `CoreMLEnabled` marker the release bundle does not
+    /// contain, and WhisperKit needs a compiled model directory that nothing
+    /// ships or downloads. Both resolve to Metal, which runs the same weights.
+    ///
+    /// Cohere won exactly one measurement -- clean read speech -- while losing
+    /// on noisy speech, costing 12x the latency and 2.4 GB. It resolves to
+    /// Parakeet Accurate, which is bundled and beats it on every other axis.
     static let retiredRawValues: [String: Self] = [
         "whisperCppCoreML": .whisperCppMetal,
         "whisperKitCoreML": .whisperCppMetal,
+        "cohereCoreML": .parakeetCoreML,
     ]
 
     public var displayName: String {
@@ -470,8 +475,6 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "Metal"
         case .parakeetCoreML:
             "Parakeet"
-        case .cohereCoreML:
-            "Cohere"
         }
     }
 
@@ -481,8 +484,6 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             "whisper.cpp Metal (Current)"
         case .parakeetCoreML:
             "Parakeet Neural Engine"
-        case .cohereCoreML:
-            "Cohere Transcribe (better on clean speech, ~11x slower, 2.4 GB)"
         }
     }
 
@@ -493,7 +494,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal:
             true
-        case .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML:
             false
         }
     }
@@ -504,7 +505,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal:
             true
-        case .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML:
             false
         }
     }
@@ -515,16 +516,15 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
         switch self {
         case .whisperCppMetal:
             true
-        case .parakeetCoreML, .cohereCoreML:
+        case .parakeetCoreML:
             false
         }
     }
 
-    /// Whether the engine's checkpoint ships inside the app. Cohere's Core ML
-    /// build is larger than the entire application, so it is fetched on demand.
-    public var shipsInsideTheApp: Bool {
-        self != .cohereCoreML
-    }
+    /// Whether the engine's checkpoint ships inside the app. Every remaining
+    /// engine does; Parakeet Unified is the one on-demand download, and it is
+    /// a variant rather than an engine.
+    public var shipsInsideTheApp: Bool { true }
 
     public static func selected(
         defaults: UserDefaults = .standard
@@ -1218,7 +1218,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     case parakeetFast
     case parakeetUnified
     case whisperTurboMetal
-    case cohereTranscribe
 
     public static let defaultChoice: Self = .parakeetAccurate
 
@@ -1227,13 +1226,11 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     public enum Group: String, CaseIterable, Sendable {
         case parakeet
         case whisper
-        case cohere
 
         public var displayName: String {
             switch self {
             case .parakeet: "Parakeet"
             case .whisper: "Whisper"
-            case .cohere: "Cohere"
             }
         }
     }
@@ -1244,8 +1241,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
             .parakeet
         case .whisperTurboMetal:
             .whisper
-        case .cohereTranscribe:
-            .cohere
         }
     }
 
@@ -1255,7 +1250,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
         case .parakeetFast: "Fast"
         case .parakeetUnified: "Unified → most accurate"
         case .whisperTurboMetal: "Turbo"
-        case .cohereTranscribe: "Transcribe → slowest"
         }
     }
 
@@ -1265,13 +1259,11 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
             .parakeetCoreML
         case .whisperTurboMetal:
             .whisperCppMetal
-        case .cohereTranscribe:
-            .cohereCoreML
         }
     }
 
-    /// The whisper model this option runs. Parakeet and Cohere ignore it, but
-    /// it still has to be a real value because the preference is shared.
+    /// The whisper model this option runs. Parakeet ignores it, but it still
+    /// has to be a real value because the preference is shared.
     ///
     /// Base was offered here until 3.5.7. Parakeet Fast is smaller, faster and
     /// more accurate, and it is bundled, so Base had no case left to make. The
@@ -1292,7 +1284,6 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     public var downloadDescription: String? {
         switch self {
         case .parakeetUnified: "594 MB"
-        case .cohereTranscribe: "2.4 GB"
         default: nil
         }
     }
@@ -1315,7 +1306,7 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
             switch engine {
             case .parakeetCoreML:
                 return $0.parakeetVariant == parakeetVariant
-            case .cohereCoreML, .whisperCppMetal:
+            case .whisperCppMetal:
                 return true
             }
         }

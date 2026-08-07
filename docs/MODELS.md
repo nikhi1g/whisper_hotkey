@@ -1,8 +1,8 @@
 # Local models
 
 Version 3.5.7 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
-Metal and flash attention, NVIDIA Parakeet on the Neural Engine, and Cohere
-Transcribe. Recognition is English-only and entirely local.
+Metal and flash attention plus NVIDIA Parakeet on the Neural Engine.
+Recognition is English-only and entirely local.
 
 | Menu choice | File | Size | Tradeoff |
 | --- | --- | ---: | --- |
@@ -10,7 +10,11 @@ Transcribe. Recognition is English-only and entirely local.
 | Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate and fastest; on-demand download |
 | Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
-| Cohere Transcribe | `cohere-transcribe-03-2026` | 2.4 GB | Best on clean speech; ~11x slower; on-demand download |
+
+Cohere Transcribe was removed in 3.5.9. It won exactly one measurement on
+this corpus -- clean read speech, 1.13% against Parakeet Unified's 1.44% --
+while losing on noisy speech, costing roughly twelve times the latency and a
+2.4 GB download. A saved selection resolves to Parakeet Accurate.
 
 Whisper Base English left the picker in 3.5.7: Parakeet Fast is smaller,
 faster and more accurate, and it is bundled. The file still ships as the
@@ -130,7 +134,7 @@ launches. Rerun the bootstrap whenever you want to add another model.
 token confidence, no-speech probability, and repetition checks are strong. It
 automatically retries uncertain audio with the same five-beam Precision
 decoder. The setting is available for the whisper.cpp Metal engine. Parakeet
-and Cohere continue to use their native decoding behavior.
+continues to use its native decoding behavior.
 
 The app stores only the selected profile. Confidence values are used in memory
 for the current inference and are not logged or retained.

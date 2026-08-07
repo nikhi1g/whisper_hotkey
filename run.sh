@@ -24,7 +24,7 @@ Usage: ./run.sh [options]
 Build, install, launch, and open setup for whisper_hotkey.
 
   --model base|turbo                Install and select one model (default: base)
-  --engine metal|parakeet|cohere
+  --engine metal|parakeet
                                     Install and select an engine (default: metal)
                                     parakeet fetches its model on first use
   --all-models                      Install every supported model (~2.7 GB)
@@ -97,7 +97,6 @@ engine_preference() {
     case "$1" in
         metal) echo "whisperCppMetal" ;;
         parakeet) echo "parakeetCoreML" ;;
-        cohere) echo "cohereCoreML" ;;
         *) die "unknown engine: $1" ;;
     esac
 }
@@ -325,7 +324,7 @@ while [[ $# -gt 0 ]]; do
         --engine)
             [[ $# -ge 2 ]] || die "--engine requires a value"
             case "$2" in
-                metal|parakeet|cohere) ENGINE="$2" ;;
+                metal|parakeet) ENGINE="$2" ;;
                 *) die "unknown engine: $2" ;;
             esac
             SELECTION_WAS_REQUESTED=1
