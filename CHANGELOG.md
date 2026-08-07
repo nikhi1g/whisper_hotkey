@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.6.0: 2026-08-07
+
+Recognition list prune and a settings window that shows what it is doing.
+
+- Cut the recognition list from ten options to five. Turbo and Base on the
+  Core ML encoder were gated behind a `CoreMLEnabled` marker no release bundle
+  contained; Turbo and Base on WhisperKit needed a compiled model directory
+  nothing shipped or downloaded. All four failed on every install
+- Removed Whisper Base from the list. Parakeet Fast is 76 MB smaller, faster,
+  and more accurate, and it is bundled. The file stays as the discovery
+  fallback
+- Retired the `whisperCppCoreML` and `whisperKitCoreML` engines. A saved
+  preference naming either resolves to Metal, which runs the same weights; a
+  saved Base selection reads as Turbo
+- Removed the "Advanced Options" disclosure. Model, Decoding, and Processing
+  are permanent rows. The fold hid the only explanation for what a preset had
+  selected, and forced itself open whenever the configuration read as Custom
+- Made the Parakeet, Whisper, and Cohere headings unselectable. They were
+  marked disabled, but `NSMenu.autoenablesItems` re-derived their state and
+  re-enabled them, so they highlighted on hover and accepted a dead click. The
+  theme list's Dark, Light, and Custom headings had the same bug
+- Styled the headings as upper-cased dimmed labels with their members indented,
+  so a category no longer looks like an unavailable option
+- Dropped the WhisperKit package dependency, its in-process runtime, the Core
+  ML encoder download-and-build path in `run.sh`, and the WhisperKit model
+  download script
+
 ## 3.5.6: 2026-08-07
 
 - Replaced the em dash between a model's name and its qualifier with an arrow.
