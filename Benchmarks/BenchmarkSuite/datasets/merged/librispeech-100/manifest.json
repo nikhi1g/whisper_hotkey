@@ -1,0 +1,817 @@
+{
+  "cases": [
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1089-134686-0000.wav",
+      "id": "1089-134686-0000",
+      "reference_words": 28,
+      "seconds": 0.41237499995622784,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1089-134691-0015.wav",
+      "id": "1089-134691-0015",
+      "reference_words": 5,
+      "seconds": 0.27562425000360236,
+      "split": "test-clean",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1188-133604-0042.wav",
+      "id": "1188-133604-0042",
+      "reference_words": 5,
+      "seconds": 0.2773039999883622,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/121-127105-0026.wav",
+      "id": "121-127105-0026",
+      "reference_words": 24,
+      "seconds": 0.3378444170230068,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1284-1180-0001.wav",
+      "id": "1284-1180-0001",
+      "reference_words": 26,
+      "seconds": 0.3561221670242958,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1284-134647-0000.wav",
+      "id": "1284-134647-0000",
+      "reference_words": 21,
+      "seconds": 0.3300119169871323,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1320-122617-0028.wav",
+      "id": "1320-122617-0028",
+      "reference_words": 52,
+      "seconds": 0.42138195800362155,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1580-141083-0040.wav",
+      "id": "1580-141083-0040",
+      "reference_words": 11,
+      "seconds": 0.2916233749710955,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1580-141084-0039.wav",
+      "id": "1580-141084-0039",
+      "reference_words": 17,
+      "seconds": 0.3090586250182241,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/1995-1837-0000.wav",
+      "id": "1995-1837-0000",
+      "reference_words": 11,
+      "seconds": 0.29988025000784546,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/2094-142345-0023.wav",
+      "id": "2094-142345-0023",
+      "reference_words": 19,
+      "seconds": 0.33018433302640915,
+      "split": "test-clean",
+      "word_errors": 4
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/2300-131720-0015.wav",
+      "id": "2300-131720-0015",
+      "reference_words": 23,
+      "seconds": 0.3314912079949863,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/237-134493-0001.wav",
+      "id": "237-134493-0001",
+      "reference_words": 19,
+      "seconds": 0.3271412500180304,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/237-134500-0035.wav",
+      "id": "237-134500-0035",
+      "reference_words": 9,
+      "seconds": 0.28496070799883455,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/260-123288-0014.wav",
+      "id": "260-123288-0014",
+      "reference_words": 3,
+      "seconds": 0.275935165991541,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/2830-3980-0004.wav",
+      "id": "2830-3980-0004",
+      "reference_words": 11,
+      "seconds": 0.2923866659984924,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/2830-3980-0058.wav",
+      "id": "2830-3980-0058",
+      "reference_words": 6,
+      "seconds": 0.28305370797170326,
+      "split": "test-clean",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/2961-961-0011.wav",
+      "id": "2961-961-0011",
+      "reference_words": 19,
+      "seconds": 0.3285996670019813,
+      "split": "test-clean",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/3570-5696-0003.wav",
+      "id": "3570-5696-0003",
+      "reference_words": 79,
+      "seconds": 0.5290770409628749,
+      "split": "test-clean",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/3575-170457-0045.wav",
+      "id": "3575-170457-0045",
+      "reference_words": 19,
+      "seconds": 0.3170737909968011,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/3729-6852-0041.wav",
+      "id": "3729-6852-0041",
+      "reference_words": 30,
+      "seconds": 0.3509277090197429,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4446-2271-0009.wav",
+      "id": "4446-2271-0009",
+      "reference_words": 23,
+      "seconds": 0.3402846660465002,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4446-2275-0000.wav",
+      "id": "4446-2275-0000",
+      "reference_words": 20,
+      "seconds": 0.3311963750165887,
+      "split": "test-clean",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4507-16021-0008.wav",
+      "id": "4507-16021-0008",
+      "reference_words": 7,
+      "seconds": 0.2815772920148447,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4970-29093-0001.wav",
+      "id": "4970-29093-0001",
+      "reference_words": 29,
+      "seconds": 0.34905299998354167,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4970-29095-0031.wav",
+      "id": "4970-29095-0031",
+      "reference_words": 35,
+      "seconds": 0.37320958299096674,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/4992-41806-0001.wav",
+      "id": "4992-41806-0001",
+      "reference_words": 24,
+      "seconds": 0.3307066249544732,
+      "split": "test-clean",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/5105-28241-0001.wav",
+      "id": "5105-28241-0001",
+      "reference_words": 66,
+      "seconds": 0.4544117500190623,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/5142-33396-0034.wav",
+      "id": "5142-33396-0034",
+      "reference_words": 23,
+      "seconds": 0.3233160839881748,
+      "split": "test-clean",
+      "word_errors": 3
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/5142-36377-0019.wav",
+      "id": "5142-36377-0019",
+      "reference_words": 7,
+      "seconds": 0.2846417910186574,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/5639-40744-0039.wav",
+      "id": "5639-40744-0039",
+      "reference_words": 41,
+      "seconds": 0.39503775001503527,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/5683-32879-0001.wav",
+      "id": "5683-32879-0001",
+      "reference_words": 11,
+      "seconds": 0.29319437500089407,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/61-70968-0029.wav",
+      "id": "61-70968-0029",
+      "reference_words": 12,
+      "seconds": 0.2997757499688305,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/61-70970-0019.wav",
+      "id": "61-70970-0019",
+      "reference_words": 12,
+      "seconds": 0.2991134169860743,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/672-122797-0032.wav",
+      "id": "672-122797-0032",
+      "reference_words": 11,
+      "seconds": 0.30138279200764373,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/6829-68769-0010.wav",
+      "id": "6829-68769-0010",
+      "reference_words": 9,
+      "seconds": 0.29853504203492776,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/6829-68771-0010.wav",
+      "id": "6829-68771-0010",
+      "reference_words": 27,
+      "seconds": 0.34580383397405967,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/6930-76324-0005.wav",
+      "id": "6930-76324-0005",
+      "reference_words": 16,
+      "seconds": 0.3137769590248354,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/7021-79730-0002.wav",
+      "id": "7021-79730-0002",
+      "reference_words": 4,
+      "seconds": 0.2727671660250053,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/7021-85628-0024.wav",
+      "id": "7021-85628-0024",
+      "reference_words": 4,
+      "seconds": 0.2744585410109721,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/7127-75947-0019.wav",
+      "id": "7127-75947-0019",
+      "reference_words": 7,
+      "seconds": 0.28325837501324713,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/7176-92135-0004.wav",
+      "id": "7176-92135-0004",
+      "reference_words": 5,
+      "seconds": 0.27629549999255687,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/7729-102255-0011.wav",
+      "id": "7729-102255-0011",
+      "reference_words": 50,
+      "seconds": 0.43286629201611504,
+      "split": "test-clean",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/8224-274384-0000.wav",
+      "id": "8224-274384-0000",
+      "reference_words": 17,
+      "seconds": 0.3308598750154488,
+      "split": "test-clean",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/8230-279154-0039.wav",
+      "id": "8230-279154-0039",
+      "reference_words": 13,
+      "seconds": 0.3041152499499731,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/8455-210777-0049.wav",
+      "id": "8455-210777-0049",
+      "reference_words": 7,
+      "seconds": 0.29087704204721376,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/8463-294825-0016.wav",
+      "id": "8463-294825-0016",
+      "reference_words": 9,
+      "seconds": 0.29882341704797,
+      "split": "test-clean",
+      "word_errors": 4
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/8555-284447-0011.wav",
+      "id": "8555-284447-0011",
+      "reference_words": 4,
+      "seconds": 0.269416207971517,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/908-157963-0002.wav",
+      "id": "908-157963-0002",
+      "reference_words": 7,
+      "seconds": 0.28328645904548466,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-clean/908-31957-0025.wav",
+      "id": "908-31957-0025",
+      "reference_words": 38,
+      "seconds": 0.36843570799101144,
+      "split": "test-clean",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/1688-142285-0000.wav",
+      "id": "1688-142285-0000",
+      "reference_words": 32,
+      "seconds": 0.3672711249673739,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/1688-142285-0059.wav",
+      "id": "1688-142285-0059",
+      "reference_words": 8,
+      "seconds": 0.28861391701502725,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/1998-15444-0023.wav",
+      "id": "1998-15444-0023",
+      "reference_words": 6,
+      "seconds": 0.29616441699909046,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/1998-29455-0008.wav",
+      "id": "1998-29455-0008",
+      "reference_words": 8,
+      "seconds": 0.2821604170021601,
+      "split": "test-other",
+      "word_errors": 5
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/2033-164915-0005.wav",
+      "id": "2033-164915-0005",
+      "reference_words": 12,
+      "seconds": 0.2949052920448594,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/2414-128292-0009.wav",
+      "id": "2414-128292-0009",
+      "reference_words": 27,
+      "seconds": 0.3575299159856513,
+      "split": "test-other",
+      "word_errors": 8
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/2414-165385-0000.wav",
+      "id": "2414-165385-0000",
+      "reference_words": 35,
+      "seconds": 0.3835286669782363,
+      "split": "test-other",
+      "word_errors": 3
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/2609-169640-0004.wav",
+      "id": "2609-169640-0004",
+      "reference_words": 23,
+      "seconds": 0.3340146660339087,
+      "split": "test-other",
+      "word_errors": 8
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3005-163390-0020.wav",
+      "id": "3005-163390-0020",
+      "reference_words": 13,
+      "seconds": 0.31008195801405236,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3005-163399-0022.wav",
+      "id": "3005-163399-0022",
+      "reference_words": 8,
+      "seconds": 0.29320245899725705,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3080-5040-0024.wav",
+      "id": "3080-5040-0024",
+      "reference_words": 30,
+      "seconds": 0.35434733401052654,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3331-159609-0003.wav",
+      "id": "3331-159609-0003",
+      "reference_words": 37,
+      "seconds": 0.38031129096634686,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3528-168669-0024.wav",
+      "id": "3528-168669-0024",
+      "reference_words": 4,
+      "seconds": 0.2875339590245858,
+      "split": "test-other",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3528-168669-0084.wav",
+      "id": "3528-168669-0084",
+      "reference_words": 13,
+      "seconds": 0.31941870896844193,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3538-142836-0013.wav",
+      "id": "3538-142836-0013",
+      "reference_words": 13,
+      "seconds": 0.3054943750030361,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3538-163624-0006.wav",
+      "id": "3538-163624-0006",
+      "reference_words": 23,
+      "seconds": 0.31988091696985066,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/367-293981-0005.wav",
+      "id": "367-293981-0005",
+      "reference_words": 11,
+      "seconds": 0.3163594999932684,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3764-168670-0044.wav",
+      "id": "3764-168670-0044",
+      "reference_words": 12,
+      "seconds": 0.2973792090197094,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3764-168671-0046.wav",
+      "id": "3764-168671-0046",
+      "reference_words": 19,
+      "seconds": 0.3247998749720864,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/3997-180297-0017.wav",
+      "id": "3997-180297-0017",
+      "reference_words": 11,
+      "seconds": 0.3039220829959959,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4198-12259-0024.wav",
+      "id": "4198-12259-0024",
+      "reference_words": 3,
+      "seconds": 0.275247749988921,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4198-61336-0024.wav",
+      "id": "4198-61336-0024",
+      "reference_words": 34,
+      "seconds": 0.3662562500103377,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4294-9934-0001.wav",
+      "id": "4294-9934-0001",
+      "reference_words": 13,
+      "seconds": 0.2922368749859743,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4350-10919-0031.wav",
+      "id": "4350-10919-0031",
+      "reference_words": 26,
+      "seconds": 0.3322232500067912,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4350-9170-0057.wav",
+      "id": "4350-9170-0057",
+      "reference_words": 54,
+      "seconds": 0.41906637500505894,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/4852-28312-0028.wav",
+      "id": "4852-28312-0028",
+      "reference_words": 16,
+      "seconds": 0.3040565420524217,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/533-1066-0002.wav",
+      "id": "533-1066-0002",
+      "reference_words": 25,
+      "seconds": 0.3384489160380326,
+      "split": "test-other",
+      "word_errors": 6
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/533-131562-0011.wav",
+      "id": "533-131562-0011",
+      "reference_words": 9,
+      "seconds": 0.29727949999505654,
+      "split": "test-other",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/5442-41168-0006.wav",
+      "id": "5442-41168-0006",
+      "reference_words": 3,
+      "seconds": 0.27712858404265717,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/5484-24317-0006.wav",
+      "id": "5484-24317-0006",
+      "reference_words": 23,
+      "seconds": 0.33765529200900346,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/5484-24318-0032.wav",
+      "id": "5484-24318-0032",
+      "reference_words": 17,
+      "seconds": 0.31587566703092307,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/5764-299665-0054.wav",
+      "id": "5764-299665-0054",
+      "reference_words": 24,
+      "seconds": 0.3328280830173753,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/6070-63485-0016.wav",
+      "id": "6070-63485-0016",
+      "reference_words": 16,
+      "seconds": 0.3125616250326857,
+      "split": "test-other",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/6128-63240-0007.wav",
+      "id": "6128-63240-0007",
+      "reference_words": 38,
+      "seconds": 0.38468154199654236,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/6128-63244-0025.wav",
+      "id": "6128-63244-0025",
+      "reference_words": 23,
+      "seconds": 0.33624866598984227,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/6432-63722-0059.wav",
+      "id": "6432-63722-0059",
+      "reference_words": 7,
+      "seconds": 0.2844488749979064,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/6938-70848-0001.wav",
+      "id": "6938-70848-0001",
+      "reference_words": 9,
+      "seconds": 0.29815899999812245,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7018-75789-0010.wav",
+      "id": "7018-75789-0010",
+      "reference_words": 10,
+      "seconds": 0.28358987503452227,
+      "split": "test-other",
+      "word_errors": 5
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7105-2330-0038.wav",
+      "id": "7105-2330-0038",
+      "reference_words": 41,
+      "seconds": 0.4043422500253655,
+      "split": "test-other",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7902-96591-0018.wav",
+      "id": "7902-96591-0018",
+      "reference_words": 11,
+      "seconds": 0.28952462499728426,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7902-96594-0002.wav",
+      "id": "7902-96594-0002",
+      "reference_words": 6,
+      "seconds": 0.28770050004823133,
+      "split": "test-other",
+      "word_errors": 1
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7975-280057-0003.wav",
+      "id": "7975-280057-0003",
+      "reference_words": 11,
+      "seconds": 0.2957761670113541,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/7975-280084-0000.wav",
+      "id": "7975-280084-0000",
+      "reference_words": 14,
+      "seconds": 0.30254454200621694,
+      "split": "test-other",
+      "word_errors": 2
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8131-117016-0023.wav",
+      "id": "8131-117016-0023",
+      "reference_words": 13,
+      "seconds": 0.3039136659936048,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8131-117017-0021.wav",
+      "id": "8131-117017-0021",
+      "reference_words": 11,
+      "seconds": 0.2955371250282042,
+      "split": "test-other",
+      "word_errors": 3
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8188-269288-0025.wav",
+      "id": "8188-269288-0025",
+      "reference_words": 6,
+      "seconds": 0.28126583399716765,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8188-269290-0027.wav",
+      "id": "8188-269290-0027",
+      "reference_words": 5,
+      "seconds": 0.2718905830406584,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8280-266249-0017.wav",
+      "id": "8280-266249-0017",
+      "reference_words": 12,
+      "seconds": 0.3042082500178367,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8461-258277-0011.wav",
+      "id": "8461-258277-0011",
+      "reference_words": 5,
+      "seconds": 0.28668470901902765,
+      "split": "test-other",
+      "word_errors": 0
+    },
+    {
+      "audio_path": "Benchmarks/Data/WAV/test-other/8461-281231-0038.wav",
+      "id": "8461-281231-0038",
+      "reference_words": 25,
+      "seconds": 0.34450525004649535,
+      "split": "test-other",
+      "word_errors": 1
+    }
+  ],
+  "dataset": "LibriSpeech test-clean and test-other",
+  "examples_per_split": 50,
+  "generated_at": "2026-08-07T18:17:32.896302+00:00",
+  "source": {
+    "librispeech_results": "/Users/rippled/Desktop/projLab/whisper_hotkey/Benchmarks/Results/latest.json",
+    "predecode_results": "/Users/rippled/Desktop/projLab/whisper_hotkey/Benchmarks/Results/predecode-latest.json"
+  },
+  "split_counts": {
+    "test-clean": 50,
+    "test-other": 50,
+    "total": 100
+  },
+  "threads": 7
+}
