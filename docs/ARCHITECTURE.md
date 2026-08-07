@@ -20,27 +20,30 @@ flowchart LR
     A --> S["Menu-bar state"]
 ```
 
-At idle, only the event tap, menu item, local control socket, and app process
-remain by default. There is no audio engine, loaded model, helper, polling
-worker, or transcript history. Model Ready and Decode While Speaking keep the
-selected helper resident, but the audio engine stays stopped and no polling
-task is added. Decode After Speaking loads the model only when capture finishes.
-Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
-helper, and deletes the private audio directory. Pause Mode retains one
-uninterrupted full-session WAV and writes a parallel current inference segment
-from the already-converted callback buffer. Its pause threshold begins at
-450 milliseconds and adapts within 300–750 milliseconds from resumed pauses.
-A boundary rotates only the inference segment, serially transcribes and pastes
-the phrase, and reuses the loaded helper until the active session ends.
-The next decode is conditioned on at most 240 trailing characters from the
-current session, sent through the helper's private JSON-line stdin channel.
-Decode While Speaking reuses the same dual-file recorder without Pause Mode's
-incremental paste. Its 20 Hz recording task rotates speech-bearing inference
-segments at a detected pause after five seconds or at an eight-second bound. Capture
-continues while a strict serial recognition chain consumes completed segments
-through one helper. Partial text stays in a bounded in-memory accumulator and is
-inserted once after the final segment. The complete session WAV remains
-available for one ordinary fallback decode if a background chunk fails.
+At idle, the event tap, menu item, local control socket, and app process
+remain active. Whether a runtime stays resident depends on processing mode:
+Decode After Speaking keeps no loaded model or helper, while Model Ready and
+Decode While Speaking may keep the selected recognition runtime resident (helper
+for whisper.cpp, in-process runtime for Parakeet) with audio capture stopped and
+no polling task added. Decode After Speaking loads the model only when capture
+finishes. Release, Stop, or Send finalizes a normal dictation, inserts it, and
+clears the private audio directory; runtime teardown is skipped only when the
+processing mode deliberately keeps it warm.
+
+Pause Mode retains one uninterrupted full-session WAV and writes a parallel
+current inference segment from the already-converted callback buffer. Its pause
+threshold begins at 450 milliseconds and adapts within 300–750 milliseconds
+from resumed pauses. A boundary rotates only the inference segment, serially
+transcribes and pastes the phrase, and reuses the loaded helper until the active
+session ends. The next decode is conditioned on at most 240 trailing characters
+from the current session, sent through the helper's private JSON-line stdin
+channel. Decode While Speaking reuses the same dual-file recorder without Pause
+Mode's incremental paste. Its 20 Hz recording task rotates speech-bearing
+inference segments at a detected pause after five seconds or at an eight-second
+bound. Capture continues while a strict serial recognition chain consumes
+completed segments through one helper. Partial text stays in a bounded in-memory
+accumulator and is inserted once after the final segment. The complete session WAV
+remains available for one ordinary fallback decode if a background chunk fails.
 
 The status menu contains only immediate actions. A lazy native Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login
@@ -78,11 +81,11 @@ idle, and prompt contents are never logged or exposed as process arguments.
 | `WhisperHotkeyLoginLauncher` | Signed one-shot login and post-exit restart launcher |
 
 The recognition engine preference is orthogonal to model size. Metal uses the
-owned C++ helper. Parakeet is an in-process, pinned Swift package (FluidAudio) running an NVIDIA
-FastConformer transducer on the Neural Engine; it is the one engine that
-fetches its checkpoint at runtime, because FluidAudio owns that cache. Only one
-path can be active, all consume the same private WAV contract, and no path may
-silently fall back to another selected engine.
+owned C++ helper. Parakeet is an in-process, pinned Swift package (FluidAudio)
+running an NVIDIA FastConformer transducer on the Neural Engine; it can reuse a
+bundled checkpoint or fetch one into the local FluidAudio cache when needed. Only
+one path can be active, all consume the same private WAV contract, and no path
+may silently fall back to another selected engine.
 
 Because a transducer has no beam search and takes no prompt, the Parakeet
 engine reports `usesWhisperDecoding` and `supportsPromptConditioning` as false.
@@ -103,9 +106,10 @@ idle → preparing → listening → transcribing → inserting → idle
                     ↘ cancel/failure cleanup ↗
 ```
 
-The input reducer distinguishes a bare modifier gesture from normal shortcuts.
-Hold mode uses one cancellable 150 ms timer; toggle and Pause modes use
-successive bare presses. Pause boundaries come from the recorder's existing
+The input reducer distinguishes a bare modifier gesture from normal
+shortcuts. Hold mode uses one cancellable 150 ms timer and rejects very short
+hold releases (less than 250 ms); toggle and Pause modes use successive bare
+presses. Pause boundaries come from the recorder's existing
 speech-energy detector. The detector maintains a bounded exponential estimate
 of the user's sub-boundary pauses; no new timer or audio analysis pass exists.
 The microphone and complete recording remain uninterrupted while segment

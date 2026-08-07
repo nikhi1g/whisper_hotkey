@@ -145,10 +145,10 @@ The status should report Microphone, Accessibility, and Input Monitoring as
 ## Dictate
 
 Click into any editable text field, hold **Right Option**, speak, then release
-it. A fresh install on a Mac with at least 8 GB selects **Decode While
-Speaking** for the shortest completion latency. Lower-memory Macs select
-**Decode After Speaking** to preserve memory. Very quick taps are ignored, and
-ordinary Option shortcuts continue to work.
+it. A fresh install on a Mac with at least 8 GB selects **Model Ready** by
+default to keep the selected model hot between dictations. Lower-memory Macs
+select **Decode After Speaking** to preserve memory. Very quick taps are ignored,
+and ordinary Option shortcuts continue to work.
 
 For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as
 `whisper_hotkey`. Its commands are:
@@ -192,9 +192,9 @@ reports **Custom**.
 
 | Option | Model | Size | Reason to choose it |
 | --- | --- | ---: | --- |
-| Parakeet Unified | `parakeet-unified-en-0.6b` | 596 MB | Default; best accuracy and best median latency |
+| Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Default; best accuracy and best median latency |
 | Parakeet Balanced | `parakeet-tdt-0.6b-v2` | 443 MB | Shortest tail on audio past 15 seconds |
-| Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
+| Parakeet Fast | `parakeet-tdt-ctc-110m` | 219 MB | Lowest latency and memory |
 | Whisper Turbo | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Supports the internal dictionary; on-demand download |
 
 Whisper Turbo remains because Parakeet is a transducer: it accepts no prompt,

@@ -1,24 +1,25 @@
 # Local models
 
-Version 3.5.7 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
-Metal and flash attention plus NVIDIA Parakeet on the Neural Engine.
+As of 3.7.0, [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Metal and flash attention plus NVIDIA Parakeet on the Neural Engine are
+available.
 Recognition is English-only and entirely local.
 
 | Menu choice | File | Size | Tradeoff |
 | --- | --- | ---: | --- |
-| Parakeet Accurate | `parakeet-tdt-0.6b-v2` | 443 MB | Default; bundled |
-| Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate and fastest; on-demand download |
-| Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
+| Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Default; bundled |
+| Parakeet Balanced | `parakeet-tdt-0.6b-v2` | 443 MB | Lowest tail risk at long dictation lengths |
+| Parakeet Fast | `parakeet-tdt-ctc-110m` | 219 MB | Lowest latency and memory |
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
 
 Cohere Transcribe was removed in 3.5.9. It won exactly one measurement on
 this corpus -- clean read speech, 1.13% against Parakeet Unified's 1.44% --
 while losing on noisy speech, costing roughly twelve times the latency and a
-2.4 GB download. A saved selection resolves to Parakeet Accurate.
+2.4 GB download. A saved selection resolves to Parakeet Unified.
 
-Whisper Base English left the picker in 3.5.7: Parakeet Fast is smaller,
-faster and more accurate, and it is bundled. The file still ships as the
-discovery fallback when Turbo is unavailable.
+Whisper Base English is no longer surfaced in Settings, but remains a bootstrap
+option for explicit `run.sh --model base` installs. Parakeet Fast is smaller,
+faster and more accurate, and it is bundled in the current app packages.
 
 Small and Medium English were retired in 3.4.1. Parakeet Fast beats Small on
 size, speed, and accuracy at once, and Medium was the largest and slowest model
@@ -77,20 +78,20 @@ preference naming either now resolves to Metal, which runs the same weights.
 ### Parakeet
 
 Parakeet is a FastConformer transducer and a different model family from
-whisper, so it carries its own two English checkpoints and its own saved
-selection. Choosing Parakeet in the Engine row replaces the four whisper chips
-with two of its own:
+whisper, so it carries its own checkpoints and own saved selection. Choosing
+Parakeet in the Engine row replaces the four whisper chips with three of its own:
 
 | Chip | Checkpoint | Disk |
 | --- | --- | ---: |
 | Fast | `parakeet-tdt-ctc-110m` | 219 MB |
-| Accurate | `parakeet-tdt-0.6b-v2` | 443 MB |
+| Balanced | `parakeet-tdt-0.6b-v2` | 443 MB |
+| Unified | `parakeet-unified-en-0.6b` | 594 MB |
 
 Switching engines never overwrites the other engine's model choice. Selecting
-Parakeet or one of its checkpoints for the first time offers the download,
-shows progress, and can be cancelled; nothing is fetched during a dictation.
-Checkpoints live in `~/Library/Application Support/FluidAudio/Models/`, so
-`run.sh` installs nothing for this engine.
+Parakeet or one of its checkpoints for the first time shows progress and can be
+cancelled; nothing is fetched during a dictation. Checkpoints live in
+`~/Library/Application Support/FluidAudio/Models/`, so `run.sh` installs nothing
+for this engine.
 
 Measured on the repository's own LibriSpeech benchmark (100 utterances across
 test-clean and test-other, Apple M5 Pro, warm model):
@@ -100,7 +101,7 @@ test-clean and test-other, Apple M5 Pro, warm model):
 | Turbo Q5 + Metal (Precision) | 4.32% | 2.26% | 6.67% | 321 ms | 21.5x | 547 MB |
 | Turbo Q5 + Metal (Smart Decode) | 4.04% | 2.15% | 6.20% | 305 ms | 22.7x | 547 MB |
 | Parakeet Fast | 3.88% | 2.36% | 5.61% | 34 ms | 206x | 219 MB |
-| Parakeet Accurate | 2.62% | 1.54% | 3.86% | 56 ms | 123x | 443 MB |
+| Parakeet Balanced | 2.62% | 1.54% | 3.86% | 56 ms | 123x | 443 MB |
 
 Two behaviors differ from the whisper engines and are intentional:
 
@@ -118,12 +119,12 @@ Two behaviors differ from the whisper engines and are intentional:
 ./run.sh --model small                        # install/select Small + Metal
 ./run.sh --model medium                       # install/select Medium + Metal
 ./run.sh --model turbo                        # install/select Turbo + Metal
-./run.sh --all-models                         # install all; select Base + Metal
+./run.sh --all-models                         # install Base + Turbo; select Base + Metal
 ./run.sh --engine parakeet                    # select Parakeet (no download)
 ```
 
-Files live in `~/.cache/whisper/`. Missing choices remain visible but disabled.
-An explicit model or engine option is persisted before the installed app
+Files live in `~/.cache/whisper/`. Missing choices remain visible but
+disabled. An explicit model or engine option is persisted before the installed app
 launches. Rerun the bootstrap whenever you want to add another model.
 
 ## Decoding
