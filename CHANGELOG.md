@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.2.3: 2026-08-07
+
+- Fixed Return and Escape doing nothing during dictation. 3.7.0 stopped asking
+  for Input Monitoring, believing Accessibility already covered the event tap.
+  Accessibility covers *creating* the tap and delivers `flagsChanged`, which is
+  why the dictation modifier kept working and setup still reported ready.
+  `kTCCServiceListenEvent` is what delivers `keyDown`, and the completion
+  shortcuts are `keyDown`, so they were never routed: the transcript was
+  inserted without being submitted. Listen access is required again, and its
+  setup row is unconditional
+- Made the permission reachable. An app has no row in the Input Monitoring list
+  until it asks for the grant at least once, and nothing asked outside the
+  setup window's button, so an install that never pressed it had nothing in
+  System Settings to switch on. The app now registers on first reconcile
+- Fixed the hotkey refusing to start on a Mac that could run it. The monitor
+  preflighted listen access before attempting the tap, so it failed on the one
+  permission that is not needed to create a tap. Creating the tap is now the
+  precondition, and the preflight only names which failure occurred
+- Fixed a stray "Open Settings" button drawn over an unrelated row. Hiding a
+  setup row collapsed the grid row but then re-showed its action button, which
+  sets visibility from readiness alone and did not know the row was gone
+- Widened the setup window's name column, which was pinned 45pt narrower than
+  "Selected Parakeet model", the label the engine picker writes there
+
 ## 3.7.1: 2026-08-07
 
 - Fixed the Settings window sizing 40pt shorter than its own content wherever
