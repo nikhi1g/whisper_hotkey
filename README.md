@@ -194,15 +194,14 @@ reports **Custom**.
 | Parakeet Fast | `parakeet-tdt-ctc-110m` | 217 MB | Lowest latency and memory |
 | Parakeet Unified | `parakeet-unified-en-0.6b` | 594 MB | Most accurate; on-demand download |
 | Whisper Turbo | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Supports the internal dictionary |
-| Cohere Transcribe | `cohere-transcribe-03-2026` | 2.4 GB | Best on clean speech; ~11x slower |
 
 Whisper Turbo remains because Parakeet is a transducer: it accepts no prompt,
 so the internal dictionary and Pause Mode context only bias Whisper. Whisper
 Base left the list in 3.5.7 — Parakeet Fast is smaller, faster and more
 accurate, and it is bundled. Small and Medium English were retired in 3.4.1.
 
-The bundled options ship inside the app; Unified and Cohere are fetched only
-when selected.
+The bundled options ship inside the app; Unified is fetched only when
+selected.
 
 ```sh
 ./run.sh --model base

@@ -19,14 +19,6 @@ final class RecognitionChoiceTests: XCTestCase {
                         "no option for Parakeet \(variant)"
                     )
                 }
-            case .cohereCoreML:
-                XCTAssertNotNil(
-                    RecognitionChoice.matching(
-                        engine: engine,
-                        model: .baseEnglish,
-                        parakeetVariant: .accurate
-                    )
-                )
             case .whisperCppMetal:
                 // Whisper carries one option now, so every stored model has to
                 // resolve to it rather than leaving the picker blank.
@@ -45,21 +37,27 @@ final class RecognitionChoiceTests: XCTestCase {
         }
     }
 
-    /// The Core ML encoder and WhisperKit engines were retired in 3.5.7.
-    /// Neither could run in a shipped build, but a saved preference naming one
-    /// must still resolve to something rather than dropping to the default.
+    /// Engines retired in 3.5.7 and 3.5.9. A saved preference naming one must
+    /// still resolve to something rather than dropping to the default: the two
+    /// Core ML paths to Metal, which runs the same weights, and Cohere to
+    /// Parakeet Accurate, which is bundled and beats it everywhere but clean
+    /// read speech.
     func testRetiredEnginesMigrateToMetal() {
         let defaults = UserDefaults(
             suiteName: "RecognitionChoiceTests.\(UUID().uuidString)"
         )!
-        for rawValue in ["whisperCppCoreML", "whisperKitCoreML"] {
+        for (rawValue, expected) in [
+            ("whisperCppCoreML", RecognitionEngine.whisperCppMetal),
+            ("whisperKitCoreML", .whisperCppMetal),
+            ("cohereCoreML", .parakeetCoreML),
+        ] {
             defaults.set(
                 rawValue,
                 forKey: WhisperHotkeyPreferenceKeys.recognitionEngine
             )
             XCTAssertEqual(
                 RecognitionEngine.selected(defaults: defaults),
-                .whisperCppMetal,
+                expected,
                 "\(rawValue) did not migrate"
             )
         }
@@ -89,7 +87,6 @@ final class RecognitionChoiceTests: XCTestCase {
         XCTAssertNil(RecognitionChoice.parakeetAccurate.downloadDescription)
         XCTAssertNil(RecognitionChoice.whisperTurboMetal.downloadDescription)
         XCTAssertNotNil(RecognitionChoice.parakeetUnified.downloadDescription)
-        XCTAssertNotNil(RecognitionChoice.cohereTranscribe.downloadDescription)
     }
 
     func testDefaultIsABundledParakeetOption() {

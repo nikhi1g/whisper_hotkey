@@ -69,7 +69,7 @@ idle, and prompt contents are never logged or exposed as process arguments.
 | Target | Responsibility |
 | --- | --- |
 | `WhisperHotkeyCore` | State machine, contracts, model and limit preferences |
-| `WhisperHotkeyASR` | Capture, exclusive engine lifecycle, whisper.cpp, Parakeet, or Cohere invocation, sanitization |
+| `WhisperHotkeyASR` | Capture, exclusive engine lifecycle, whisper.cpp or Parakeet invocation, sanitization |
 | `WhisperHotkeySystem` | Global input, Accessibility, pasteboard, Command-V/Return |
 | `WhisperHotkeyShell` | Menu, Setup and Settings, badge, login item, local control socket |
 | `WhisperHotkeyApp` | Main-actor orchestration and app lifecycle |
