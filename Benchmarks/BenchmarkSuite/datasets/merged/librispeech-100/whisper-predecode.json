@@ -1,0 +1,1017 @@
+{
+  "cases": [
+    {
+      "audio_seconds": 10.435,
+      "chunks": 2,
+      "full_release_seconds": 0.8394754579639994,
+      "full_word_errors": 0,
+      "id": "1089-134686-0000",
+      "predecode_release_seconds": 0.6220159999793395,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.395,
+      "chunks": 1,
+      "full_release_seconds": 0.5913947090157308,
+      "full_word_errors": 1,
+      "id": "1089-134691-0015",
+      "predecode_release_seconds": 0.6015592080075294,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.66,
+      "chunks": 1,
+      "full_release_seconds": 0.6063007090124302,
+      "full_word_errors": 0,
+      "id": "1188-133604-0042",
+      "predecode_release_seconds": 0.6363387500168756,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.53,
+      "chunks": 1,
+      "full_release_seconds": 0.8076120000332594,
+      "full_word_errors": 0,
+      "id": "121-127105-0026",
+      "predecode_release_seconds": 0.7955925000133002,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.755,
+      "chunks": 2,
+      "full_release_seconds": 0.8091472499654628,
+      "full_word_errors": 0,
+      "id": "1284-1180-0001",
+      "predecode_release_seconds": 0.748055332954972,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 8.53,
+      "chunks": 2,
+      "full_release_seconds": 0.7089207919780165,
+      "full_word_errors": 0,
+      "id": "1284-134647-0000",
+      "predecode_release_seconds": 0.7498143750405877,
+      "predecode_word_errors": 2,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 15.995,
+      "chunks": 3,
+      "full_release_seconds": 1.0512568749836646,
+      "full_word_errors": 0,
+      "id": "1320-122617-0028",
+      "predecode_release_seconds": 0.7568888330063768,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.75,
+      "chunks": 1,
+      "full_release_seconds": 0.5918986249598674,
+      "full_word_errors": 0,
+      "id": "1580-141083-0040",
+      "predecode_release_seconds": 0.5963165829889476,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 4.885,
+      "chunks": 1,
+      "full_release_seconds": 0.6702232920215465,
+      "full_word_errors": 0,
+      "id": "1580-141084-0039",
+      "predecode_release_seconds": 0.6538875830010511,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.865,
+      "chunks": 1,
+      "full_release_seconds": 0.6481250000069849,
+      "full_word_errors": 0,
+      "id": "1995-1837-0000",
+      "predecode_release_seconds": 0.6179668339900672,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 5.18,
+      "chunks": 1,
+      "full_release_seconds": 0.7136006250511855,
+      "full_word_errors": 4,
+      "id": "2094-142345-0023",
+      "predecode_release_seconds": 0.6799285830347799,
+      "predecode_word_errors": 4,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 8.875,
+      "chunks": 2,
+      "full_release_seconds": 0.7198353750281967,
+      "full_word_errors": 0,
+      "id": "2300-131720-0015",
+      "predecode_release_seconds": 0.5234204999869689,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.38,
+      "chunks": 1,
+      "full_release_seconds": 0.7132934579858556,
+      "full_word_errors": 0,
+      "id": "237-134493-0001",
+      "predecode_release_seconds": 0.695873499964363,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.555,
+      "chunks": 1,
+      "full_release_seconds": 0.5870355409570038,
+      "full_word_errors": 0,
+      "id": "237-134500-0035",
+      "predecode_release_seconds": 0.5722409579902887,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 1.805,
+      "chunks": 1,
+      "full_release_seconds": 0.5295750829973258,
+      "full_word_errors": 0,
+      "id": "260-123288-0014",
+      "predecode_release_seconds": 0.54792354197707,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.81,
+      "chunks": 1,
+      "full_release_seconds": 0.5877670830232091,
+      "full_word_errors": 0,
+      "id": "2830-3980-0004",
+      "predecode_release_seconds": 0.5969843340571974,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.69,
+      "chunks": 1,
+      "full_release_seconds": 0.5580418329918757,
+      "full_word_errors": 1,
+      "id": "2830-3980-0058",
+      "predecode_release_seconds": 0.5609031660133041,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.815,
+      "chunks": 2,
+      "full_release_seconds": 0.7155534169869497,
+      "full_word_errors": 1,
+      "id": "2961-961-0011",
+      "predecode_release_seconds": 0.5643372919876137,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 25.115,
+      "chunks": 4,
+      "full_release_seconds": 1.429282333003357,
+      "full_word_errors": 2,
+      "id": "3570-5696-0003",
+      "predecode_release_seconds": 0.6209722080384381,
+      "predecode_word_errors": 3,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 6.52,
+      "chunks": 2,
+      "full_release_seconds": 0.6489846669719554,
+      "full_word_errors": 0,
+      "id": "3575-170457-0045",
+      "predecode_release_seconds": 0.42643041698262163,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 10.895,
+      "chunks": 2,
+      "full_release_seconds": 0.7623823750182055,
+      "full_word_errors": 0,
+      "id": "3729-6852-0041",
+      "predecode_release_seconds": 0.5602469999575987,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.82,
+      "chunks": 2,
+      "full_release_seconds": 0.7509209999698214,
+      "full_word_errors": 0,
+      "id": "4446-2271-0009",
+      "predecode_release_seconds": 0.7159937089681634,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 6.34,
+      "chunks": 1,
+      "full_release_seconds": 0.720006707997527,
+      "full_word_errors": 1,
+      "id": "4446-2275-0000",
+      "predecode_release_seconds": 0.7443966249702498,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.59,
+      "chunks": 1,
+      "full_release_seconds": 0.5666826660162769,
+      "full_word_errors": 0,
+      "id": "4507-16021-0008",
+      "predecode_release_seconds": 0.5616340420092456,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 11.92,
+      "chunks": 3,
+      "full_release_seconds": 0.7408407080220059,
+      "full_word_errors": 0,
+      "id": "4970-29093-0001",
+      "predecode_release_seconds": 0.4507929160143256,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 15.05,
+      "chunks": 3,
+      "full_release_seconds": 0.8428043749881908,
+      "full_word_errors": 0,
+      "id": "4970-29095-0031",
+      "predecode_release_seconds": 0.6173734170151874,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 8.31,
+      "chunks": 2,
+      "full_release_seconds": 0.7056494160206057,
+      "full_word_errors": 2,
+      "id": "4992-41806-0001",
+      "predecode_release_seconds": 0.41698729095281983,
+      "predecode_word_errors": 2,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 21.015,
+      "chunks": 4,
+      "full_release_seconds": 1.103590708982665,
+      "full_word_errors": 0,
+      "id": "5105-28241-0001",
+      "predecode_release_seconds": 0.500972125027328,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 6.615,
+      "chunks": 1,
+      "full_release_seconds": 0.7201810000115074,
+      "full_word_errors": 3,
+      "id": "5142-33396-0034",
+      "predecode_release_seconds": 0.6984610420186073,
+      "predecode_word_errors": 3,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.415,
+      "chunks": 1,
+      "full_release_seconds": 0.5710084579768591,
+      "full_word_errors": 0,
+      "id": "5142-36377-0019",
+      "predecode_release_seconds": 0.5714801250142045,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 14.375,
+      "chunks": 3,
+      "full_release_seconds": 0.8970272919978015,
+      "full_word_errors": 0,
+      "id": "5639-40744-0039",
+      "predecode_release_seconds": 0.5534007080132142,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.66,
+      "chunks": 1,
+      "full_release_seconds": 0.638795041013509,
+      "full_word_errors": 0,
+      "id": "5683-32879-0001",
+      "predecode_release_seconds": 0.60486929200124,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.495,
+      "chunks": 1,
+      "full_release_seconds": 0.6306703329901211,
+      "full_word_errors": 0,
+      "id": "61-70968-0029",
+      "predecode_release_seconds": 0.6358258749824017,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.78,
+      "chunks": 1,
+      "full_release_seconds": 0.6315402920008637,
+      "full_word_errors": 0,
+      "id": "61-70970-0019",
+      "predecode_release_seconds": 0.6211274579982269,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 4.0,
+      "chunks": 1,
+      "full_release_seconds": 0.6135147499735467,
+      "full_word_errors": 0,
+      "id": "672-122797-0032",
+      "predecode_release_seconds": 0.6016952079953626,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.14,
+      "chunks": 1,
+      "full_release_seconds": 0.6246415830100887,
+      "full_word_errors": 0,
+      "id": "6829-68769-0010",
+      "predecode_release_seconds": 0.6168820829479955,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 9.82,
+      "chunks": 2,
+      "full_release_seconds": 0.8151756669976749,
+      "full_word_errors": 0,
+      "id": "6829-68771-0010",
+      "predecode_release_seconds": 0.5390258330153301,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 5.035,
+      "chunks": 1,
+      "full_release_seconds": 0.6508183329715393,
+      "full_word_errors": 0,
+      "id": "6930-76324-0005",
+      "predecode_release_seconds": 0.4062920410069637,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.69,
+      "chunks": 1,
+      "full_release_seconds": 0.7223765419912525,
+      "full_word_errors": 0,
+      "id": "7021-79730-0002",
+      "predecode_release_seconds": 0.6095079579972662,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.165,
+      "chunks": 1,
+      "full_release_seconds": 0.3829404170392081,
+      "full_word_errors": 0,
+      "id": "7021-85628-0024",
+      "predecode_release_seconds": 0.3609934590058401,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 3.875,
+      "chunks": 1,
+      "full_release_seconds": 0.37041829200461507,
+      "full_word_errors": 0,
+      "id": "7127-75947-0019",
+      "predecode_release_seconds": 0.3657412499887869,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.425,
+      "chunks": 1,
+      "full_release_seconds": 0.3537202500156127,
+      "full_word_errors": 0,
+      "id": "7176-92135-0004",
+      "predecode_release_seconds": 0.3492379160015844,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 20.355,
+      "chunks": 4,
+      "full_release_seconds": 0.5379353330354206,
+      "full_word_errors": 2,
+      "id": "7729-102255-0011",
+      "predecode_release_seconds": 0.3596319160168058,
+      "predecode_word_errors": 2,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 7.605,
+      "chunks": 2,
+      "full_release_seconds": 0.4087035830016248,
+      "full_word_errors": 1,
+      "id": "8224-274384-0000",
+      "predecode_release_seconds": 0.2013989580026827,
+      "predecode_word_errors": 1,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 4.59,
+      "chunks": 1,
+      "full_release_seconds": 0.3752157920389436,
+      "full_word_errors": 0,
+      "id": "8230-279154-0039",
+      "predecode_release_seconds": 0.37119216698920354,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 4.11,
+      "chunks": 1,
+      "full_release_seconds": 0.3582255420042202,
+      "full_word_errors": 0,
+      "id": "8455-210777-0049",
+      "predecode_release_seconds": 0.35568679100833833,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 4.475,
+      "chunks": 1,
+      "full_release_seconds": 0.35787949996301904,
+      "full_word_errors": 4,
+      "id": "8463-294825-0016",
+      "predecode_release_seconds": 0.3623569579795003,
+      "predecode_word_errors": 4,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 1.955,
+      "chunks": 1,
+      "full_release_seconds": 0.3412712920107879,
+      "full_word_errors": 0,
+      "id": "8555-284447-0011",
+      "predecode_release_seconds": 0.3373508339864202,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 2.755,
+      "chunks": 1,
+      "full_release_seconds": 0.3496988330152817,
+      "full_word_errors": 0,
+      "id": "908-157963-0002",
+      "predecode_release_seconds": 0.3498219170141965,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 20.56,
+      "chunks": 4,
+      "full_release_seconds": 0.4678307079593651,
+      "full_word_errors": 0,
+      "id": "908-31957-0025",
+      "predecode_release_seconds": 0.35064562497427687,
+      "predecode_word_errors": 0,
+      "split": "test-clean"
+    },
+    {
+      "audio_seconds": 15.0,
+      "chunks": 2,
+      "full_release_seconds": 0.4556963330251165,
+      "full_word_errors": 0,
+      "id": "1688-142285-0000",
+      "predecode_release_seconds": 0.3850792500306852,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.56,
+      "chunks": 1,
+      "full_release_seconds": 0.35988691699458286,
+      "full_word_errors": 0,
+      "id": "1688-142285-0059",
+      "predecode_release_seconds": 0.3572872499935329,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.465,
+      "chunks": 1,
+      "full_release_seconds": 0.36279579205438495,
+      "full_word_errors": 0,
+      "id": "1998-15444-0023",
+      "predecode_release_seconds": 0.36158729100134224,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.895,
+      "chunks": 1,
+      "full_release_seconds": 0.35122599999886006,
+      "full_word_errors": 5,
+      "id": "1998-29455-0008",
+      "predecode_release_seconds": 0.34673512500012293,
+      "predecode_word_errors": 6,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 4.64,
+      "chunks": 1,
+      "full_release_seconds": 0.3731784580159001,
+      "full_word_errors": 0,
+      "id": "2033-164915-0005",
+      "predecode_release_seconds": 0.37028037500567734,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 13.125,
+      "chunks": 3,
+      "full_release_seconds": 0.4519954159623012,
+      "full_word_errors": 8,
+      "id": "2414-128292-0009",
+      "predecode_release_seconds": 0.19446937497006722,
+      "predecode_word_errors": 8,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 19.96,
+      "chunks": 4,
+      "full_release_seconds": 0.48652504198253155,
+      "full_word_errors": 3,
+      "id": "2414-165385-0000",
+      "predecode_release_seconds": 0.3385264999815263,
+      "predecode_word_errors": 7,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 10.84,
+      "chunks": 2,
+      "full_release_seconds": 0.4178810839657672,
+      "full_word_errors": 8,
+      "id": "2609-169640-0004",
+      "predecode_release_seconds": 0.34491658402839676,
+      "predecode_word_errors": 8,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.055,
+      "chunks": 1,
+      "full_release_seconds": 0.38236295798560604,
+      "full_word_errors": 1,
+      "id": "3005-163390-0020",
+      "predecode_release_seconds": 0.3812596669886261,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.8,
+      "chunks": 1,
+      "full_release_seconds": 0.36357462499290705,
+      "full_word_errors": 0,
+      "id": "3005-163399-0022",
+      "predecode_release_seconds": 0.3631760409916751,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 12.92,
+      "chunks": 3,
+      "full_release_seconds": 0.45004112500464544,
+      "full_word_errors": 0,
+      "id": "3080-5040-0024",
+      "predecode_release_seconds": 0.3488815830205567,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 12.13,
+      "chunks": 2,
+      "full_release_seconds": 0.4884858329896815,
+      "full_word_errors": 1,
+      "id": "3331-159609-0003",
+      "predecode_release_seconds": 0.37960566696710885,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.2,
+      "chunks": 1,
+      "full_release_seconds": 0.3742217920371331,
+      "full_word_errors": 2,
+      "id": "3528-168669-0024",
+      "predecode_release_seconds": 0.37217612500535324,
+      "predecode_word_errors": 2,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.905,
+      "chunks": 2,
+      "full_release_seconds": 0.41337900003418326,
+      "full_word_errors": 1,
+      "id": "3528-168669-0084",
+      "predecode_release_seconds": 0.18045049996580875,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 4.2050625,
+      "chunks": 1,
+      "full_release_seconds": 0.3762901669833809,
+      "full_word_errors": 0,
+      "id": "3538-142836-0013",
+      "predecode_release_seconds": 0.3826444589649327,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.795,
+      "chunks": 1,
+      "full_release_seconds": 0.40627154102548957,
+      "full_word_errors": 0,
+      "id": "3538-163624-0006",
+      "predecode_release_seconds": 0.4020479579921812,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.445,
+      "chunks": 1,
+      "full_release_seconds": 0.3949607080430724,
+      "full_word_errors": 1,
+      "id": "367-293981-0005",
+      "predecode_release_seconds": 0.3949846249888651,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.26,
+      "chunks": 1,
+      "full_release_seconds": 0.3692267910228111,
+      "full_word_errors": 0,
+      "id": "3764-168670-0044",
+      "predecode_release_seconds": 0.36537804099498317,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 7.84,
+      "chunks": 2,
+      "full_release_seconds": 0.39445849996991456,
+      "full_word_errors": 0,
+      "id": "3764-168671-0046",
+      "predecode_release_seconds": 0.1540207080054099,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.855,
+      "chunks": 1,
+      "full_release_seconds": 0.37404333299491554,
+      "full_word_errors": 0,
+      "id": "3997-180297-0017",
+      "predecode_release_seconds": 0.38045254198368683,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.225,
+      "chunks": 1,
+      "full_release_seconds": 0.3469503750093281,
+      "full_word_errors": 0,
+      "id": "4198-12259-0024",
+      "predecode_release_seconds": 0.34755712503101677,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 13.76,
+      "chunks": 3,
+      "full_release_seconds": 0.4758316660299897,
+      "full_word_errors": 0,
+      "id": "4198-61336-0024",
+      "predecode_release_seconds": 0.32975916699971997,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.34,
+      "chunks": 2,
+      "full_release_seconds": 0.38601575000211596,
+      "full_word_errors": 0,
+      "id": "4294-9934-0001",
+      "predecode_release_seconds": 0.18908729199785768,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 7.76,
+      "chunks": 2,
+      "full_release_seconds": 0.4178901669802144,
+      "full_word_errors": 0,
+      "id": "4350-10919-0031",
+      "predecode_release_seconds": 0.35605291702086106,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 14.315,
+      "chunks": 3,
+      "full_release_seconds": 0.5275966660119593,
+      "full_word_errors": 1,
+      "id": "4350-9170-0057",
+      "predecode_release_seconds": 0.3458226249786094,
+      "predecode_word_errors": 5,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 4.36,
+      "chunks": 1,
+      "full_release_seconds": 0.3928799169952981,
+      "full_word_errors": 0,
+      "id": "4852-28312-0028",
+      "predecode_release_seconds": 0.401035042013973,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 9.29,
+      "chunks": 2,
+      "full_release_seconds": 0.4503534159739502,
+      "full_word_errors": 6,
+      "id": "533-1066-0002",
+      "predecode_release_seconds": 0.34480816702125594,
+      "predecode_word_errors": 5,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.625,
+      "chunks": 1,
+      "full_release_seconds": 0.37580383400199935,
+      "full_word_errors": 2,
+      "id": "533-131562-0011",
+      "predecode_release_seconds": 0.3773854580358602,
+      "predecode_word_errors": 2,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.69,
+      "chunks": 1,
+      "full_release_seconds": 0.3486903749871999,
+      "full_word_errors": 1,
+      "id": "5442-41168-0006",
+      "predecode_release_seconds": 0.3453541250200942,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 7.87,
+      "chunks": 1,
+      "full_release_seconds": 0.4288000839878805,
+      "full_word_errors": 1,
+      "id": "5484-24317-0006",
+      "predecode_release_seconds": 0.4306804999941969,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 6.7599375,
+      "chunks": 2,
+      "full_release_seconds": 0.4085750419762917,
+      "full_word_errors": 0,
+      "id": "5484-24318-0032",
+      "predecode_release_seconds": 0.3901482920129782,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 10.715,
+      "chunks": 3,
+      "full_release_seconds": 0.4372163750231266,
+      "full_word_errors": 0,
+      "id": "5764-299665-0054",
+      "predecode_release_seconds": 0.17246237502666162,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.72,
+      "chunks": 1,
+      "full_release_seconds": 0.3753632919979282,
+      "full_word_errors": 2,
+      "id": "6070-63485-0016",
+      "predecode_release_seconds": 0.3835497079999186,
+      "predecode_word_errors": 2,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 14.99,
+      "chunks": 3,
+      "full_release_seconds": 0.4974571670172736,
+      "full_word_errors": 0,
+      "id": "6128-63240-0007",
+      "predecode_release_seconds": 0.3544668329996057,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 9.295,
+      "chunks": 2,
+      "full_release_seconds": 0.442526041995734,
+      "full_word_errors": 0,
+      "id": "6128-63244-0025",
+      "predecode_release_seconds": 0.3388305410044268,
+      "predecode_word_errors": 3,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.24,
+      "chunks": 1,
+      "full_release_seconds": 0.37861150002572685,
+      "full_word_errors": 0,
+      "id": "6432-63722-0059",
+      "predecode_release_seconds": 0.37791962502524257,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 4.03,
+      "chunks": 1,
+      "full_release_seconds": 0.38885533303255215,
+      "full_word_errors": 0,
+      "id": "6938-70848-0001",
+      "predecode_release_seconds": 0.39221166603965685,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.68,
+      "chunks": 1,
+      "full_release_seconds": 0.37635104201035574,
+      "full_word_errors": 5,
+      "id": "7018-75789-0010",
+      "predecode_release_seconds": 0.3784847500501196,
+      "predecode_word_errors": 5,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 14.25,
+      "chunks": 2,
+      "full_release_seconds": 0.5290842500398867,
+      "full_word_errors": 2,
+      "id": "7105-2330-0038",
+      "predecode_release_seconds": 0.40857229195535183,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.11,
+      "chunks": 1,
+      "full_release_seconds": 0.37645670800702646,
+      "full_word_errors": 0,
+      "id": "7902-96591-0018",
+      "predecode_release_seconds": 0.37306958402041346,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.105,
+      "chunks": 1,
+      "full_release_seconds": 0.3660721670021303,
+      "full_word_errors": 1,
+      "id": "7902-96594-0002",
+      "predecode_release_seconds": 0.3652394999517128,
+      "predecode_word_errors": 1,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.79,
+      "chunks": 1,
+      "full_release_seconds": 0.36633066600188613,
+      "full_word_errors": 0,
+      "id": "7975-280057-0003",
+      "predecode_release_seconds": 0.3715521250269376,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.79,
+      "chunks": 1,
+      "full_release_seconds": 0.38201183400815353,
+      "full_word_errors": 2,
+      "id": "7975-280084-0000",
+      "predecode_release_seconds": 0.38302033400395885,
+      "predecode_word_errors": 2,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 5.81,
+      "chunks": 2,
+      "full_release_seconds": 0.38775674998760223,
+      "full_word_errors": 0,
+      "id": "8131-117016-0023",
+      "predecode_release_seconds": 0.25615849998313944,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 3.9,
+      "chunks": 1,
+      "full_release_seconds": 0.3735527499811724,
+      "full_word_errors": 3,
+      "id": "8131-117017-0021",
+      "predecode_release_seconds": 0.37106916704215154,
+      "predecode_word_errors": 3,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.24,
+      "chunks": 1,
+      "full_release_seconds": 0.35703670798102394,
+      "full_word_errors": 0,
+      "id": "8188-269288-0025",
+      "predecode_release_seconds": 0.35884779202751815,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.495,
+      "chunks": 1,
+      "full_release_seconds": 0.35507233400130644,
+      "full_word_errors": 0,
+      "id": "8188-269290-0027",
+      "predecode_release_seconds": 0.35452016699127853,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 4.31,
+      "chunks": 1,
+      "full_release_seconds": 0.3965436670114286,
+      "full_word_errors": 0,
+      "id": "8280-266249-0017",
+      "predecode_release_seconds": 0.3922629579901695,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 2.42,
+      "chunks": 1,
+      "full_release_seconds": 0.37312570901121944,
+      "full_word_errors": 0,
+      "id": "8461-258277-0011",
+      "predecode_release_seconds": 0.3709085840382613,
+      "predecode_word_errors": 0,
+      "split": "test-other"
+    },
+    {
+      "audio_seconds": 10.2,
+      "chunks": 2,
+      "full_release_seconds": 0.442657292005606,
+      "full_word_errors": 1,
+      "id": "8461-281231-0038",
+      "predecode_release_seconds": 0.39575054100714624,
+      "predecode_word_errors": 2,
+      "split": "test-other"
+    }
+  ],
+  "dataset": "LibriSpeech test-clean and test-other",
+  "examples_per_split": 50,
+  "full_mean_release_seconds": 0.5274776120815658,
+  "full_p50_release_seconds": 0.4501972704892978,
+  "full_p95_release_seconds": 0.8394754579639994,
+  "full_wer": 0.04316939890710383,
+  "mean_chunks": 1.59,
+  "predecode_mean_release_seconds": 0.44819020456095693,
+  "predecode_p50_release_seconds": 0.38328502100193873,
+  "predecode_p95_release_seconds": 0.7159937089681634,
+  "predecode_wer": 0.054098360655737705,
+  "strategy": "accuracy",
+  "threads": 7
+}

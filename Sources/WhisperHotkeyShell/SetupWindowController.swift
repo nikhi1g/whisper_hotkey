@@ -28,10 +28,15 @@ public struct SetupReadiness: Equatable, Sendable {
         self.engine = engine
     }
 
+    /// Input Monitoring is deliberately absent. The event tap is authorised by
+    /// Accessibility, and `kTCCServiceListenEvent` is a separate grant the app
+    /// never registers for, so requiring it here left setup permanently
+    /// incomplete on a Mac where the hotkey would have worked. When the tap
+    /// really cannot be created, `reconcileRuntime` forces setup open and
+    /// `requiresInputMonitoringStep` surfaces the row.
     public var isReady: Bool {
         microphoneGranted
             && accessibilityGranted
-            && inputMonitoringGranted
             && modelAvailable
             && helperAvailable
     }
@@ -214,14 +219,18 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             missingText: "Permission needed",
             actionTitle: "Open Settings"
         )
-        gridRows[.inputMonitoring]?.isHidden =
-            !readiness.requiresInputMonitoringStep
         update(
             .inputMonitoring,
             ready: readiness.inputMonitoringGranted,
             missingText: "Permission needed",
             actionTitle: "Open Settings"
         )
+        // Hide the row only after `update` has run. `update` un-hides the
+        // action button whenever the row is not ready, and an NSGridRow hides
+        // its cells by hiding the views inside them, so doing this first left
+        // the button visible in a collapsed row -- drawn on top of whichever
+        // row took its place.
+        setInputMonitoringRowHidden(!readiness.requiresInputMonitoringStep)
         update(
             .model,
             ready: readiness.modelAvailable,
@@ -333,6 +342,19 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
         controls.button.isEnabled = !ready
     }
 
+    /// Collapses the Input Monitoring row, including its action button.
+    ///
+    /// The button is hidden explicitly because `update` sets its visibility
+    /// from readiness alone and has no idea the row it sits in is gone.
+    private func setInputMonitoringRowHidden(_ hidden: Bool) {
+        gridRows[.inputMonitoring]?.isHidden = hidden
+        guard hidden, let controls = rowControls[.inputMonitoring] else {
+            return
+        }
+        controls.button.isHidden = true
+        controls.button.isEnabled = false
+    }
+
     private func updateLoginItem(_ status: LoginItemStatus) {
         guard let controls = rowControls[.loginItem] else {
             return
@@ -423,7 +445,10 @@ public final class SetupWindowController: NSWindowController, NSWindowDelegate {
             )
         }
 
-        grid.column(at: 0).width = 135
+        // Wide enough for the longest name this column ever holds, which is
+        // set at runtime by `nameRowsForEngine` -- "Selected Parakeet model",
+        // not the shorter placeholder built above. 135 truncated it.
+        grid.column(at: 0).width = 180
         grid.column(at: 1).width = 175
         grid.column(at: 2).width = 100
         stack.addArrangedSubview(grid)

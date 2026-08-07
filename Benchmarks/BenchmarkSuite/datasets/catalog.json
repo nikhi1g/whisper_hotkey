@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "schema": "whisper_hotkey_benchmark_catalog_v1",
+  "entries": [
+    {
+      "id": "librispeech_test100_local",
+      "name": "LibriSpeech test-clean + test-other (100-utterance repo baseline)",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/12/",
+      "category": "speech-recognition",
+      "license": "CC BY 4.0",
+      "status": "ready",
+      "notes": "Existing repository baseline used by benchmark_librispeech.py and score_parakeet.py"
+    },
+    {
+      "id": "librispeech_pc",
+      "name": "LibriSpeech-PC punctuation manifests",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/145/",
+      "category": "text",
+      "license": "CC BY 4.0",
+      "status": "ready",
+      "notes": "Manifests with punctuation/capitalization restored for LibriSpeech utterances"
+    },
+    {
+      "id": "libritts",
+      "name": "LibriTTS (sentence-segmented LibriSpeech-derived text-to-speech set)",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/60/",
+      "category": "speech-recognition",
+      "license": "CC BY 4.0",
+      "status": "ready",
+      "notes": "Useful for sentence-length, read-speech generalization checks"
+    },
+    {
+      "id": "ami_meetings",
+      "name": "AMI Meeting Corpus (English)",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/16/",
+      "category": "speech-recognition",
+      "license": "CC BY-NC-SA 2.0",
+      "status": "ready",
+      "notes": "Meeting/noise-rich data, useful for far-field/overlap robustness checks"
+    },
+    {
+      "id": "tedlium",
+      "name": "TEDLIUM",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/51/",
+      "category": "speech-recognition",
+      "license": "CC BY-NC-ND 3.0",
+      "status": "ready",
+      "notes": "TED talks, long-form dictation style, broad acoustic conditions"
+    },
+    {
+      "id": "common_voice_en",
+      "name": "Common Voice (English)",
+      "source": "Mozilla",
+      "source_url": "https://commonvoice.mozilla.org/en/datasets",
+      "category": "speech-recognition",
+      "license": "CC0",
+      "status": "ready",
+      "notes": "Conversation-like/commands and noisy speech coverage; large-scale benchmark coverage"
+    }
+  ]
+}

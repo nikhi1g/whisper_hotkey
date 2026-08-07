@@ -5,6 +5,10 @@ The benchmark uses deterministic samples from the official
 used by [OpenAI to evaluate Whisper](https://github.com/openai/whisper/blob/main/data/README.md).
 LibriSpeech is distributed under CC BY 4.0.
 
+Tracked benchmark assets are now kept in `Benchmarks/BenchmarkSuite/`. The large
+audio and transient result artifacts still live under `Benchmarks/Data` and
+`Benchmarks/Results` as before.
+
 Downloaded audio and generated results stay in the ignored `Data/` and
 `Results/` directories.
 
@@ -18,6 +22,19 @@ python3 Benchmarks/Scripts/benchmark_predecode.py \
   --helper .build/arm64-apple-macosx/debug/WhisperModelHelper \
   --model ~/.cache/whisper/ggml-large-v3-turbo-q5_0.bin \
   --wav-root Benchmarks/Data/WAV
+```
+
+Regenerate tracked suite assets when you refresh results:
+
+```sh
+python3 Benchmarks/BenchmarkSuite/scripts/sync_assets.py
+python3 Benchmarks/BenchmarkSuite/tests/run_suite_asset_checks.py
+```
+
+The suite catalog of broader benchmark candidates is in:
+
+```
+Benchmarks/BenchmarkSuite/datasets/catalog.json
 ```
 
 ## Parakeet

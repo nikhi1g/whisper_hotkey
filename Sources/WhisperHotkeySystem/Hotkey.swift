@@ -577,10 +577,6 @@ public final class GlobalHotkeyMonitor {
         guard eventTap == nil else {
             return
         }
-        guard CGPreflightListenEventAccess() else {
-            throw GlobalHotkeyMonitorError.inputMonitoringNotGranted
-        }
-
         let mask = eventMask(
             for: [
                 .flagsChanged,
@@ -599,7 +595,18 @@ public final class GlobalHotkeyMonitor {
             callback: globalHotkeyEventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            throw GlobalHotkeyMonitorError.eventTapCreationFailed
+            // Creating the tap is the only authoritative check. This is a
+            // `.defaultTap` on the session tap, which Accessibility
+            // authorises; `CGPreflightListenEventAccess` reports
+            // kTCCServiceListenEvent, which governs listen-only taps and is a
+            // separate grant the app never registers for. Preflighting it as a
+            // precondition refused to start on a Mac that had everything the
+            // tap actually needs. It still tells the two failures apart, so
+            // the setup window can name the missing permission when that
+            // genuinely is the cause.
+            throw CGPreflightListenEventAccess()
+                ? GlobalHotkeyMonitorError.eventTapCreationFailed
+                : GlobalHotkeyMonitorError.inputMonitoringNotGranted
         }
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap)
