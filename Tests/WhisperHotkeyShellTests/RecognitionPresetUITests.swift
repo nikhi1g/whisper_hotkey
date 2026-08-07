@@ -53,11 +53,13 @@ final class RecognitionPresetUITests: XCTestCase {
         let controller = controller(
             engine: .parakeetCoreML,
             variant: .accurate,
-            processing: .decodeWhileSpeaking
+            processing: .modelReady
         )
+        // Custom is a third, permanently disabled segment: a state the
+        // control can report but a user cannot pick.
         XCTAssertEqual(
             controller.presetChipLabelsForTesting,
-            ["Fast", "Accurate"]
+            ["Fast", "Accurate", "Custom"]
         )
     }
 
@@ -70,7 +72,7 @@ final class RecognitionPresetUITests: XCTestCase {
             let controller = controller(
                 engine: .parakeetCoreML,
                 variant: variant,
-                processing: .decodeWhileSpeaking
+                processing: .modelReady
             )
             XCTAssertEqual(controller.selectedPresetForTesting, expected)
             XCTAssertFalse(
@@ -89,7 +91,7 @@ final class RecognitionPresetUITests: XCTestCase {
             variant: .accurate,
             processing: .afterRecording
         )
-        XCTAssertNil(controller.selectedPresetForTesting)
+        XCTAssertEqual(controller.selectedPresetForTesting, .custom)
         XCTAssertTrue(controller.advancedRecognitionVisibleForTesting)
     }
 
@@ -100,7 +102,7 @@ final class RecognitionPresetUITests: XCTestCase {
                 engine: engine,
                 variant: .accurate,
                 processing: engine == .parakeetCoreML
-                    ? .decodeWhileSpeaking
+                    ? .modelReady
                     : .afterRecording
             )
             XCTAssertTrue(

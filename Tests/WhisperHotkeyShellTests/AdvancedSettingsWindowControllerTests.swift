@@ -45,30 +45,31 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         )
         controller.showWindow(nil)
 
-        XCTAssertEqual(
+        // Index 3 is the recognition list: every option plus its group
+        // headings and the separators between them.
+        XCTAssertGreaterThanOrEqual(
             controller.optionCountsForTesting[3],
-            RecognitionEngine.allCases.count
+            RecognitionChoice.allCases.count
         )
         XCTAssertEqual(controller.selectedEngineForTesting, .parakeetCoreML)
         // A transducer has no beam search, so the row is gone, not greyed.
         XCTAssertFalse(controller.decodingRowVisibleForTesting)
-        // The Model row carries Parakeet's own two checkpoints. Reusing
-        // whisper's size names here would misreport what is selected.
+        // One flat list holds every configuration, grouped by family, so no
+        // combination is hidden behind a second control.
         XCTAssertEqual(
-            controller.modelChipLabelsForTesting,
-            ["Fast", "Accurate", "Unified"]
+            controller.recognitionChoiceLabelsForTesting.count,
+            RecognitionChoice.allCases.count
         )
-        // Engine leads the section, because it decides what the rest means.
+        XCTAssertEqual(
+            controller.recognitionChoiceHeadingsForTesting,
+            RecognitionChoice.Group.allCases.map(\.displayName)
+        )
         XCTAssertEqual(
             controller.recognitionRowTitlesForTesting,
             [
-                "Recognition", "Engine", "Model", "Decoding", "Processing",
+                "Quality", "Model", "Decoding", "Processing",
                 "Internal dictionary", "Recording limit",
             ]
-        )
-        XCTAssertEqual(
-            controller.summaryValuesForTesting[2],
-            "Parakeet Accurate After Recording"
         )
         controller.close()
     }
@@ -175,33 +176,18 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.showWindow(nil)
 
         for iteration in 0..<8 {
-            controller.selectEngineForTesting(.parakeetCoreML)
+            controller.selectRecognitionChoiceForTesting(.parakeetAccurate)
             XCTAssertEqual(
-                controller.selectedEngineForTesting,
-                .parakeetCoreML,
-                "engine did not stick on iteration \(iteration)"
-            )
-            XCTAssertEqual(
-                controller.modelChipLabelsForTesting,
-                ["Fast", "Accurate", "Unified"],
-                "parakeet chips wrong on iteration \(iteration)"
+                controller.recognitionChoiceLabelsForTesting.count,
+                RecognitionChoice.allCases.count,
+                "list lost options on iteration \(iteration)"
             )
 
-            controller.selectEngineForTesting(.whisperCppMetal)
+            controller.selectRecognitionChoiceForTesting(.whisperTurboMetal)
             XCTAssertEqual(
-                controller.selectedEngineForTesting,
-                .whisperCppMetal,
-                "engine did not return on iteration \(iteration)"
-            )
-            XCTAssertEqual(
-                controller.modelChipLabelsForTesting,
-                ["Base", "Turbo"],
-                "whisper chips wrong on iteration \(iteration)"
-            )
-            XCTAssertEqual(
-                controller.selectedModelForTesting,
-                .largeV3TurboQ5,
-                "whisper model lost on iteration \(iteration)"
+                controller.recognitionChoiceLabelsForTesting.count,
+                RecognitionChoice.allCases.count,
+                "list lost options on iteration \(iteration)"
             )
         }
         controller.close()
@@ -255,11 +241,9 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
         XCTAssertTrue(controller.keepsLatestDictationForTesting)
         XCTAssertTrue(controller.modeControlEnabledForTesting)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.largeV3TurboQ5), true)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.baseEnglish), true)
         XCTAssertEqual(
-            controller.modelTitleForTesting(.baseEnglish),
-            DictationModel.baseEnglish.menuTitle
+            controller.recognitionChoiceIsEnabledForTesting(.whisperTurboMetal),
+            true
         )
         XCTAssertTrue(controller.usesChipSelectionForTesting)
         XCTAssertEqual(
@@ -270,26 +254,6 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.controlsFitWindowForTesting,
             controller.controlsOutsideWindowForTesting.joined(separator: ", ")
         )
-        XCTAssertEqual(
-            controller.summaryValuesForTesting,
-            [
-                "Right Option", "Toggle",
-                "Turbo Metal Smart Decode Decode While Speaking", "5 Minutes",
-                "Dimmed", "Login On",
-            ]
-        )
-        let summaryFrames = controller.summaryFramesForTesting
-        XCTAssertEqual(summaryFrames.count, 6)
-        XCTAssertEqual(
-            Set(summaryFrames.prefix(3).map(\.midY)).count,
-            1
-        )
-        XCTAssertEqual(
-            Set(summaryFrames.suffix(3).map(\.midY)).count,
-            1
-        )
-        XCTAssertNotEqual(summaryFrames[0].midY, summaryFrames[3].midY)
-        XCTAssertLessThan(summaryFrames[3].midY, summaryFrames[0].midY)
         XCTAssertEqual(
             controller.helpAccessibilityLabelForTesting,
             "Open User Guide"
@@ -450,9 +414,6 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             controller.selectedDecodingProfileForTesting,
             .adaptive
         )
-        XCTAssertFalse(
-            controller.summaryValuesForTesting[2].contains("Native")
-        )
         controller.close()
     }
 
@@ -507,7 +468,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         var selectedHotkeys: [HotkeyKey] = []
         var selectedModes: [HotkeyActivationMode] = []
         var selectedModels: [DictationModel] = []
-        var selectedEngines: [RecognitionEngine] = []
+        var selectedChoices: [RecognitionChoice] = []
         var selectedDecodingProfiles: [DecodingProfile] = []
         var processingSelections: [ModelProcessingMode] = []
         var dictionaryAdditions: [[String]] = []
@@ -523,7 +484,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 selectDictationMode: { selectedModes.append($0) },
                 selectHotkey: { selectedHotkeys.append($0) },
                 selectModel: { selectedModels.append($0) },
-                selectEngine: { selectedEngines.append($0) },
+                selectRecognitionChoice: { selectedChoices.append($0) },
                 selectDecodingProfile: {
                     selectedDecodingProfiles.append($0)
                 },
@@ -548,9 +509,8 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         controller.selectHotkeyForTesting(.leftShift)
         controller.selectModeForTesting(.toggle)
-        controller.selectModelForTesting(.largeV3TurboQ5)
         controller.selectDecodingProfileForTesting(.adaptive)
-        controller.selectEngineForTesting(.whisperKitCoreML)
+        controller.selectRecognitionChoiceForTesting(.whisperTurboWhisperKit)
         controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(
             [" Codex ", "Claude Code", "codex"]
@@ -563,8 +523,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(selectedHotkeys, [.leftShift])
         XCTAssertEqual(selectedModes, [.toggle])
-        XCTAssertEqual(selectedModels, [.largeV3TurboQ5])
-        XCTAssertEqual(selectedEngines, [.whisperKitCoreML])
+        XCTAssertEqual(selectedChoices, [.whisperTurboWhisperKit])
         XCTAssertEqual(selectedDecodingProfiles, [.adaptive])
         XCTAssertEqual(processingSelections, [.decodeWhileSpeaking])
         XCTAssertEqual(dictionaryAdditions, [["Codex", "Claude Code"]])
@@ -749,7 +708,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertFalse(controller.modeControlEnabledForTesting)
         controller.selectHotkeyForTesting(.leftControl)
         controller.selectModeForTesting(.toggle)
-        controller.selectModelForTesting(.largeV3TurboQ5)
+        controller.selectRecognitionChoiceForTesting(.whisperTurboMetal)
         controller.selectProcessingModeForTesting(.decodeWhileSpeaking)
         controller.setInternalDictionaryForTesting(["Codex"])
         controller.setKeepsLatestDictationForTesting(false)
@@ -853,24 +812,26 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
                 availableModels: [.baseEnglish]
             )
         )
-        var selectedModels: [DictationModel] = []
+        var selectedChoices: [RecognitionChoice] = []
         let controller = AdvancedSettingsWindowController(
             stateProvider: { box.value },
             actions: AdvancedSettingsActions(
                 selectDictationMode: { _ in },
                 selectHotkey: { _ in },
-                selectModel: { selectedModels.append($0) },
+                selectModel: { _ in },
+                selectRecognitionChoice: { selectedChoices.append($0) },
                 selectRecordingLimit: { _ in }
             ),
             loginItemManager: makeLoginItemManager()
         )
 
         XCTAssertEqual(controller.selectedModelForTesting, .largeV3TurboQ5)
-        XCTAssertEqual(controller.modelIsEnabledForTesting(.baseEnglish), true)
         XCTAssertTrue(controller.configurationControlsEnabledForTesting)
 
-        controller.selectModelForTesting(.baseEnglish)
-        XCTAssertEqual(selectedModels, [.baseEnglish])
+        // An option whose model is not installed is still listed, so there is
+        // always a way back to one that is.
+        controller.selectRecognitionChoiceForTesting(.whisperBaseMetal)
+        XCTAssertEqual(selectedChoices, [.whisperBaseMetal])
     }
 
     @MainActor

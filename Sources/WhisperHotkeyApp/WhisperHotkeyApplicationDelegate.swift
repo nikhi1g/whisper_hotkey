@@ -1578,6 +1578,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     selectRecognitionPreset: { [weak self] preset in
                         self?.applyRecognitionPreset(preset)
                     },
+                    selectRecognitionChoice: { [weak self] choice in
+                        self?.applyRecognitionChoice(choice)
+                    },
                     selectEngine: { [weak self] engine in
                         self?.selectEngine(engine)
                     },
@@ -1993,6 +1996,22 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
             completion(failure == nil && !cancelled)
         }
+    }
+
+    /// Applies one option from the flat recognition list, writing whichever of
+    /// the three underlying preferences it implies. Routed through the existing
+    /// selectors so install offers, availability and readiness all still apply.
+    private func applyRecognitionChoice(_ choice: RecognitionChoice) {
+        guard !machine.phase.isBusy else { return }
+        switch choice.engine {
+        case .parakeetCoreML:
+            selectParakeetVariant(choice.parakeetVariant)
+        case .whisperCppMetal, .whisperCppCoreML, .whisperKitCoreML:
+            selectModel(choice.model)
+        case .cohereCoreML:
+            break
+        }
+        selectEngine(choice.engine)
     }
 
     /// Cohere's Core ML build is larger than the whole application, so it is

@@ -78,6 +78,7 @@ public struct AdvancedSettingsActions {
     public var selectModel: (DictationModel) -> Void
     public var selectParakeetVariant: (ParakeetVariant) -> Void
     public var selectRecognitionPreset: (RecognitionPreset) -> Void
+    public var selectRecognitionChoice: (RecognitionChoice) -> Void
     public var selectEngine: (RecognitionEngine) -> Void
     public var selectDecodingProfile: (DecodingProfile) -> Void
     public var selectProcessingMode: (ModelProcessingMode) -> Void
@@ -98,6 +99,7 @@ public struct AdvancedSettingsActions {
         selectModel: @escaping (DictationModel) -> Void,
         selectParakeetVariant: @escaping (ParakeetVariant) -> Void = { _ in },
         selectRecognitionPreset: @escaping (RecognitionPreset) -> Void = { _ in },
+        selectRecognitionChoice: @escaping (RecognitionChoice) -> Void = { _ in },
         selectEngine: @escaping (RecognitionEngine) -> Void = { _ in },
         selectDecodingProfile: @escaping (DecodingProfile) -> Void = { _ in },
         selectProcessingMode: @escaping (ModelProcessingMode) -> Void = { _ in },
@@ -117,6 +119,7 @@ public struct AdvancedSettingsActions {
         self.selectModel = selectModel
         self.selectParakeetVariant = selectParakeetVariant
         self.selectRecognitionPreset = selectRecognitionPreset
+        self.selectRecognitionChoice = selectRecognitionChoice
         self.selectEngine = selectEngine
         self.selectDecodingProfile = selectDecodingProfile
         self.selectProcessingMode = selectProcessingMode
@@ -171,8 +174,10 @@ public final class AdvancedSettingsWindowController:
     private let loginItemManager: LoginItemManager
     private let hotkeyPopup = NSPopUpButton()
     private let modeControl = NSSegmentedControl()
-    private let modelControl = NSSegmentedControl()
-    private let engineControl = NSSegmentedControl()
+    /// One grouped list in place of the engine and model rows. Those two
+    /// described a matrix whose cells are not all valid; this names the real
+    /// configurations.
+    private let recognitionChoicePopup = NSPopUpButton()
     private let presetControl = NSSegmentedControl()
     /// A labelled button rather than a disclosure triangle: a bare triangle
     /// renders as a stray glyph beside the preset chips and says nothing about
@@ -190,7 +195,6 @@ public final class AdvancedSettingsWindowController:
     private var internalDictionaryRow: NSGridRow?
     /// Which chip set the Model row currently shows, so `refresh` only rebuilds
     /// the control when the engine actually changes what belongs there.
-    private var modelRowKind: ModelRowKind?
     /// Row order of the RECOGNITION section, recorded as the grid is built so
     /// a test can assert the section reads in dependency order.
     private var recognitionRowTitles: [String] = []
@@ -248,12 +252,6 @@ public final class AdvancedSettingsWindowController:
     private let versionLabel = NSTextField(labelWithString: "")
     private let githubButton = NSButton()
     private let helpButton = NSButton()
-    private let hotkeySummary = SettingsSummaryChip()
-    private let modeSummary = SettingsSummaryChip()
-    private let modelSummary = SettingsSummaryChip()
-    private let limitSummary = SettingsSummaryChip()
-    private let themeSummary = SettingsSummaryChip()
-    private let loginSummary = SettingsSummaryChip()
     private lazy var userGuidePopover = UserGuidePopoverController(
         stateProvider: stateProvider,
         loginItemEnabledProvider: { [weak self] in
@@ -365,12 +363,9 @@ public final class AdvancedSettingsWindowController:
         // selection is applied to it. Selecting first meant returning from
         // Parakeet asked a two-segment control for segment three.
         let preset = state.recognitionPreset
-        if let index = RecognitionPreset.selectable.firstIndex(of: preset) {
+        rebuildRecognitionChoicePopup(for: state)
+        if let index = presetSegments.firstIndex(of: preset) {
             presetControl.selectedSegment = index
-        } else {
-            // Custom: no segment is the truth, so leave none highlighted
-            // rather than claiming a preset the settings no longer match.
-            presetControl.selectedSegment = -1
         }
         presetControl.isEnabled = state.configurationEnabled
         advancedDisclosure.title = preset == .custom
@@ -385,14 +380,6 @@ public final class AdvancedSettingsWindowController:
         for row in advancedRows {
             row.isHidden = !showsAdvanced
         }
-        rebuildModelRowIfNeeded(for: state)
-        switch ModelRowKind(engine: state.selectedEngine) {
-        case .whisper:
-            select(model: state.selectedModel)
-        case .parakeet:
-            select(parakeetVariant: state.selectedParakeetVariant)
-        }
-        select(engine: state.selectedEngine)
         select(decodingProfile: state.decodingProfile)
         select(processingMode: state.processingMode)
         rebuildInternalDictionaryEntries(state.internalDictionaryEntries)
@@ -424,8 +411,6 @@ public final class AdvancedSettingsWindowController:
 
         hotkeyPopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
-        modelControl.isEnabled = state.configurationEnabled
-        engineControl.isEnabled = state.configurationEnabled
         decodingControl.isEnabled = state.configurationEnabled
         // Hidden rather than greyed: an engine with no beam search has no
         // decoding profile, so showing one selected would be a lie.
@@ -452,46 +437,6 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled
                 && state.selectedTheme.customTheme != nil
 
-        switch ModelRowKind(engine: state.selectedEngine) {
-        case .whisper:
-            for (index, model) in DictationModel.allCases.enumerated() {
-                let installed = state.availableModels.contains(model)
-                modelControl.setEnabled(
-                    state.configurationEnabled && installed,
-                    forSegment: index
-                )
-                modelControl.setToolTip(
-                    installed
-                        ? model.menuTitle
-                        : "\(model.menuTitle): Not Installed",
-                    forSegment: index
-                )
-            }
-        case .parakeet:
-            // Both checkpoints download on demand, so neither is ever
-            // unavailable the way a missing whisper file is.
-            for (index, variant) in ParakeetVariant.allCases.enumerated() {
-                modelControl.setEnabled(
-                    state.configurationEnabled,
-                    forSegment: index
-                )
-                modelControl.setToolTip(variant.menuTitle, forSegment: index)
-            }
-        }
-        for (index, engine) in RecognitionEngine.allCases.enumerated() {
-            let installed = state.availableEngines.contains(engine)
-            engineControl.setEnabled(
-                state.configurationEnabled && installed,
-                forSegment: index
-            )
-            engineControl.setToolTip(
-                installed
-                    ? engine.menuTitle
-                    : "\(engine.menuTitle): Required local files are not installed",
-                forSegment: index
-            )
-        }
-
         for (index, mode) in dictationModes.enumerated() {
             modeControl.setEnabled(
                 state.configurationEnabled
@@ -502,7 +447,6 @@ public final class AdvancedSettingsWindowController:
 
         let loginStatus = loginItemManager.status
         updateLoginItemControls(loginStatus)
-        updateSummary(using: state, loginStatus: loginStatus)
         applyTheme(state.selectedTheme)
         loginItemToggle.isEnabled =
             state.configurationEnabled && loginStatus != .unknown
@@ -575,60 +519,7 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func selectModel(_ sender: NSSegmentedControl) {
-        let state = stateProvider()
-        guard state.configurationEnabled else {
-            refresh()
-            return
-        }
-        // The Model row carries whichever family the selected engine belongs
-        // to, so the click resolves against that family's cases.
-        switch ModelRowKind(engine: state.selectedEngine) {
-        case .whisper:
-            guard
-                DictationModel.allCases.indices.contains(sender.selectedSegment)
-            else {
-                refresh()
-                return
-            }
-            let model = DictationModel.allCases[sender.selectedSegment]
-            guard state.availableModels.contains(model) else {
-                refresh()
-                return
-            }
-            actions.selectModel(model)
-        case .parakeet:
-            guard ParakeetVariant.allCases.indices.contains(
-                sender.selectedSegment
-            ) else {
-                refresh()
-                return
-            }
-            actions.selectParakeetVariant(
-                ParakeetVariant.allCases[sender.selectedSegment]
-            )
-        }
-        refresh()
-    }
 
-    @objc private func selectEngine(_ sender: NSSegmentedControl) {
-        let state = stateProvider()
-        guard state.configurationEnabled,
-              RecognitionEngine.allCases.indices.contains(
-                sender.selectedSegment
-              )
-        else {
-            refresh()
-            return
-        }
-        let engine = RecognitionEngine.allCases[sender.selectedSegment]
-        guard state.availableEngines.contains(engine) else {
-            refresh()
-            return
-        }
-        actions.selectEngine(engine)
-        refresh()
-    }
 
     @objc private func selectDecodingProfile(
         _ sender: NSSegmentedControl
@@ -891,21 +782,20 @@ public final class AdvancedSettingsWindowController:
             labels: dictationModes.map(DictationModePresentation.optionTitle),
             action: #selector(selectDictationMode(_:))
         )
-        configure(
-            modelControl,
-            labels: DictationModel.allCases.map(
-                DictationModelPresentation.chipTitle
-            ),
-            action: #selector(selectModel(_:))
-        )
+        // Custom is a real, permanently disabled third segment rather than a
+        // state with nothing selected, which read as a broken control.
         configure(
             presetControl,
-            labels: RecognitionPreset.selectable.map(\.displayName),
+            labels: presetSegments.map(\.displayName),
             action: #selector(selectRecognitionPreset(_:))
         )
-        for (index, preset) in RecognitionPreset.selectable.enumerated() {
+        for (index, preset) in presetSegments.enumerated() {
             presetControl.setToolTip(preset.summary, forSegment: index)
         }
+        presetControl.setEnabled(false, forSegment: presetSegments.count - 1)
+        recognitionChoicePopup.target = self
+        recognitionChoicePopup.action = #selector(selectRecognitionChoice(_:))
+        recognitionChoicePopup.setAccessibilityLabel("Recognition model")
         advancedDisclosure.setButtonType(.pushOnPushOff)
         advancedDisclosure.bezelStyle = .rounded
         advancedDisclosure.controlSize = .small
@@ -919,11 +809,6 @@ public final class AdvancedSettingsWindowController:
         advancedDisclosure.target = self
         advancedDisclosure.action = #selector(toggleAdvancedRecognition(_:))
         advancedDisclosure.setAccessibilityLabel("Advanced Options")
-        configure(
-            engineControl,
-            labels: RecognitionEngine.allCases.map(\.displayName),
-            action: #selector(selectEngine(_:))
-        )
         configure(
             decodingControl,
             labels: DecodingProfile.allCases.map(\.displayName),
@@ -1270,46 +1155,6 @@ public final class AdvancedSettingsWindowController:
         }
     }
 
-    private func updateSummary(
-        using state: AdvancedSettingsState,
-        loginStatus: LoginItemStatus
-    ) {
-        hotkeySummary.stringValue = state.selectedHotkey.displayName
-        modeSummary.stringValue = DictationModePresentation.optionTitle(
-            for: state.activationMode
-        )
-        // Only name a decoding profile on engines that have one, rather than
-        // printing a placeholder word where a real setting would go.
-        let parts: [String]
-        switch ModelRowKind(engine: state.selectedEngine) {
-        case .whisper:
-            parts = [
-                DictationModelPresentation.chipTitle(for: state.selectedModel),
-                state.selectedEngine.displayName,
-                state.decodingProfile.displayName,
-                state.processingMode.displayName,
-            ]
-        case .parakeet:
-            parts = [
-                state.selectedEngine.displayName,
-                state.selectedParakeetVariant.displayName,
-                state.processingMode.displayName,
-            ]
-        }
-        modelSummary.stringValue = parts.joined(separator: " ")
-        limitSummary.stringValue = state.recordingLimit.displayName
-        themeSummary.stringValue = state.selectedTheme.summaryName
-        switch loginStatus {
-        case .enabled:
-            loginSummary.stringValue = "Login On"
-        case .requiresApproval:
-            loginSummary.stringValue = "Login Approval"
-        case .notRegistered, .notFound:
-            loginSummary.stringValue = "Login Off"
-        case .unknown:
-            loginSummary.stringValue = "Login Unavailable"
-        }
-    }
 
     private func applyTheme(_ theme: BadgeThemeSelection) {
         let palette = BadgeThemePalette.palette(for: theme)
@@ -1332,14 +1177,6 @@ public final class AdvancedSettingsWindowController:
         loginItemSettingsButton.contentTintColor = palette.waveform
         githubButton.contentTintColor = palette.waveform
         helpButton.contentTintColor = palette.waveform
-        [
-            hotkeySummary,
-            modeSummary,
-            modelSummary,
-            limitSummary,
-            themeSummary,
-            loginSummary,
-        ].forEach { $0.applyTheme(palette) }
         userGuidePopover.applyTheme(theme)
     }
 
@@ -1363,64 +1200,80 @@ public final class AdvancedSettingsWindowController:
     /// Parakeet is a different model family, not a fourth way to run whisper,
     /// so reusing whisper's names for its checkpoints would misreport what is
     /// selected.
-    private func rebuildModelRowIfNeeded(for state: AdvancedSettingsState) {
-        let kind = ModelRowKind(engine: state.selectedEngine)
-        guard modelRowKind != kind else { return }
-        modelRowKind = kind
-        // Drop the selection before the segment count changes. AppKit consults
-        // the selected index while resizing, and a stale index past the new
-        // bounds raises NSRangeException from inside the action that triggered
-        // the rebuild, leaving the window unresponsive.
-        modelControl.selectedSegment = -1
-        switch kind {
-        case .whisper:
-            configure(
-                modelControl,
-                labels: DictationModel.allCases.map(
-                    DictationModelPresentation.chipTitle
-                ),
-                action: #selector(selectModel(_:))
-            )
-        case .parakeet:
-            configure(
-                modelControl,
-                labels: ParakeetVariant.allCases.map(\.displayName),
-                action: #selector(selectModel(_:))
-            )
-        }
+    /// Fast and Accurate are selectable; Custom is a reported state.
+    private var presetSegments: [RecognitionPreset] {
+        RecognitionPreset.selectable + [.custom]
     }
 
-    private func select(model: DictationModel) {
-        guard let index = DictationModel.allCases.firstIndex(of: model) else {
-            return
+    /// Grouped like the theme popup: a disabled heading per family, then its
+    /// options. Unavailable options stay visible but disabled with a reason,
+    /// which is how the engine chips behaved.
+    private func rebuildRecognitionChoicePopup(
+        for state: AdvancedSettingsState
+    ) {
+        recognitionChoicePopup.removeAllItems()
+        for (index, group) in RecognitionChoice.Group.allCases.enumerated() {
+            if index > 0 {
+                recognitionChoicePopup.menu?.addItem(.separator())
+            }
+            let heading = NSMenuItem(
+                title: group.displayName,
+                action: nil,
+                keyEquivalent: ""
+            )
+            heading.isEnabled = false
+            recognitionChoicePopup.menu?.addItem(heading)
+            for choice in RecognitionChoice.allCases where choice.group == group {
+                let available = state.availableEngines.contains(choice.engine)
+                var title = choice.displayName
+                if let size = choice.downloadDescription {
+                    // A size, not a claim that it still needs downloading:
+                    // the option may already be installed.
+                    title += " (\(size))"
+                }
+                recognitionChoicePopup.addItem(withTitle: title)
+                let item = recognitionChoicePopup.lastItem
+                item?.representedObject = choice.rawValue
+                item?.isEnabled = available && state.configurationEnabled
+                item?.toolTip = available
+                    ? nil
+                    : "Required local files are not installed"
+            }
         }
-        selectModelSegment(index)
+        let selected = RecognitionChoice.matching(
+            engine: state.selectedEngine,
+            model: state.selectedModel,
+            parakeetVariant: state.selectedParakeetVariant
+        )
+        if let selected,
+           let index = recognitionChoicePopup.itemArray.firstIndex(where: {
+               $0.representedObject as? String == selected.rawValue
+           }) {
+            recognitionChoicePopup.selectItem(at: index)
+        }
+        recognitionChoicePopup.isEnabled = state.configurationEnabled
     }
 
-    private func select(parakeetVariant: ParakeetVariant) {
-        guard let index = ParakeetVariant.allCases.firstIndex(
-            of: parakeetVariant
-        ) else {
+    @objc private func selectRecognitionChoice(_ sender: NSPopUpButton) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              let rawValue = sender.selectedItem?.representedObject as? String,
+              let choice = RecognitionChoice(rawValue: rawValue)
+        else {
+            refresh()
             return
         }
-        selectModelSegment(index)
+        actions.selectRecognitionChoice(choice)
+        refresh()
     }
+
+
+
 
     /// The Model row changes length with the engine, so every write goes
     /// through here. Assigning an index past the current count raises
     /// NSRangeException from inside AppKit rather than being ignored.
-    private func selectModelSegment(_ index: Int) {
-        guard (0..<modelControl.segmentCount).contains(index) else { return }
-        modelControl.selectedSegment = index
-    }
 
-    private func select(engine: RecognitionEngine) {
-        guard let index = RecognitionEngine.allCases.firstIndex(of: engine)
-        else {
-            return
-        }
-        engineControl.selectedSegment = index
-    }
 
     private func select(decodingProfile: DecodingProfile) {
         guard let index = DecodingProfile.allCases.firstIndex(
@@ -1561,7 +1414,7 @@ public final class AdvancedSettingsWindowController:
         addRow(to: inputGrid, title: "Behavior", control: modeControl)
         addRow(
             to: inputGrid,
-            title: "Copy Last Dictation",
+            title: "Last dictation",
             control: keepLatestDictationToggle
         )
         sizeColumns(in: inputGrid)
@@ -1575,7 +1428,7 @@ public final class AdvancedSettingsWindowController:
         // Decoding applies at all. Reading top to bottom now follows the
         // dependency rather than cutting across it.
         recognitionRowTitles = [
-            "Recognition", "Engine", "Model", "Decoding", "Processing",
+            "Quality", "Model", "Decoding", "Processing",
             "Internal dictionary", "Recording limit",
         ]
         // The disclosure shares the preset's row rather than taking one of its
@@ -1595,20 +1448,17 @@ public final class AdvancedSettingsWindowController:
         recognitionControls.orientation = .horizontal
         recognitionControls.spacing = 8
         recognitionControls.alignment = .centerY
+        // "Quality" rather than "Recognition": the row sat inside a section
+        // already called RECOGNITION and repeated it.
         addRow(
             to: recognitionGrid,
-            title: "Recognition",
+            title: "Quality",
             control: recognitionControls
         )
-        let engineRow = addRow(
-            to: recognitionGrid,
-            title: "Engine",
-            control: engineControl
-        )
-        let modelRow = addRow(
+        let choiceRow = addRow(
             to: recognitionGrid,
             title: "Model",
-            control: modelControl
+            control: recognitionChoicePopup
         )
         decodingRow = addRow(
             to: recognitionGrid,
@@ -1623,8 +1473,7 @@ public final class AdvancedSettingsWindowController:
         // Engine, model, decoding, and processing all exist to serve one of
         // the two presets. They stay reachable, but folded away by default so
         // the common choice is the visible one.
-        advancedRows = [engineRow, modelRow, decodingRow, processingRow]
-            .compactMap { $0 }
+        advancedRows = [choiceRow, decodingRow, processingRow].compactMap { $0 }
         internalDictionaryRow = addRow(
             to: recognitionGrid,
             title: "Internal dictionary",
@@ -1684,35 +1533,9 @@ public final class AdvancedSettingsWindowController:
         sizeColumns(in: startupGrid)
         stack.addArrangedSubview(startupGrid)
 
-        let primarySummaryRow = NSStackView(
-            views: [
-                hotkeySummary,
-                modeSummary,
-                modelSummary,
-            ]
-        )
-        primarySummaryRow.orientation = .horizontal
-        primarySummaryRow.alignment = .centerY
-        primarySummaryRow.spacing = 4
-
-        let secondarySummaryRow = NSStackView(
-            views: [
-                limitSummary,
-                themeSummary,
-                loginSummary,
-            ]
-        )
-        secondarySummaryRow.orientation = .horizontal
-        secondarySummaryRow.alignment = .centerY
-        secondarySummaryRow.spacing = 4
-
-        let summary = NSStackView(
-            views: [primarySummaryRow, secondarySummaryRow]
-        )
-        summary.orientation = .vertical
-        summary.alignment = .leading
-        summary.spacing = 4
-
+        // The summary chips that used to sit here repeated six values that are
+        // each already visible in a row above, so they added length without
+        // adding information.
         let footerSpacer = NSView()
         footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         helpButton.setContentCompressionResistancePriority(
@@ -1728,7 +1551,7 @@ public final class AdvancedSettingsWindowController:
             for: .horizontal
         )
         let footer = NSStackView(
-            views: [summary, footerSpacer, projectMetadata, helpButton]
+            views: [footerSpacer, projectMetadata, helpButton]
         )
         footer.orientation = .horizontal
         footer.alignment = .centerY
@@ -1799,21 +1622,20 @@ public final class AdvancedSettingsWindowController:
         return dictationModes[modeControl.selectedSegment]
     }
 
-    var selectedModelForTesting: DictationModel? {
-        guard DictationModel.allCases.indices.contains(modelControl.selectedSegment)
-        else {
+    var selectedRecognitionChoiceForTesting: RecognitionChoice? {
+        guard let raw = recognitionChoicePopup.selectedItem?
+            .representedObject as? String else {
             return nil
         }
-        return DictationModel.allCases[modelControl.selectedSegment]
+        return RecognitionChoice(rawValue: raw)
+    }
+
+    var selectedModelForTesting: DictationModel? {
+        selectedRecognitionChoiceForTesting?.model
     }
 
     var selectedEngineForTesting: RecognitionEngine? {
-        guard RecognitionEngine.allCases.indices.contains(
-            engineControl.selectedSegment
-        ) else {
-            return nil
-        }
-        return RecognitionEngine.allCases[engineControl.selectedSegment]
+        selectedRecognitionChoiceForTesting?.engine
     }
 
     var selectedDecodingProfileForTesting: DecodingProfile? {
@@ -1901,8 +1723,7 @@ public final class AdvancedSettingsWindowController:
 
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
-            && modelControl.isEnabled
-            && engineControl.isEnabled
+            && recognitionChoicePopup.isEnabled
             && decodingControl.isEnabled
             && processingModeControl.isEnabled
             && internalDictionaryDraftField.isEnabled
@@ -1926,12 +1747,12 @@ public final class AdvancedSettingsWindowController:
     }
 
     var selectedPresetForTesting: RecognitionPreset? {
-        guard RecognitionPreset.selectable.indices.contains(
+        guard presetSegments.indices.contains(
             presetControl.selectedSegment
         ) else {
             return nil
         }
-        return RecognitionPreset.selectable[presetControl.selectedSegment]
+        return presetSegments[presetControl.selectedSegment]
     }
 
     var decodingRowVisibleForTesting: Bool {
@@ -1949,10 +1770,17 @@ public final class AdvancedSettingsWindowController:
                 .allSatisfy(\.isEnabled)
     }
 
-    var modelChipLabelsForTesting: [String] {
-        (0..<modelControl.segmentCount).compactMap {
-            modelControl.label(forSegment: $0)
-        }
+    /// Selectable options only — the group headings are disabled menu items.
+    var recognitionChoiceLabelsForTesting: [String] {
+        recognitionChoicePopup.itemArray
+            .filter { $0.representedObject != nil }
+            .map(\.title)
+    }
+
+    var recognitionChoiceHeadingsForTesting: [String] {
+        recognitionChoicePopup.itemArray
+            .filter { $0.representedObject == nil && !$0.isSeparatorItem }
+            .map(\.title)
     }
 
     var recognitionRowTitlesForTesting: [String] {
@@ -1966,10 +1794,6 @@ public final class AdvancedSettingsWindowController:
     var usesChipSelectionForTesting: Bool {
         modeControl.segmentStyle == .rounded
             && modeControl.trackingMode == .selectOne
-            && modelControl.segmentStyle == .rounded
-            && modelControl.trackingMode == .selectOne
-            && engineControl.segmentStyle == .rounded
-            && engineControl.trackingMode == .selectOne
             && decodingControl.segmentStyle == .rounded
             && decodingControl.trackingMode == .selectOne
             && processingModeControl.segmentStyle == .rounded
@@ -1988,8 +1812,6 @@ public final class AdvancedSettingsWindowController:
         let controls: [(String, NSView)] = [
             ("hotkey", hotkeyPopup),
             ("mode", modeControl),
-            ("model", modelControl),
-            ("engine", engineControl),
             ("decoding", decodingControl),
             ("processing", processingModeControl),
             ("internal dictionary", internalDictionaryControl),
@@ -2001,12 +1823,6 @@ public final class AdvancedSettingsWindowController:
             ("login toggle", loginItemToggle),
             ("check for updates", checkForUpdatesButton),
             ("automatic update checks", automaticUpdateCheckToggle),
-            ("hotkey summary", hotkeySummary),
-            ("mode summary", modeSummary),
-            ("model summary", modelSummary),
-            ("limit summary", limitSummary),
-            ("theme summary", themeSummary),
-            ("login summary", loginSummary),
             ("version", versionLabel),
             ("github", githubButton),
             ("help", helpButton),
@@ -2020,26 +1836,20 @@ public final class AdvancedSettingsWindowController:
         }
     }
 
-    func modelIsEnabledForTesting(_ model: DictationModel) -> Bool? {
-        guard let index = DictationModel.allCases.firstIndex(of: model) else {
-            return nil
-        }
-        return modelControl.isEnabled(forSegment: index)
-    }
-
-    func modelTitleForTesting(_ model: DictationModel) -> String? {
-        guard let index = DictationModel.allCases.firstIndex(of: model) else {
-            return nil
-        }
-        return modelControl.toolTip(forSegment: index)
+    func recognitionChoiceIsEnabledForTesting(
+        _ choice: RecognitionChoice
+    ) -> Bool? {
+        recognitionChoicePopup.itemArray.first {
+            $0.representedObject as? String == choice.rawValue
+        }?.isEnabled
     }
 
     var optionCountsForTesting: [Int] {
         [
             hotkeyPopup.numberOfItems,
             modeControl.segmentCount,
-            modelControl.segmentCount,
-            engineControl.segmentCount,
+            presetControl.segmentCount,
+            recognitionChoicePopup.numberOfItems,
             decodingControl.segmentCount,
             processingModeControl.segmentCount,
             recordingLimitPopup.numberOfItems,
@@ -2099,31 +1909,7 @@ public final class AdvancedSettingsWindowController:
         return helpButton.convert(helpButton.bounds, to: contentView)
     }
 
-    var summaryValuesForTesting: [String] {
-        [
-            hotkeySummary.stringValue,
-            modeSummary.stringValue,
-            modelSummary.stringValue,
-            limitSummary.stringValue,
-            themeSummary.stringValue,
-            loginSummary.stringValue,
-        ]
-    }
 
-    var summaryFramesForTesting: [CGRect] {
-        guard let contentView = window?.contentView else {
-            return []
-        }
-        contentView.layoutSubtreeIfNeeded()
-        return [
-            hotkeySummary,
-            modeSummary,
-            modelSummary,
-            limitSummary,
-            themeSummary,
-            loginSummary,
-        ].map { $0.convert($0.bounds, to: contentView) }
-    }
 
     func toggleUserGuideForTesting() {
         toggleUserGuide()
@@ -2143,19 +1929,20 @@ public final class AdvancedSettingsWindowController:
         selectDictationMode(modeControl)
     }
 
-    func selectModelForTesting(_ model: DictationModel) {
-        select(model: model)
-        selectModel(modelControl)
-    }
 
     func selectDecodingProfileForTesting(_ profile: DecodingProfile) {
         select(decodingProfile: profile)
         selectDecodingProfile(decodingControl)
     }
 
-    func selectEngineForTesting(_ engine: RecognitionEngine) {
-        select(engine: engine)
-        selectEngine(engineControl)
+    func selectRecognitionChoiceForTesting(_ choice: RecognitionChoice) {
+        guard let index = recognitionChoicePopup.itemArray.firstIndex(where: {
+            $0.representedObject as? String == choice.rawValue
+        }) else {
+            return
+        }
+        recognitionChoicePopup.selectItem(at: index)
+        selectRecognitionChoice(recognitionChoicePopup)
     }
 
     func selectProcessingModeForTesting(_ mode: ModelProcessingMode) {
