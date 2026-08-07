@@ -86,6 +86,11 @@ class Helper:
         threads: int,
     ) -> None:
         strategy = "beam" if profile == "accuracy" else profile
+        # Helper v2 resets per-request decoding state at the top of every
+        # command, so the launch flag below no longer survives into a
+        # transcribe that does not name a strategy itself. Asking for
+        # "adaptive" and not repeating it per request silently measured greedy.
+        self.strategy = strategy
         self.process = subprocess.Popen(
             [
                 str(executable),
@@ -125,6 +130,7 @@ class Helper:
                     "command": "transcribe",
                     "audioPath": str(audio),
                     "prompt": prompt,
+                    "strategy": self.strategy,
                 },
                 separators=(",", ":"),
             )
@@ -230,8 +236,16 @@ def main() -> None:
                 latency = time.perf_counter() - started
                 measurement["latencies"].append(latency)
                 hypothesis = str(event["text"])
+                # Helper v2 nests this under "metadata". Reading it at the
+                # top level silently counted zero fallbacks on a run that was
+                # in fact falling back.
                 measurement["fallback_count"] += bool(
-                    event.get("adaptiveFallback", False)
+                    event.get(
+                        "metadata", {}
+                    ).get(
+                        "adaptiveFallback",
+                        event.get("adaptiveFallback", False),
+                    )
                 )
                 measurement["average_log_probabilities"].append(
                     float(event["averageLogProbability"])
@@ -260,11 +274,22 @@ def main() -> None:
                         "weak_token_fraction": float(
                             event["weakTokenFraction"]
                         ),
+                        # Helper v2 renamed this field. The value is the same
+                        # maximum, so the old name is still accepted to keep
+                        # this runnable against a pre-v2 helper.
                         "maximum_no_speech_probability": float(
-                            event["maximumNoSpeechProbability"]
+                            event.get(
+                                "noSpeechProbability",
+                                event.get("maximumNoSpeechProbability", 0.0),
+                            )
                         ),
                         "adaptive_fallback": bool(
-                            event.get("adaptiveFallback", False)
+                            event.get(
+                                "metadata", {}
+                            ).get(
+                                "adaptiveFallback",
+                                event.get("adaptiveFallback", False),
+                            )
                         ),
                         "seconds": latency,
                     }
