@@ -1,31 +1,49 @@
-Version 3.4.2 is release plumbing. Nothing about how the app behaves changed
-from 3.4.1 — if you are already on 3.4.1, there is no reason to update.
+Version 3.5.0 adds two recognition engines. Both are additions — every existing
+engine, model, preset, and decoding profile behaves exactly as it did in 3.4.2,
+and no saved selection changes.
 
-## What it fixes
+## Parakeet Unified
 
-Bundling the Parakeet checkpoints in 3.4.1 broke the signed-release workflow in
-a way that was hidden behind an unrelated failure. `build_app.py` copies the
-checkpoints out of FluidAudio's cache, and a clean CI runner has no cache, so
-the build would have failed even once the signing secrets were in place.
+A third Parakeet model, and the only one evaluated that beats the shipping
+engine on this project's own benchmark rather than only on a public leaderboard
+average. Measured over the same 100 LibriSpeech utterances on an Apple M5 Pro:
 
-- The benchmark harness grew a `download` subcommand, so the workflow can
-  populate that cache before building. It already links FluidAudio, so this
-  needed no new package and no hand-rolled fetch against a file layout
-  FluidAudio owns. Verified against both a warm cache, where it is a no-op, and
-  a genuinely empty one.
-- The workflow was still downloading `ggml-small.en.bin`, retired in 3.4.1. Its
-  download list now matches `build_app.py` exactly, so the two cannot drift
-  again the next time the lineup changes.
-- `build_app.py` no longer copies the Parakeet checkpoints from inside the
-  function that copies the digest-verified Whisper models. Each does one job,
-  and the Parakeet copy honors the same opt-in flag, so an ordinary development
-  build does not need the checkpoints present.
+| Model | Combined WER | test-clean | test-other | Mean | Median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Parakeet Unified | **2.46%** | **1.44%** | **3.63%** | **50 ms** | **41 ms** |
+| Parakeet Accurate | 2.62% | 1.54% | 3.86% | 56 ms | 53 ms |
 
-## Unchanged
+It wins every accuracy figure and both mean and median latency. Its one
+regression is the tail: audio longer than 15 seconds is transcribed with
+overlapping windows, so long recordings run about 138 ms against Accurate's
+100 ms. Dictation phrases are far shorter, so the median is the number you
+feel.
 
-The recognition presets, the bundled model lineup, and the app binary behave
-exactly as in 3.4.1: Fast and Accurate, both running Parakeet on the Neural
-Engine, with both checkpoints shipped inside the app.
+Downloaded on demand at 594 MB. Select it under Advanced Options.
+
+## Cohere Transcribe
+
+The highest-ranked permissively licensed model with an Apple Silicon path —
+Apache-2.0, and fourth on the Open ASR Leaderboard. On this corpus that ranking
+does not hold up:
+
+| Engine | Combined WER | test-clean | test-other | Mean latency |
+| --- | ---: | ---: | ---: | ---: |
+| Cohere Transcribe | 2.57% | **1.13%** | 4.21% | 629 ms |
+| Parakeet Accurate | 2.62% | 1.54% | **3.86%** | **56 ms** |
+
+The two tie overall. Cohere is meaningfully better on clean speech and worse on
+noisy speech, and it costs eleven times the latency because it decodes one
+token at a time. It is offered for anyone who dictates in quiet conditions and
+prefers accuracy there, and the confirmation dialog states that tradeoff before
+the 2.4 GB download rather than after.
+
+## Also
+
+The benchmark harness measures all three engines through the same word-error
+math, so a published leaderboard number can be checked against this corpus
+before it is believed. Both of the above are cases where it did not survive
+that check.
 
 The app is signed with a stable Apple Development identity and is not
 notarized, so the first launch still needs one approval through System

@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.5.0: 2026-08-06
+
+Two New Engines release. Both are additions; nothing existing changed.
+
+- Added **Parakeet Unified** as a third Parakeet model. On the repository's
+  100-utterance benchmark it beats the shipping engine on every accuracy figure
+  and on mean and median latency: 2.46% word error rate against 2.62%, and
+  41 ms median against 53 ms. Its one regression is tail latency on audio past
+  15 seconds, which it transcribes with overlapping windows. Downloaded on
+  demand at 594 MB
+- Added **Cohere Transcribe** as a fifth engine, Apache-2.0 and the
+  highest-ranked permissively licensed model with an Apple Silicon path.
+  Measured on the same set it ties Parakeet overall (2.57% against 2.62%),
+  wins on clean speech, loses on noisy speech, and costs eleven times the
+  latency at 629 ms. Offered in Advanced only, downloaded on demand at 2.4 GB,
+  with the tradeoff stated before the download rather than after
+- Left every existing engine, model, preset, and decoding profile untouched.
+  Fast and Accurate resolve exactly as they did, and no saved selection changes
+- Extended the benchmark harness to measure all three, so leaderboard claims
+  can be checked against this corpus rather than taken on trust
+
 ## 3.4.2: 2026-08-06
 
 Release plumbing. No change to how the app behaves.
