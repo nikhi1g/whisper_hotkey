@@ -893,6 +893,14 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
     case fast
     /// `parakeet-tdt-0.6b-v2` — 443 MB on disk.
     case accurate
+    /// `parakeet-unified-en-0.6b` — 594 MB, downloaded on demand.
+    ///
+    /// Measured on this project's benchmark it beats `.accurate` on every
+    /// accuracy figure and on mean and median latency: 2.46% against 2.62%
+    /// combined word error rate, 41 ms against 53 ms median. Its one
+    /// regression is tail latency on audio past 15 seconds, which it
+    /// transcribes with overlapping windows.
+    case unified
 
     public static let defaultVariant: Self = .accurate
 
@@ -904,6 +912,8 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
             "Fast"
         case .accurate:
             "Accurate"
+        case .unified:
+            "Unified"
         }
     }
 
@@ -914,6 +924,8 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
             "Fast (110M, 219 MB, lowest latency)"
         case .accurate:
             "Accurate (0.6B, 443 MB, lowest error rate)"
+        case .unified:
+            "Unified (0.6B, 594 MB download, most accurate and fastest)"
         }
     }
 
@@ -925,6 +937,8 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
             "220 MB"
         case .accurate:
             "440 MB"
+        case .unified:
+            "594 MB"
         }
     }
 
@@ -935,7 +949,16 @@ public enum ParakeetVariant: String, CaseIterable, Codable, Sendable {
             "parakeet-tdt-ctc-110m"
         case .accurate:
             "parakeet-tdt-0.6b-v2"
+        case .unified:
+            "parakeet-unified-en-0.6b"
         }
+    }
+
+    /// Whether the checkpoint ships inside the app. Unified is downloaded on
+    /// demand: bundling it as well would take the release asset close enough
+    /// to GitHub's 2 GB ceiling to be reckless.
+    public var shipsInsideTheApp: Bool {
+        self != .unified
     }
 
     public static func selected(

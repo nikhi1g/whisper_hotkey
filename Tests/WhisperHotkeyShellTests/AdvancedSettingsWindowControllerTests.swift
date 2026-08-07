@@ -56,7 +56,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         // whisper's size names here would misreport what is selected.
         XCTAssertEqual(
             controller.modelChipLabelsForTesting,
-            ["Fast", "Accurate"]
+            ["Fast", "Accurate", "Unified"]
         )
         // Engine leads the section, because it decides what the rest means.
         XCTAssertEqual(
@@ -183,7 +183,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
             )
             XCTAssertEqual(
                 controller.modelChipLabelsForTesting,
-                ["Fast", "Accurate"],
+                ["Fast", "Accurate", "Unified"],
                 "parakeet chips wrong on iteration \(iteration)"
             )
 

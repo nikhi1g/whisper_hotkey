@@ -103,6 +103,15 @@ final class ParakeetRecognitionTests: XCTestCase {
         }
     }
 
+    func testUnifiedIsNotBundledAndHasItsOwnDirectory() {
+        XCTAssertFalse(ParakeetVariant.unified.shipsInsideTheApp)
+        XCTAssertNil(ParakeetModelInstaller.bundledDirectory(for: .unified))
+        XCTAssertNotEqual(
+            ParakeetModelInstaller.cacheDirectory(for: .unified),
+            ParakeetModelInstaller.cacheDirectory(for: .accurate)
+        )
+    }
+
     func testCacheDirectoriesDifferPerVariant() {
         XCTAssertNotEqual(
             ParakeetModelInstaller.cacheDirectory(for: .fast),
@@ -120,7 +129,9 @@ final class ParakeetRecognitionTests: XCTestCase {
         guard let bundle = Bundle(url: URL(fileURLWithPath: appPath)) else {
             throw XCTSkip("no app bundle at \(appPath)")
         }
-        for variant in ParakeetVariant.allCases {
+        // Unified is downloaded on demand rather than bundled, so it is not
+        // expected inside the application.
+        for variant in ParakeetVariant.allCases where variant.shipsInsideTheApp {
             let directory = ParakeetModelInstaller.bundledDirectory(
                 for: variant,
                 bundle: bundle
@@ -134,6 +145,46 @@ final class ParakeetRecognitionTests: XCTestCase {
                 "\(variant) should report installed from the bundle alone"
             )
         }
+    }
+
+    /// End-to-end Unified recognition through the recognizer, not the
+    /// benchmark harness. Skipped unless the checkpoint is installed, because
+    /// it is a 594 MB on-demand download.
+    func testUnifiedTranscribesThroughTheRecognizer() async throws {
+        guard ParakeetModelInstaller.isInstalled(.unified) else {
+            throw XCTSkip("Unified checkpoint not installed")
+        }
+        guard let fixture = ProcessInfo.processInfo
+            .environment["WHISPER_HOTKEY_PARAKEET_FIXTURE"] else {
+            throw XCTSkip("set WHISPER_HOTKEY_PARAKEET_FIXTURE to run")
+        }
+        let directory = URL(
+            fileURLWithPath: NSTemporaryDirectory(),
+            isDirectory: true
+        ).appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let audioURL = directory.appendingPathComponent("fixture.wav")
+        try FileManager.default.copyItem(
+            at: URL(fileURLWithPath: fixture),
+            to: audioURL
+        )
+        let audio = WhisperAudioFile(
+            url: audioURL,
+            directoryURL: directory,
+            speechPresence: .present
+        )
+        let configuration = try WhisperRuntimeDiscovery.discover(
+            model: .baseEnglish,
+            engine: .parakeetCoreML,
+            parakeetVariant: .unified,
+            environment: [:]
+        )
+        let recognizer = WhisperRecognizer(configuration: configuration)
+        let transcript = try await recognizer.transcribe(audio)
+        XCTAssertFalse(transcript.isEmpty)
     }
 
     /// End-to-end recognition against a real checkpoint. Skipped unless

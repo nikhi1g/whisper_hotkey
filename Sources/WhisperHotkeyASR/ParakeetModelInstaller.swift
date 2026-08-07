@@ -28,6 +28,11 @@ public enum ParakeetModelInstaller {
         if let bundled = bundledDirectory(for: variant, bundle: bundle) {
             return bundled
         }
+        if variant == .unified {
+            return MLModelConfigurationUtils.defaultModelsDirectory(
+                for: .parakeetUnified
+            )
+        }
         return AsrModels.defaultCacheDirectory(for: version(for: variant))
     }
 
@@ -37,6 +42,8 @@ public enum ParakeetModelInstaller {
         for variant: ParakeetVariant,
         bundle: Bundle = .main
     ) -> URL? {
+        // Unified is never bundled, so there is nothing to look for.
+        guard variant != .unified else { return nil }
         guard let resources = bundle.resourceURL else { return nil }
         let candidate = resources
             .appendingPathComponent("ParakeetModels", isDirectory: true)
@@ -57,8 +64,24 @@ public enum ParakeetModelInstaller {
         _ variant: ParakeetVariant,
         bundle: Bundle = .main
     ) -> Bool {
-        AsrModels.modelsExist(
-            at: cacheDirectory(for: variant, bundle: bundle),
+        let directory = cacheDirectory(for: variant, bundle: bundle)
+        if variant == .unified {
+            // The offline path loads four bundles plus the vocabulary; the
+            // streaming encoders in the same repo are not fetched.
+            let names = ModelNames.ParakeetUnified.self
+            return [
+                names.offlineEncoderInt8File,
+                names.decoderFile,
+                names.jointDecisionFile,
+                names.vocab,
+            ].allSatisfy {
+                FileManager.default.fileExists(
+                    atPath: directory.appendingPathComponent($0).path
+                )
+            }
+        }
+        return AsrModels.modelsExist(
+            at: directory,
             version: version(for: variant)
         )
     }
@@ -69,6 +92,10 @@ public enum ParakeetModelInstaller {
         _ variant: ParakeetVariant,
         progress: @escaping @Sendable (Phase) -> Void
     ) async throws {
+        if variant == .unified {
+            try await installUnified(progress: progress)
+            return
+        }
         do {
             _ = try await AsrModels.download(
                 version: version(for: variant),
@@ -94,11 +121,42 @@ public enum ParakeetModelInstaller {
         }
     }
 
+    /// Unified lives in its own repo with its own manager, so it is fetched
+    /// through the generic hub rather than the TDT model loader.
+    private static func installUnified(
+        progress: @escaping @Sendable (Phase) -> Void
+    ) async throws {
+        do {
+            try await ModelHub.download(
+                .parakeetUnified,
+                to: MLModelConfigurationUtils.defaultModelsDirectory(),
+                variant: "offline",
+                progressHandler: { update in
+                    switch update.phase {
+                    case .compiling:
+                        progress(.compiling)
+                    default:
+                        progress(
+                            .downloading(
+                                fractionCompleted: update.fractionCompleted
+                            )
+                        )
+                    }
+                }
+            )
+            try Task.checkCancellation()
+        } catch {
+            if isCancellation(error) { throw CancellationError() }
+            throw WhisperASRError.modelInstallFailed(error.localizedDescription)
+        }
+    }
+
     static func version(for variant: ParakeetVariant) -> AsrModelVersion {
         switch variant {
         case .fast:
             .tdtCtc110m
-        case .accurate:
+        case .accurate, .unified:
+            // Unified never reaches the TDT loader; this keeps the switch total.
             .v2
         }
     }

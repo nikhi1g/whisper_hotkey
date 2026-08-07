@@ -34,7 +34,7 @@ final class UserGuidePopoverControllerTests: XCTestCase {
     func testParakeetGuideNamesItsOwnCheckpointAndNoWhisperModel() {
         let guide = rows(state(engine: .parakeetCoreML, variant: .fast))
         let modelRows = guide.filter { $0.key == "model" }
-        XCTAssertEqual(modelRows.map(\.title), ["Fast", "Accurate"])
+        XCTAssertEqual(modelRows.map(\.title), ["Fast", "Accurate", "Unified"])
         let whisperNames = Set(
             DictationModel.allCases.map(DictationModelPresentation.chipTitle)
         )

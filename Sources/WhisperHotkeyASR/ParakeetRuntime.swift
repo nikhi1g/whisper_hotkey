@@ -18,6 +18,10 @@ actor ParakeetRuntime {
     private let variant: ParakeetVariant
     private var models: AsrModels?
     private var manager: AsrManager?
+    /// Unified is a different FluidAudio manager with its own decoder, so it
+    /// is held separately rather than bent into the TDT one.
+    private var unifiedManager: UnifiedAsrManager?
+    private let audioConverter = AudioConverter()
     private var decoderLayers = 2
 
     init(variant: ParakeetVariant) {
@@ -29,7 +33,7 @@ actor ParakeetRuntime {
     }
 
     var isLoaded: Bool {
-        manager != nil
+        manager != nil || unifiedManager != nil
     }
 
     /// Loads an already-installed checkpoint.
@@ -40,6 +44,10 @@ actor ParakeetRuntime {
     /// fetch is an explicit, cancellable step at selection time instead; see
     /// `ParakeetModelInstaller`.
     func load() async throws {
+        if variant == .unified {
+            try await loadUnified()
+            return
+        }
         guard manager == nil else { return }
         let directory = ParakeetModelInstaller.cacheDirectory(for: variant)
         guard ParakeetModelInstaller.isInstalled(variant) else {
@@ -67,6 +75,26 @@ actor ParakeetRuntime {
 
     func transcribe(audioURL: URL) async throws -> String {
         try await load()
+        if variant == .unified {
+            guard let unifiedManager else {
+                throw WhisperASRError.helperFailed("Parakeet is not loaded")
+            }
+            do {
+                let samples = try audioConverter.resampleAudioFile(audioURL)
+                // A fresh decoder state per utterance keeps one dictation from
+                // carrying transducer state into the next.
+                try await unifiedManager.reset()
+                let text = try await unifiedManager.transcribe(samples)
+                try Task.checkCancellation()
+                return text
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw WhisperASRError.helperFailed(
+                    "Parakeet transcription failed"
+                )
+            }
+        }
         guard let manager else {
             throw WhisperASRError.helperFailed("Parakeet is not loaded")
         }
@@ -93,7 +121,31 @@ actor ParakeetRuntime {
         if let manager {
             await manager.cleanup()
         }
+        if let unifiedManager {
+            await unifiedManager.cleanup()
+        }
         manager = nil
+        unifiedManager = nil
         models = nil
+    }
+
+    /// Loads the already-installed Unified checkpoint. Like the TDT path this
+    /// never downloads; the install is an explicit step at selection time.
+    private func loadUnified() async throws {
+        guard unifiedManager == nil else { return }
+        let directory = ParakeetModelInstaller.cacheDirectory(for: variant)
+        guard ParakeetModelInstaller.isInstalled(variant) else {
+            throw WhisperASRError.modelMissing(directory.path)
+        }
+        do {
+            let runtime = UnifiedAsrManager()
+            try await runtime.loadModels(from: directory)
+            try Task.checkCancellation()
+            unifiedManager = runtime
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw WhisperASRError.helperFailed("Parakeet model load failed")
+        }
     }
 }
