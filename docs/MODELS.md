@@ -1,6 +1,6 @@
 # Local models
 
-Version 3.6.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.5.7 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, NVIDIA Parakeet on the Neural Engine, and Cohere
 Transcribe. Recognition is English-only and entirely local.
 
@@ -12,7 +12,7 @@ Transcribe. Recognition is English-only and entirely local.
 | Large-v3 Turbo Q5 | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | Whisper; supports the internal dictionary |
 | Cohere Transcribe | `cohere-transcribe-03-2026` | 2.4 GB | Best on clean speech; ~11x slower; on-demand download |
 
-Whisper Base English left the picker in 3.6.0: Parakeet Fast is smaller,
+Whisper Base English left the picker in 3.5.7: Parakeet Fast is smaller,
 faster and more accurate, and it is bundled. The file still ships as the
 discovery fallback when Turbo is unavailable.
 
@@ -64,7 +64,7 @@ behind that list are:
   [FluidAudio](https://github.com/FluidInference/FluidAudio), replacing whisper
   entirely rather than re-hosting it.
 
-The whisper.cpp Core ML encoder and WhisperKit engines were retired in 3.6.0.
+The whisper.cpp Core ML encoder and WhisperKit engines were retired in 3.5.7.
 Neither could run in a shipped build: the Core ML encoder path was gated on a
 `CoreMLEnabled` marker the release bundle never contained, and WhisperKit
 needed a compiled model directory nothing shipped or downloaded. A saved

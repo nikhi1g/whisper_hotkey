@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.6.0: 2026-08-07
+## 3.5.7: 2026-08-07
 
 Recognition list prune and a settings window that shows what it is doing.
 

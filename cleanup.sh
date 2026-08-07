@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# One-off maintenance for the 3.6.0 engine prune.
+# One-off maintenance for the 3.5.7 engine prune.
 #
 # 1. Installs the freshly built bundle from dist/ over /Applications.
 # 2. Deletes the cache artifacts left behind by the retired Core ML encoder

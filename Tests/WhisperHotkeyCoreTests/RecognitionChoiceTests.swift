@@ -45,7 +45,7 @@ final class RecognitionChoiceTests: XCTestCase {
         }
     }
 
-    /// The Core ML encoder and WhisperKit engines were retired in 3.6.0.
+    /// The Core ML encoder and WhisperKit engines were retired in 3.5.7.
     /// Neither could run in a shipped build, but a saved preference naming one
     /// must still resolve to something rather than dropping to the default.
     func testRetiredEnginesMigrateToMetal() {

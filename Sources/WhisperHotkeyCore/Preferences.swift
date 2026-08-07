@@ -453,7 +453,7 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
 
     public static let defaultEngine: Self = .whisperCppMetal
 
-    /// Engines retired in 3.6.0, kept only so a saved preference can be read
+    /// Engines retired in 3.5.7, kept only so a saved preference can be read
     /// and migrated. Neither could ever run in a shipped build: the Core ML
     /// encoder path is gated on a `CoreMLEnabled` marker the release bundle
     /// does not contain, and WhisperKit needs a compiled model directory that
@@ -1273,7 +1273,7 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
     /// The whisper model this option runs. Parakeet and Cohere ignore it, but
     /// it still has to be a real value because the preference is shared.
     ///
-    /// Base was offered here until 3.6.0. Parakeet Fast is smaller, faster and
+    /// Base was offered here until 3.5.7. Parakeet Fast is smaller, faster and
     /// more accurate, and it is bundled, so Base had no case left to make. The
     /// model itself stays in `DictationModel` as the discovery fallback.
     public var model: DictationModel {

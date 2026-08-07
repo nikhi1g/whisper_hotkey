@@ -290,7 +290,7 @@ final class RecognitionTests: XCTestCase {
         )
     }
 
-    /// The Core ML encoder and WhisperKit engines were retired in 3.6.0; what
+    /// The Core ML encoder and WhisperKit engines were retired in 3.5.7; what
     /// survives is Metal's requirement that the model path be a real file.
     /// A directory there used to satisfy the existence check.
     func testDiscoveryRejectsADirectoryWhereTheModelFileBelongs() throws {

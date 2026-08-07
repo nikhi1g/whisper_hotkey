@@ -198,7 +198,7 @@ reports **Custom**.
 
 Whisper Turbo remains because Parakeet is a transducer: it accepts no prompt,
 so the internal dictionary and Pause Mode context only bias Whisper. Whisper
-Base left the list in 3.6.0 — Parakeet Fast is smaller, faster and more
+Base left the list in 3.5.7 — Parakeet Fast is smaller, faster and more
 accurate, and it is bundled. Small and Medium English were retired in 3.4.1.
 
 The bundled options ship inside the app; Unified and Cohere are fetched only

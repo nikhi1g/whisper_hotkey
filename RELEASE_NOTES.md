@@ -1,4 +1,4 @@
-Version 3.6.0 cuts the recognition list from ten options to five, stops
+Version 3.5.7 cuts the recognition list from ten options to five, stops
 hiding the controls behind those options, and fixes a model list whose
 category headings behaved like models.
 
