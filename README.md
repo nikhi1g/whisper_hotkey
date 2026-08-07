@@ -223,6 +223,11 @@ anything:
 ./run.sh --check --model turbo --engine parakeet
 ```
 
+To see the download and first-launch path the way a new user sees it, reset
+this Mac with `./fresh_restart_application_test.sh`. It backs up your
+preferences first and `--restore` puts them back. See
+[docs/first-run-testing.md](docs/first-run-testing.md).
+
 Common recovery commands:
 
 ```sh
