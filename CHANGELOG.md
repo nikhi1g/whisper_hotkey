@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.5.5: 2026-08-07
+
+Readable Settings release. Nothing is removed; every configuration stays
+reachable.
+
+- Replaced the Engine and Model rows with one grouped list of ten named
+  configurations. The two rows described a matrix whose cells are not all
+  valid, and both were labelled Fast | Accurate while meaning different things
+- Renamed the Recognition row to Quality, since the section above it already
+  said Recognition
+- Made Custom a real, permanently disabled third segment instead of leaving the
+  preset control with nothing selected, which read as broken
+- Removed the six footer chips, which repeated values already visible in the
+  rows above them
+- Folded "Copy Last Dictation" and its "Keep latest dictation" checkbox into one
+  control that said the same thing twice
+- Defaulted processing to Model Ready in both presets and the first-run profile.
+  It decodes the whole recording, so it is as accurate as After Recording, and
+  the resident model removes the load latency
+- Documented the guided welcome window in `docs/design/welcome-window.md`. It is
+  designed but deliberately not built yet
+
+Collapsed by default the Recognition section is two rows rather than four.
+
 ## 3.5.0: 2026-08-06
 
 Two New Engines release. Both are additions; nothing existing changed.

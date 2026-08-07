@@ -1,49 +1,40 @@
-Version 3.5.0 adds two recognition engines. Both are additions — every existing
-engine, model, preset, and decoding profile behaves exactly as it did in 3.4.2,
-and no saved selection changes.
+Version 3.5.5 makes the Settings window readable. Nothing is removed — every
+engine, model, profile and mode stays reachable.
 
-## Parakeet Unified
+## What changed
 
-A third Parakeet model, and the only one evaluated that beats the shipping
-engine on this project's own benchmark rather than only on a public leaderboard
-average. Measured over the same 100 LibriSpeech utterances on an Apple M5 Pro:
+The window had grown to fifteen rows, and two of them were both labelled
+`Fast | Accurate` while meaning different things. The Engine row offered
+"Metal", "Core ML Encoder" and "WhisperKit", words that say nothing about what
+you get. A row called Recognition sat inside a section called RECOGNITION. Six
+chips along the bottom repeated values already visible above them.
 
-| Model | Combined WER | test-clean | test-other | Mean | Median |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Parakeet Unified | **2.46%** | **1.44%** | **3.63%** | **50 ms** | **41 ms** |
-| Parakeet Accurate | 2.62% | 1.54% | 3.86% | 56 ms | 53 ms |
+- **Engine and Model are now one list** of ten named configurations, grouped by
+  family, with the ones that need no download first. The old matrix had cells
+  that could not run; the matrix is gone.
+- **Custom is a real segment.** Previously, a configuration matching neither
+  preset left the control with nothing highlighted, which reads as broken.
+- **Quality**, not Recognition.
+- **The footer chips are gone.**
+- **One control for keeping the last dictation**, not a label and a checkbox
+  saying the same thing.
 
-It wins every accuracy figure and both mean and median latency. Its one
-regression is the tail: audio longer than 15 seconds is transcribed with
-overlapping windows, so long recordings run about 138 ms against Accurate's
-100 ms. Dictation phrases are far shorter, so the median is the number you
-feel.
+Collapsed, the Recognition section is two rows instead of four.
 
-Downloaded on demand at 594 MB. Select it under Advanced Options.
+## Processing now defaults to Model Ready
 
-## Cohere Transcribe
+In both presets and on first run. It decodes the whole recording, so it is as
+accurate as After Recording, and the model is already resident so the load
+latency is gone. Decode While Speaking trades accuracy for perceived speed,
+which is the wrong default for someone who has not chosen it deliberately. All
+three modes remain selectable under Advanced Options.
 
-The highest-ranked permissively licensed model with an Apple Silicon path —
-Apache-2.0, and fourth on the Open ASR Leaderboard. On this corpus that ranking
-does not hold up:
+## Still to come
 
-| Engine | Combined WER | test-clean | test-other | Mean latency |
-| --- | ---: | ---: | ---: | ---: |
-| Cohere Transcribe | 2.57% | **1.13%** | 4.21% | 629 ms |
-| Parakeet Accurate | 2.62% | 1.54% | **3.86%** | **56 ms** |
-
-The two tie overall. Cohere is meaningfully better on clean speech and worse on
-noisy speech, and it costs eleven times the latency because it decodes one
-token at a time. It is offered for anyone who dictates in quiet conditions and
-prefers accuracy there, and the confirmation dialog states that tradeoff before
-the 2.4 GB download rather than after.
-
-## Also
-
-The benchmark harness measures all three engines through the same word-error
-math, so a published leaderboard number can be checked against this corpus
-before it is believed. Both of the above are cases where it did not survive
-that check.
+The guided first-run window — permissions, key, and a live "try it" that proves
+dictation works — is designed and written up in `docs/design/welcome-window.md`,
+but not built. It is the larger half of making this approachable for someone
+non-technical.
 
 The app is signed with a stable Apple Development identity and is not
 notarized, so the first launch still needs one approval through System

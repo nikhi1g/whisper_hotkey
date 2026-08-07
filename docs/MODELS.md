@@ -1,6 +1,6 @@
 # Local models
 
-Version 3.5.0 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
+Version 3.5.5 offers [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with
 Metal and flash attention, whisper.cpp with a Core ML encoder, native
 WhisperKit Core ML recognition, and NVIDIA Parakeet on the Neural Engine.
 Recognition is English-only and entirely local.
@@ -52,7 +52,9 @@ modest latency cost.
 
 ## Recognition engines
 
-The Engine chips in Settings are independent of model size:
+Settings presents one grouped list of named configurations rather than separate
+engine and model rows, so an invalid pairing cannot be selected. The engines
+behind that list are:
 
 - **Metal** is the default whisper.cpp GPU path.
 - **Core ML Encoder** runs the encoder through Core ML while whisper.cpp
