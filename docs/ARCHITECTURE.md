@@ -24,7 +24,7 @@ At idle, only the event tap, menu item, local control socket, and app process
 remain by default. There is no audio engine, loaded model, helper, polling
 worker, or transcript history. Model Ready and Decode While Speaking keep the
 selected helper resident, but the audio engine stays stopped and no polling
-task is added. After Recording loads the model only when capture finishes.
+task is added. Decode After Speaking loads the model only when capture finishes.
 Release, Stop, or Send finalizes a normal dictation, inserts it, tears down the
 helper, and deletes the private audio directory. Pause Mode retains one
 uninterrupted full-session WAV and writes a parallel current inference segment

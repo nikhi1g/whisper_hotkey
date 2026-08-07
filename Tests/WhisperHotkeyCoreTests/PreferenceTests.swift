@@ -250,7 +250,7 @@ final class PreferenceTests: XCTestCase {
         XCTAssertFalse(ModelProcessingMode.afterRecording.keepsModelReady)
         XCTAssertEqual(
             ModelProcessingMode.allCases.map(\.displayName),
-            ["After Recording", "Model Ready", "Decode While Speaking"]
+            ["Decode After Speaking", "Model Ready", "Decode While Speaking"]
         )
     }
 

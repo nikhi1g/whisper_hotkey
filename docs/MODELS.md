@@ -32,7 +32,7 @@ menu shows download size rather than promising a fixed RAM number.
 
 Settings provides three processing chips directly below the model picker:
 
-- **After Recording** loads and decodes after capture for minimal idle memory.
+- **Decode After Speaking** loads and decodes once you stop, for minimal idle memory.
 - **Model Ready** keeps one selected model loaded between dictations.
 - **Decode While Speaking** keeps that model loaded and decodes private bounded
   chunks concurrently with capture, then inserts the assembled transcript once.

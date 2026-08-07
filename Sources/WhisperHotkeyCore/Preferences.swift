@@ -46,7 +46,8 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
             ?? DictationModel.allCases.first(where: availableModels.contains)
             ?? .baseEnglish
         // Model Ready keeps a whole-recording decode, so it is as accurate as
-        // After Recording, and the resident model removes the load latency.
+        // Decode After Speaking, and the resident model removes the load
+        // latency.
         // Decode While Speaking is the one that trades accuracy for speed.
         let processingMode: ModelProcessingMode =
             physicalMemory >= responsiveMemoryThreshold
@@ -551,7 +552,11 @@ public enum ModelProcessingMode: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .afterRecording:
-            "After Recording"
+            // "Recording" described the app's internals; "Speaking" describes
+            // what the user did. Parallel with Decode While Speaking, so the
+            // three chips read as one scale. The raw value stays
+            // `afterRecording` so no stored preference is rewritten.
+            "Decode After Speaking"
         case .modelReady:
             "Model Ready"
         case .decodeWhileSpeaking:
@@ -562,7 +567,7 @@ public enum ModelProcessingMode: String, CaseIterable, Codable, Sendable {
     public var description: String {
         switch self {
         case .afterRecording:
-            "Loads and decodes after recording for full-context accuracy and the lowest idle memory."
+            "Loads and decodes once you stop speaking, for full-context accuracy and the lowest idle memory."
         case .modelReady:
             "Keeps the selected model loaded for full-context decoding without model startup."
         case .decodeWhileSpeaking:

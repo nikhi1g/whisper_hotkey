@@ -145,7 +145,7 @@ The status should report Microphone, Accessibility, and Input Monitoring as
 Click into any editable text field, hold **Right Option**, speak, then release
 it. A fresh install on a Mac with at least 8 GB selects **Decode While
 Speaking** for the shortest completion latency. Lower-memory Macs select
-**After Recording** to preserve memory. Very quick taps are ignored, and
+**Decode After Speaking** to preserve memory. Very quick taps are ignored, and
 ordinary Option shortcuts continue to work.
 
 For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as

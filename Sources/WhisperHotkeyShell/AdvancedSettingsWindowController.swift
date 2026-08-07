@@ -293,6 +293,12 @@ public final class AdvancedSettingsWindowController:
         window.isReleasedWhenClosed = false
         window.animationBehavior = .utilityWindow
         window.collectionBehavior.insert(.fullScreenPrimary)
+        // The controller is built once and reused, so without this the window
+        // stays on whichever Space it was first opened on: activating the app
+        // either yanked the user to that Space or appeared to do nothing at
+        // all. Moving it to the active Space makes Settings open where the
+        // user is looking.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.minSize = NSSize(width: 620, height: 520)
         window.center()
         window.delegate = self
@@ -320,7 +326,13 @@ public final class AdvancedSettingsWindowController:
         refresh()
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
+        // A miniaturized window ignores makeKeyAndOrderFront, so the menu item
+        // silently did nothing once Settings had been sent to the Dock.
+        if window?.isMiniaturized == true {
+            window?.deminiaturize(nil)
+        }
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless()
     }
 
     public func refreshIfVisible() {

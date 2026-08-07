@@ -1553,9 +1553,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showAdvancedSettings() {
-        guard !machine.phase.isBusy else {
-            return
-        }
+        // Deliberately not gated on `machine.phase.isBusy`. Opening a window is
+        // not a configuration change: the state it publishes already carries
+        // `configurationEnabled: !isBusy`, so every control arrives disabled
+        // during a dictation. Refusing to open at all made the menu item do
+        // nothing at exactly the moment a user reaches for it, with no
+        // feedback to explain why.
         if advancedSettingsWindowController == nil {
             advancedSettingsWindowController = AdvancedSettingsWindowController(
                 stateProvider: { [weak self] in

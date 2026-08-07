@@ -387,7 +387,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(
             [
                 "Press and Hold", "Pause Mode", "Base",
-                "After Recording", "Decode While Speaking",
+                "Decode After Speaking", "Decode While Speaking",
             ].allSatisfy { title in
                 alternativeRows.contains(where: { $0.title == title })
             }
