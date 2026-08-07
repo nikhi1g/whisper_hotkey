@@ -47,14 +47,26 @@ final class SetupReadinessTests: XCTestCase {
         )
     }
 
-    /// Hiding the row must not make setup claim to be complete: the tap really
-    /// does need listen access, whichever permission granted it.
-    func testHidingTheRowDoesNotMakeSetupReady() {
-        XCTAssertFalse(
+    /// Listen access is not a precondition for readiness. The event tap is a
+    /// `.defaultTap`, which Accessibility authorises; `kTCCServiceListenEvent`
+    /// is a separate grant the app never registers for, so requiring it here
+    /// left setup permanently incomplete on a Mac where the hotkey worked.
+    /// Whether the tap can actually be created is settled by creating it, and
+    /// `reconcileRuntime` reopens setup when that fails.
+    func testAccessibilityAloneIsEnoughForSetupToBeReady() {
+        XCTAssertTrue(
             readiness(accessibility: true, inputMonitoring: false).isReady
         )
         XCTAssertTrue(
             readiness(accessibility: true, inputMonitoring: true).isReady
+        )
+    }
+
+    /// Accessibility remains mandatory; dropping the listen check must not
+    /// have made the permission that authorises the tap optional too.
+    func testAccessibilityIsStillRequired() {
+        XCTAssertFalse(
+            readiness(accessibility: false, inputMonitoring: true).isReady
         )
     }
 }

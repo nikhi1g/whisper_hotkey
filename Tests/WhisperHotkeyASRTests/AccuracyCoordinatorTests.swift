@@ -200,6 +200,200 @@ final class AccuracyCoordinatorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(assessment.score, 0.4)
     }
 
+    func testAdaptiveWeakTokenUncertainResultTriggersSecondaryVerifierPass() async throws {
+        let primary = makeHypothesis(
+            text: "uncertain weak token",
+            averageLogProbability: -0.10,
+            noSpeechProbability: 0.01,
+            weakTokenFraction: 0.11
+        )
+        let secondary = makeHypothesis(
+            text: "reliable transcript",
+            averageLogProbability: -0.12,
+            noSpeechProbability: 0.01,
+            weakTokenFraction: 0.01
+        )
+        let provider = FakeCandidateProvider(
+            primary: primary,
+            alternate: secondary
+        )
+
+        let decision = try await AccuracyCoordinator(
+            primaryProvider: provider,
+            secondaryProvider: provider
+        ).finalize(
+            request: RecognitionRequest(
+                requestID: "weak-token-flow",
+                audioURL: URL(fileURLWithPath: "/private/utterance.wav"),
+                window: .init(startSample: 0, endSample: 10),
+                strategy: .adaptive,
+                protocolVersion: 2
+            )
+        )
+
+        let primaryInvocationCount = await provider.primaryInvocationCount()
+        let alternateInvocationCount = await provider.alternateInvocationCount()
+        XCTAssertEqual(primaryInvocationCount, 1)
+        XCTAssertEqual(alternateInvocationCount, 1)
+        XCTAssertEqual(decision.alternatives.count, 2)
+        XCTAssertTrue(
+            decision.trace.rejectionReasons.contains {
+                $0.contains("weakTokenFraction")
+            }
+        )
+        XCTAssertNotNil(decision.trace.rejectionReasons.first {
+            $0.contains("weakTokenFraction")
+        })
+    }
+
+    func testAdaptiveUncertainPrimarySkipsSecondaryWhenUnavailable() async throws {
+        let primary = makeHypothesis(
+            text: "single option only",
+            averageLogProbability: -2.0,
+            noSpeechProbability: 0.20
+        )
+
+        let decision = try await AccuracyCoordinator(
+            primaryProvider: FakeCandidateProvider(
+                primary: primary,
+                alternate: makeHypothesis(text: "should not appear")
+            )
+        ).finalize(
+            request: RecognitionRequest(
+                requestID: "adaptive-single-provider",
+                audioURL: URL(fileURLWithPath: "/private/utterance.wav"),
+                window: .init(startSample: 0, endSample: 10),
+                strategy: .adaptive,
+                protocolVersion: 2
+            )
+        )
+
+        XCTAssertEqual(decision.alternatives.count, 1)
+        XCTAssertEqual(decision.selected.text, primary.text)
+        XCTAssertEqual(decision.trace.rejectionReasons.count, 1)
+        XCTAssertTrue(decision.trace.rejectionReasons[0].contains("averageLogProbability"))
+    }
+
+    func testAdaptiveSecondaryRetryFailurePreservesPrimaryAndTracksRejection() async throws {
+        let primary = makeHypothesis(
+            text: "primary fallback",
+            averageLogProbability: -2.0,
+            noSpeechProbability: 0.2
+        )
+        let provider = FakeCandidateProvider(
+            primary: primary,
+            alternate: makeHypothesis(text: "unused"),
+            alternateThrows: .helperFailed("secondary verifier unavailable")
+        )
+
+        let decision = try await AccuracyCoordinator(
+            primaryProvider: provider,
+            secondaryProvider: provider
+        ).finalize(
+            request: RecognitionRequest(
+                requestID: "secondary-failure-flow",
+                audioURL: URL(fileURLWithPath: "/private/utterance.wav"),
+                window: .init(startSample: 0, endSample: 10),
+                strategy: .adaptive,
+                protocolVersion: 2
+            )
+        )
+
+        let primaryInvocationCount = await provider.primaryInvocationCount()
+        let alternateInvocationCount = await provider.alternateInvocationCount()
+        XCTAssertEqual(primaryInvocationCount, 1)
+        XCTAssertEqual(alternateInvocationCount, 1)
+        XCTAssertEqual(decision.alternatives.count, 1)
+        XCTAssertEqual(decision.selected.text, primary.text)
+        XCTAssertTrue(
+            decision.trace.rejectionReasons.contains {
+                $0.contains("secondary retry failed")
+            }
+        )
+    }
+
+    func testProvisionalCandidatesAreCarriedAndTruncatedToMaxCandidates() async throws {
+        let policy = AccuracyPolicy(maximumCandidates: 2)
+        let primary = makeHypothesis(
+            text: "primary",
+            averageLogProbability: -1.2,
+            noSpeechProbability: 0.2
+        )
+        let provider = FakeCandidateProvider(
+            primary: primary,
+            alternate: makeHypothesis(
+                text: "secondary-best",
+                averageLogProbability: -0.2,
+                noSpeechProbability: 0.01
+            )
+        )
+
+        let decision = try await AccuracyCoordinator(
+            primaryProvider: provider,
+            secondaryProvider: provider,
+            policy: policy
+        ).finalize(
+            request: RecognitionRequest(
+                requestID: "candidate-truncation",
+                audioURL: URL(fileURLWithPath: "/private/utterance.wav"),
+                window: .init(startSample: 0, endSample: 10),
+                strategy: .adaptive,
+                protocolVersion: 2
+            ),
+            provisional: [
+                makeHypothesis(
+                    text: "candidate-one",
+                    averageLogProbability: -0.4,
+                    noSpeechProbability: 0.2
+                ),
+                makeHypothesis(
+                    text: "candidate-two",
+                    averageLogProbability: -0.5,
+                    noSpeechProbability: 0.2
+                ),
+            ]
+        )
+
+        XCTAssertEqual(decision.alternatives.map(\.text), ["candidate-two", "secondary-best"])
+        XCTAssertEqual(decision.trace.candidateCount, 2)
+    }
+
+    func testUncertaintyDetectorRecordsRepetitionAsUncertain() {
+        let repeated = makeHypothesis(
+            text: "hey hey hey",
+            averageLogProbability: -0.1,
+            noSpeechProbability: 0.01,
+            repetitionDetected: true
+        )
+        let policy = AccuracyPolicy()
+        let assessment = UncertaintyDetector.assess(
+            hypothesis: repeated,
+            policy: policy
+        )
+
+        XCTAssertTrue(assessment.isUncertain)
+        XCTAssertTrue(
+            assessment.reasons.contains("repeated phrase detected")
+        )
+    }
+
+    func testUncertaintyDetectorCanDisableRepetitionPenalty() {
+        let repeated = makeHypothesis(
+            text: "hey hey hey",
+            averageLogProbability: -0.1,
+            noSpeechProbability: 0.01,
+            repetitionDetected: true
+        )
+        let policy = AccuracyPolicy(repeatPenaltyEnabled: false)
+        let assessment = UncertaintyDetector.assess(
+            hypothesis: repeated,
+            policy: policy
+        )
+
+        XCTAssertFalse(assessment.isUncertain)
+        XCTAssertFalse(assessment.reasons.contains("repeated phrase detected"))
+    }
+
     private func makeHypothesis(
         text: String,
         adaptiveFallback: Bool = false,
@@ -237,16 +431,19 @@ private actor FakeCandidateProvider: RecognitionCandidateProvider {
     private var alternateCalls: Int = 0
     private var alternateRequestPayload: RecognitionRequest?
     private var alternatePassPayload: RecognitionPassKind?
+    private let alternateThrows: WhisperASRError?
 
     private let primaryResult: RecognitionHypothesis
     private let alternateResult: RecognitionHypothesis
 
     init(
         primary: RecognitionHypothesis,
-        alternate: RecognitionHypothesis
+        alternate: RecognitionHypothesis,
+        alternateThrows: WhisperASRError? = nil
     ) {
         primaryResult = primary
         alternateResult = alternate
+        self.alternateThrows = alternateThrows
     }
 
     func primaryHypothesis(
@@ -260,6 +457,9 @@ private actor FakeCandidateProvider: RecognitionCandidateProvider {
         request: AlternateRecognitionRequest
     ) async throws -> RecognitionHypothesis {
         alternateCalls += 1
+        if let alternateThrows {
+            throw alternateThrows
+        }
         alternateRequestPayload = request.base
         alternatePassPayload = request.pass
         return alternateResult
