@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.5.9: 2026-08-07
+
+- Removed the Cohere Transcribe engine. On this repository's own corpus it won
+  exactly one measurement -- clean read speech, 1.13% word error rate against
+  Parakeet Unified's 1.44% -- while losing every other axis: 4.21% against
+  3.63% on noisy speech, 629 ms against 50 ms mean latency, and a 2.4 GB
+  download against 594 MB
+- Migrated a saved `cohereCoreML` selection to Parakeet Accurate, which is
+  bundled and beats Cohere everywhere except clean read speech
+- Dropped the Cohere runtime, installer, download offer, progress panel, and
+  the `--engine cohere` option in run.sh
+
 ## 3.5.7: 2026-08-07
 
 Recognition list prune and a settings window that shows what it is doing.
