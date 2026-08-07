@@ -27,15 +27,14 @@ LOGIN_LAUNCHER_NAME = "WhisperHotkeyLoginLauncher"
 LOGIN_AGENT_LABEL = f"{BUNDLE_ID}.login-launcher"
 LOGIN_AGENT_PLIST_NAME = f"{LOGIN_AGENT_LABEL}.plist"
 LOGIN_AGENT_BUNDLE_PROGRAM = f"Contents/MacOS/{LOGIN_LAUNCHER_NAME}"
-BASE_MODEL_NAME = "ggml-base.en.bin"
-BASE_MODEL_SHA256 = (
-    "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-)
-# Every model the first-run profile can select on its own, so no Mac starts on
-# a model it does not have. Medium is deliberately absent: it is never chosen
-# automatically, and all four together exceed the 2 GB release-asset limit.
+# Every whisper model the first-run profile can select on its own, so no Mac
+# starts on a model it does not have.
+#
+# Base was dropped in 3.6.0: it left the recognition list in 3.5.7 and nothing
+# could select it afterwards, so 141 MB of every download bought nothing.
+# Parakeet Fast is smaller, faster, more accurate, and also bundled, so the
+# low-memory first-run profile points there instead.
 BUNDLED_MODELS: dict[str, str] = {
-    BASE_MODEL_NAME: BASE_MODEL_SHA256,
     "ggml-large-v3-turbo-q5_0.bin":
         "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
 }
@@ -140,7 +139,7 @@ def bundle_verified_models() -> None:
     for name, expected in BUNDLED_MODELS.items():
         source = (
             Path(configured_base).expanduser()
-            if configured_base and name == BASE_MODEL_NAME
+            if configured_base
             else cache / name
         )
         if not source.is_file():

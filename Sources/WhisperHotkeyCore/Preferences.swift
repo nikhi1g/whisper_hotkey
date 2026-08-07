@@ -36,12 +36,11 @@ public struct FirstRunPerformanceProfile: Equatable, Sendable {
         physicalMemory: UInt64,
         availableModels: Set<DictationModel>
     ) -> Self {
-        let preferredModels: [DictationModel]
-        if physicalMemory >= responsiveMemoryThreshold {
-            preferredModels = [.largeV3TurboQ5, .baseEnglish]
-        } else {
-            preferredModels = [.baseEnglish]
-        }
+        // Base stopped being bundled in 3.6.0, so a low-memory Mac can no
+        // longer be pointed at it. Both tiers resolve to Turbo when it is
+        // installed; the engine below is what actually governs memory, and
+        // Parakeet -- which ignores this model entirely -- is the default.
+        let preferredModels: [DictationModel] = [.largeV3TurboQ5, .baseEnglish]
         let model = preferredModels.first(where: availableModels.contains)
             ?? DictationModel.allCases.first(where: availableModels.contains)
             ?? .baseEnglish

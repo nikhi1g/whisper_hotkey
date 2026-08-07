@@ -9,7 +9,10 @@ final class PreferenceTests: XCTestCase {
             physicalMemory: 4 * 1_024 * 1_024 * 1_024,
             availableModels: allModels
         )
-        XCTAssertEqual(constrained.model, .baseEnglish)
+        // Base stopped being bundled in 3.6.0, so no profile points at it
+        // while Turbo is installed. Processing still steps down on a
+        // memory-constrained Mac, which is the part that governs footprint.
+        XCTAssertEqual(constrained.model, .largeV3TurboQ5)
         XCTAssertEqual(constrained.engine, .whisperCppMetal)
         XCTAssertEqual(constrained.decodingProfile, .precision)
         XCTAssertEqual(constrained.processingMode, .afterRecording)

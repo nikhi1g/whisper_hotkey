@@ -92,6 +92,8 @@ public struct AdvancedSettingsActions {
     public var setAutomaticallyChecksForUpdates: (Bool) -> Void
     public var checkForUpdates: () -> Void
     public var installUpdate: () -> Void
+    /// Aborts an in-flight model install started from this window.
+    public var cancelModelInstall: () -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -112,7 +114,8 @@ public struct AdvancedSettingsActions {
         loginItemChanged: @escaping () -> Void = {},
         setAutomaticallyChecksForUpdates: @escaping (Bool) -> Void = { _ in },
         checkForUpdates: @escaping () -> Void = {},
-        installUpdate: @escaping () -> Void = {}
+        installUpdate: @escaping () -> Void = {},
+        cancelModelInstall: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -134,6 +137,7 @@ public struct AdvancedSettingsActions {
             setAutomaticallyChecksForUpdates
         self.checkForUpdates = checkForUpdates
         self.installUpdate = installUpdate
+        self.cancelModelInstall = cancelModelInstall
     }
 }
 
@@ -179,6 +183,16 @@ public final class AdvancedSettingsWindowController:
     /// configurations.
     private let recognitionChoicePopup = NSPopUpButton()
     private let presetControl = NSSegmentedControl()
+    private let installProgress = NSProgressIndicator()
+    private let installStatusLabel = NSTextField(labelWithString: "")
+    private let installCancelButton = NSButton()
+    private var installRow: NSGridRow?
+    /// Drives the estimated portion of the bar. Core ML compilation reports no
+    /// byte count, so the segment is advanced on a timer instead of freezing.
+    private var installEstimateTimer: Timer?
+    private var installEstimateStart: Date?
+    private var installEstimatedSeconds: TimeInterval = 1
+    private var installEstimateRange: ClosedRange<Double> = 0...1
     /// A labelled button rather than a disclosure triangle: a bare triangle
     /// renders as a stray glyph beside the preset chips and says nothing about
     /// what it opens.
@@ -333,6 +347,103 @@ public final class AdvancedSettingsWindowController:
         }
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
+    }
+
+    // MARK: - In-window install progress
+
+    /// Shows the progress row and takes the bar to zero.
+    ///
+    /// `estimatedSeconds` covers the phases that report no byte count, so the
+    /// bar keeps moving through them instead of freezing at a number. The
+    /// estimate never runs past its segment: it eases toward the segment's top
+    /// and only reaches it when the phase actually ends.
+    public func beginModelInstall(title: String) {
+        installStatusLabel.stringValue = title
+        installProgress.doubleValue = 0
+        installRow?.isHidden = false
+        installCancelButton.isEnabled = true
+        stopInstallEstimate()
+    }
+
+    /// Reports a phase with a real measurement. `fraction` is that phase's own
+    /// completion; `range` is the slice of the overall bar it owns.
+    public func updateModelInstall(
+        fraction: Double,
+        in range: ClosedRange<Double>,
+        detail: String
+    ) {
+        stopInstallEstimate()
+        let clamped = min(max(fraction, 0), 1)
+        installProgress.doubleValue =
+            range.lowerBound
+                + clamped * (range.upperBound - range.lowerBound)
+        installStatusLabel.stringValue = detail
+    }
+
+    /// Reports a phase with no measurement available, advancing its slice on a
+    /// timer against a typical duration. The bar still moves and still ends
+    /// where the next phase begins, so it never reports backwards.
+    public func estimateModelInstall(
+        over seconds: TimeInterval,
+        in range: ClosedRange<Double>,
+        detail: String
+    ) {
+        installStatusLabel.stringValue = detail
+        installEstimateRange = range
+        installEstimatedSeconds = max(seconds, 0.5)
+        installEstimateStart = Date()
+        installEstimateTimer?.invalidate()
+        installEstimateTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.1,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.advanceInstallEstimate()
+            }
+        }
+    }
+
+    public func finishModelInstall() {
+        stopInstallEstimate()
+        installProgress.doubleValue = 1
+        installRow?.isHidden = true
+        installStatusLabel.stringValue = ""
+    }
+
+    private func advanceInstallEstimate() {
+        guard let start = installEstimateStart else { return }
+        let elapsed = Date().timeIntervalSince(start)
+        // Eases toward the top of the slice without arriving: an estimate that
+        // hits 100% and then waits is worse than one that visibly slows down.
+        let progress = 1 - exp(-elapsed / installEstimatedSeconds)
+        let span =
+            installEstimateRange.upperBound - installEstimateRange.lowerBound
+        let value = installEstimateRange.lowerBound + progress * span * 0.98
+        installProgress.doubleValue = max(installProgress.doubleValue, value)
+    }
+
+    private func stopInstallEstimate() {
+        installEstimateTimer?.invalidate()
+        installEstimateTimer = nil
+        installEstimateStart = nil
+    }
+
+    @objc private func cancelModelInstall(_ sender: NSButton) {
+        installCancelButton.isEnabled = false
+        installStatusLabel.stringValue = "Cancelling…"
+        actions.cancelModelInstall()
+    }
+
+    var modelInstallVisibleForTesting: Bool {
+        installRow?.isHidden == false
+    }
+
+    var modelInstallFractionForTesting: Double {
+        installProgress.doubleValue
+    }
+
+    var modelInstallStatusForTesting: String {
+        installStatusLabel.stringValue
     }
 
     public func refreshIfVisible() {
@@ -1441,6 +1552,44 @@ public final class AdvancedSettingsWindowController:
             title: "Model",
             control: recognitionChoicePopup
         )
+        // Progress lives in the window that started the work, directly under
+        // the control that started it. A floating utility panel was a second
+        // window to manage, could be dragged away from its context, and read
+        // as a system dialog rather than as part of this app.
+        installProgress.isIndeterminate = false
+        installProgress.minValue = 0
+        installProgress.maxValue = 1
+        installProgress.doubleValue = 0
+        installProgress.style = .bar
+        installProgress.controlSize = .small
+        installStatusLabel.font = .systemFont(ofSize: 11)
+        installStatusLabel.textColor = .secondaryLabelColor
+        installCancelButton.title = "Cancel"
+        installCancelButton.bezelStyle = .rounded
+        installCancelButton.controlSize = .small
+        installCancelButton.target = self
+        installCancelButton.action = #selector(cancelModelInstall(_:))
+        let installText = NSStackView(
+            views: [installStatusLabel, installCancelButton]
+        )
+        installText.orientation = .horizontal
+        installText.alignment = .centerY
+        installText.spacing = 8
+        let installStack = NSStackView(views: [installProgress, installText])
+        installStack.orientation = .vertical
+        installStack.alignment = .leading
+        installStack.spacing = 4
+        installProgress.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            installProgress.widthAnchor.constraint(equalToConstant: 320),
+        ])
+        installRow = addRow(
+            to: recognitionGrid,
+            title: "Installing",
+            control: installStack
+        )
+        installRow?.isHidden = true
+
         decodingRow = addRow(
             to: recognitionGrid,
             title: "Decoding",

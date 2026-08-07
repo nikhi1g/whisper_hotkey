@@ -16,6 +16,11 @@ sys.path.insert(0, str(ROOT))
 import build_app  # noqa: E402
 
 
+# Any name works: the bundler is driven by BUNDLED_MODELS, which these
+# tests patch. Base stopped being bundled in 3.6.0.
+TEST_MODEL_NAME = "ggml-large-v3-turbo-q5_0.bin"
+
+
 class RunScriptTests(unittest.TestCase):
     def run_script(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -161,19 +166,18 @@ class RunScriptTests(unittest.TestCase):
     def test_release_build_bundles_only_a_pinned_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / build_app.BASE_MODEL_NAME
+            source = root / TEST_MODEL_NAME
             resources = root / "Resources"
             source.write_bytes(b"verified model fixture")
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             with (
                 patch.object(build_app, "RESOURCES", resources),
-                patch.object(build_app, "BASE_MODEL_SHA256", digest),
                 # Only the fixture is on disk, so restrict the bundle set to it
                 # rather than requiring a populated model cache.
                 patch.object(
                     build_app,
                     "BUNDLED_MODELS",
-                    {build_app.BASE_MODEL_NAME: digest},
+                    {TEST_MODEL_NAME: digest},
                 ),
                 patch.dict(
                     "os.environ",
@@ -186,20 +190,20 @@ class RunScriptTests(unittest.TestCase):
             ):
                 build_app.bundle_verified_models()
 
-            bundled = resources / "Models" / build_app.BASE_MODEL_NAME
+            bundled = resources / "Models" / TEST_MODEL_NAME
             self.assertEqual(bundled.read_bytes(), source.read_bytes())
 
     def test_release_build_rejects_mismatched_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / build_app.BASE_MODEL_NAME
+            source = root / TEST_MODEL_NAME
             source.write_bytes(b"wrong model")
             with (
                 patch.object(build_app, "RESOURCES", root / "Resources"),
                 patch.object(
                     build_app,
                     "BUNDLED_MODELS",
-                    {build_app.BASE_MODEL_NAME: build_app.BASE_MODEL_SHA256},
+                    {TEST_MODEL_NAME: "0" * 64},
                 ),
                 patch.dict(
                     "os.environ",

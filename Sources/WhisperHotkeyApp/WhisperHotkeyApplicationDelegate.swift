@@ -1622,6 +1622,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     installUpdate: { [weak self] in
                         self?.installAvailableUpdate()
+                    },
+                    cancelModelInstall: { [weak self] in
+                        self?.parakeetInstallTask?.cancel()
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -1962,14 +1965,24 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let panel = ModelDownloadProgressPanel(
-            title: "Downloading Parakeet \(variant.displayName)",
-            totalByteCount: nil
-        ) { [weak self] in
-            self?.parakeetInstallTask?.cancel()
+        // Progress is reported inside Settings, which is the window the user
+        // started this from. The floating panel is kept only as the fallback
+        // for an install triggered from the menu bar with Settings closed.
+        if let controller = advancedSettingsWindowController,
+           controller.window?.isVisible == true {
+            controller.beginModelInstall(
+                title: "Preparing Parakeet \(variant.displayName)…"
+            )
+        } else {
+            let panel = ModelDownloadProgressPanel(
+                title: "Downloading Parakeet \(variant.displayName)",
+                totalByteCount: nil
+            ) { [weak self] in
+                self?.parakeetInstallTask?.cancel()
+            }
+            panel.show()
+            parakeetInstallPanel = panel
         }
-        panel.show()
-        parakeetInstallPanel = panel
 
         // The progress handler is called off the main actor, so it hops back
         // through a box that holds one weak reference rather than capturing
@@ -2015,19 +2028,50 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         selectEngine(choice.engine)
     }
 
+    /// Slices of the single bar the user sees. Downloading owns most of it
+    /// because it is by far the longest phase and the only one that reports a
+    /// real measurement; compiling and the first load are estimated.
+    private enum InstallStage {
+        static let downloading = 0.0...0.85
+        static let compiling = 0.85...0.97
+        static let loading = 0.97...1.0
+        /// Measured on an M-series Mac for the 0.6B checkpoints. Only used to
+        /// pace the bar; the phase ends when it ends.
+        static let compileSeconds: TimeInterval = 25
+        static let loadSeconds: TimeInterval = 4
+    }
+
     fileprivate func updateParakeetInstallPanel(
         _ phase: ParakeetModelInstaller.Phase
     ) {
+        let inWindow = advancedSettingsWindowController?.window?.isVisible
+            == true
         switch phase {
         case let .downloading(fraction):
-            parakeetInstallPanel?.update(
-                completedByteCount: Int64(fraction * 1000),
-                totalByteCount: 1000
-            )
+            if inWindow {
+                advancedSettingsWindowController?.updateModelInstall(
+                    fraction: fraction,
+                    in: InstallStage.downloading,
+                    detail: "Downloading… \(Int(fraction * 100))%"
+                )
+            } else {
+                parakeetInstallPanel?.update(
+                    completedByteCount: Int64(fraction * 1000),
+                    totalByteCount: 1000
+                )
+            }
         case .compiling:
-            parakeetInstallPanel?.showIndeterminate(
-                "Compiling for this Mac…"
-            )
+            if inWindow {
+                advancedSettingsWindowController?.estimateModelInstall(
+                    over: InstallStage.compileSeconds,
+                    in: InstallStage.compiling,
+                    detail: "Compiling for this Mac…"
+                )
+            } else {
+                parakeetInstallPanel?.showIndeterminate(
+                    "Compiling for this Mac…"
+                )
+            }
         }
     }
 
@@ -2035,6 +2079,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         parakeetInstallPanel?.close()
         parakeetInstallPanel = nil
         parakeetInstallTask = nil
+        advancedSettingsWindowController?.finishModelInstall()
     }
 
     fileprivate func presentInstallFailure(

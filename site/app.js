@@ -173,11 +173,14 @@ const refreshStableDownload = async () => {
     if (!response.ok) return;
     const release = await response.json();
     const assets = Array.isArray(release.assets) ? release.assets : [];
-    // The ZIP is the human download. macOS blocks an unnotarized disk image
-    // before it mounts, so the DMG is only the fallback for older releases.
+    // The DMG is the human download as of 3.6.0. A quarantined unnotarized
+    // disk image does mount -- that was tested -- and the app copied out of it
+    // carries only com.apple.provenance rather than com.apple.quarantine,
+    // which the ZIP path did propagate. The ZIP stays as the fallback so links
+    // to older releases keep working.
     const asset =
-      assets.find(candidate => candidate.name === 'whisper_hotkey.zip') ??
-      assets.find(candidate => candidate.name === 'whisper_hotkey.dmg');
+      assets.find(candidate => candidate.name === 'whisper_hotkey.dmg') ??
+      assets.find(candidate => candidate.name === 'whisper_hotkey.zip');
     if (!asset || typeof asset.browser_download_url !== 'string') return;
 
     downloadButton.href = asset.browser_download_url;

@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.6.0: 2026-08-07
+
+- Moved model install progress into the Settings window. It was a floating
+  utility panel: a second window to manage, draggable away from the control
+  that started it, and it read as a system dialog rather than as part of this
+  app. The bar is now a row directly under the model picker, with its own
+  Cancel
+- Made that bar deterministic from start to finish. Downloading owns 0-85% and
+  reports real bytes; compiling and first load own the rest and are paced
+  against measured typical durations, easing toward each segment's top so the
+  bar never freezes, never reports backwards, and never claims 100% early
+- Stopped bundling Whisper Base. It left the recognition list in 3.5.7 and
+  nothing could select it afterwards, so 141 MB of every download bought
+  nothing. The low-memory first-run profile no longer points at it
+- Dropped the ZIP from new releases and made the DMG the primary download. The
+  ZIP existed because an unnotarized disk image was believed not to mount; a
+  quarantined DMG was tested and mounts normally, and the app copied out of it
+  carries only `com.apple.provenance` rather than the `com.apple.quarantine`
+  flag the ZIP propagated
+- Fixed Settings failing to come forward: it was gated on the dictation state
+  so the menu item did nothing mid-dictation, it stayed on the Space it was
+  first opened on, and it could not be recovered once miniaturized
+- Renamed the After Recording processing chip to Decode After Speaking, which
+  names what the user did rather than what the app did
+
 ## 3.5.9: 2026-08-07
 
 - Removed the Cohere Transcribe engine. On this repository's own corpus it won

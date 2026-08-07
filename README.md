@@ -9,7 +9,7 @@ focused at release time. Audio and transcripts are not sent to a server.
 The fastest path is the signed, self-contained download:
 
 1. **[Download the latest release](https://github.com/nikhi1g/whisper_hotkey/releases/latest)**
-   and pick `whisper_hotkey.zip`.
+   and pick `whisper_hotkey.dmg`.
 2. Unzip it and drag **whisper_hotkey** into **Applications**.
 3. Open `/Applications/whisper_hotkey.app`. macOS blocks the first launch with
    *"Apple could not verify …"*; click **Done**, then open **System Settings →
@@ -36,7 +36,7 @@ Every release publishes a checksum, so you can confirm you received the exact
 published file before you approve it:
 
 ```sh
-shasum -a 256 -c whisper_hotkey.zip.sha256
+shasum -a 256 -c whisper_hotkey.dmg.sha256
 ```
 
 The `.dmg` asset in each release contains the same app and exists for the in-app

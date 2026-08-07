@@ -165,7 +165,6 @@ if [[ "$DO_RELEASE" -eq 1 ]]; then
     note "Packaging release assets"
     /bin/rm -rf "${ROOT}/dist/release"
     /usr/bin/python3 tools/package_release.py "$TAG" >/dev/null
-    /usr/bin/python3 tools/package_zip.py >/dev/null
     /usr/bin/python3 tools/package_dmg.py --unnotarized >/dev/null
 
     note "Publishing the GitHub release (this uploads ~2.7 GB)"

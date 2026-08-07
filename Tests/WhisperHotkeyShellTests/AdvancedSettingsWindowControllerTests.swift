@@ -78,6 +78,48 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         controller.close()
     }
 
+    /// Progress belongs in the window that started the work. A floating
+    /// utility panel was a second window to manage and read as a system
+    /// dialog rather than as part of this app.
+    @MainActor
+    func testModelInstallProgressIsInlineAndMonotonic() {
+        let controller = makeController(
+            box: AdvancedSettingsStateBox(makeAdvancedSettingsState()),
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+        controller.showWindow(nil)
+
+        XCTAssertFalse(controller.modelInstallVisibleForTesting)
+
+        controller.beginModelInstall(title: "Preparing…")
+        XCTAssertTrue(controller.modelInstallVisibleForTesting)
+        XCTAssertEqual(controller.modelInstallFractionForTesting, 0)
+
+        controller.updateModelInstall(
+            fraction: 0.5,
+            in: 0.0...0.85,
+            detail: "Downloading… 50%"
+        )
+        let midway = controller.modelInstallFractionForTesting
+        XCTAssertEqual(midway, 0.425, accuracy: 0.001)
+        XCTAssertEqual(
+            controller.modelInstallStatusForTesting,
+            "Downloading… 50%"
+        )
+
+        // A later phase must never report less than an earlier one.
+        controller.updateModelInstall(
+            fraction: 1,
+            in: 0.0...0.85,
+            detail: "Downloading… 100%"
+        )
+        XCTAssertGreaterThan(controller.modelInstallFractionForTesting, midway)
+
+        controller.finishModelInstall()
+        XCTAssertFalse(controller.modelInstallVisibleForTesting)
+        controller.close()
+    }
+
     /// Parakeet and Whisper name families, not models. They used to
     /// highlight on hover and accept a click that then did nothing, because
     /// NSMenu.autoenablesItems recomputes item state from target and action

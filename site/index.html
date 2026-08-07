@@ -118,7 +118,7 @@
         <h2 id="overview-title">Setup</h2>
         <div class="setup-paths">
           <ol class="compact-steps">
-            <li><span>1</span><p><strong>Install</strong> Unzip and drag the app to Applications.</p></li>
+            <li><span>1</span><p><strong>Install</strong> Open the disk image and drag the app to Applications.</p></li>
             <li><span>2</span><p><strong>Open Anyway</strong> The build is signed but not Apple-notarized, so the first launch is blocked. Open System Settings &rsaquo; Privacy &amp; Security, scroll to Security, and choose Open Anyway.</p></li>
             <li><span>3</span><p><strong>Allow</strong> Microphone, Accessibility, and Input Monitoring.</p></li>
             <li><span>4</span><p><strong>Dictate</strong> Use your selected key and behavior.</p></li>
@@ -126,11 +126,11 @@
           <div class="quick-options" aria-label="Copyable setup options">
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Coding agent</strong><span data-copy-state aria-live="polite">Click to copy</span></span>
-              <span data-copy-content>Download https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.zip, extract it into /Applications, launch it, and do not finish until Microphone, Accessibility, and Input Monitoring are granted and a dictation test is verified.</span>
+              <span data-copy-content>Download https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg, copy the app into /Applications, launch it, and do not finish until Microphone, Accessibility, and Input Monitoring are granted and a dictation test is verified.</span>
             </button>
             <button class="copy-option" type="button" data-copy-option>
               <span class="copy-option-header"><strong>Terminal</strong><span data-copy-state aria-live="polite">Click to copy</span></span>
-              <code data-copy-content>curl -L -o /tmp/whisper_hotkey.zip https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.zip &amp;&amp; ditto -x -k /tmp/whisper_hotkey.zip /Applications &amp;&amp; open /Applications/whisper_hotkey.app</code>
+              <code data-copy-content>curl -L -o /tmp/whisper_hotkey.dmg https://github.com/nikhi1g/whisper_hotkey/releases/latest/download/whisper_hotkey.dmg &amp;&amp; hdiutil attach -nobrowse /tmp/whisper_hotkey.dmg &amp;&amp; cp -R /Volumes/whisper_hotkey/whisper_hotkey.app /Applications/ &amp;&amp; hdiutil detach /Volumes/whisper_hotkey &amp;&amp; open /Applications/whisper_hotkey.app</code>
             </button>
           </div>
         </div>

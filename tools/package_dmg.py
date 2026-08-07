@@ -170,6 +170,10 @@ def create_dmg(app: Path, output: Path, *, channel: str) -> Path:
             "-srcfolder",
             str(staging),
             "-format",
+            # Measured against this 1.33 GB bundle: ULFO (LZFSE) saved 0.69%
+            # and UDBZ (bzip2) 2.02%, at 190s against UDZO's 27s. The payload
+            # is already-quantized model weights, so there is nothing left to
+            # compress. UDZO also has the widest mount compatibility.
             "UDZO",
             "-ov",
             str(output),
