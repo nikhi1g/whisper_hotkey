@@ -53,6 +53,51 @@ cloud API, a package solely for a small utility, or a second speech engine.
   `~/bin/whisper_hotkey`, launch the installed bundle, verify its executable
   path and signature, and compare built/installed executable hashes.
 
+## Releases
+
+Read [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) before publishing anything.
+Three points are settled policy and must not be re-litigated:
+
+- **Releases are never notarized.** There is no paid Apple Developer Program
+  membership. Every release is signed with the project's stable **Apple
+  Development** identity. `spctl --assess` reporting `rejected` is the expected
+  state, not a regression. Never describe a release as notarized.
+- **The ZIP is the human download; the DMG exists only for the in-app updater.**
+  macOS 15+ blocks an unnotarized disk image *before it mounts*, which leaves a
+  user at a "Move to Trash" dead end with no Open Anyway. This is a deliberate
+  workaround, accepted by the project owner, and stands until the $99
+  membership is purchased.
+- **The GitHub release workflow is expected to fail on tag push, and that is
+  fine.** It has no `APPLE_SIGNING_CERTIFICATE_P12_*` secrets, so it exits in
+  ~15s at its "Validate release ref and secrets" step, before touching the
+  release. Locally-built assets are never at risk. **Do not "fix" this, and do
+  not raise it as a problem** unless the owner asks or buys the membership.
+
+Releases are therefore built and uploaded locally:
+
+```sh
+WHISPER_HOTKEY_BUNDLE_MODEL=1 WHISPER_HOTKEY_DISTRIBUTION=1 \
+  WHISPER_HOTKEY_UNNOTARIZED=1 python3 build_app.py
+python3 tools/package_zip.py
+python3 tools/package_dmg.py --unnotarized
+python3 tools/package_release.py "v$(cat VERSION)"
+gh release create "v$(cat VERSION)" --notes-file RELEASE_NOTES.md --verify-tag
+gh release upload "v$(cat VERSION)" --clobber dist/release/*
+```
+
+`build_app.py` will refuse Homebrew's `whisper-cpp`: it targets the host macOS
+and trips the macOS 14 deployment-target guardrail, which exists so the release
+runs on macOS 14 and later. Build the pinned library first and point
+`WHISPER_CPP_PREFIX` and `GGML_PREFIX` at its install prefix — whisper.cpp
+`v1.9.1`, commit `f049fff95a089aa9969deb009cdd4892b3e74916`, configured with
+`-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_OSX_ARCHITECTURES=arm64
+-DGGML_METAL=ON -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=ON`. This mirrors
+`.github/workflows/release.yml`, which is the reference for the exact flags.
+
+Never publish an ad-hoc build. Ad-hoc changes the designated requirement on
+every build, which breaks in-app updates and drops the Microphone,
+Accessibility and Input Monitoring grants.
+
 ## Git
 
 - After every turn that changes files, stage and commit the relevant tracked

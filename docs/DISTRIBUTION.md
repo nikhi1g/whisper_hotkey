@@ -83,16 +83,54 @@ route automatically; do not create a competing directory with the same name in
 
 ### Publishing without CI
 
-If the certificate should not live in GitHub secrets, produce the same assets on
-the release commit locally and upload them:
+This is the current route. The workflow secrets are not set, so `release.yml`
+exits in ~15 seconds at "Validate release ref and secrets" on every tag push,
+before it touches the release. That failure is expected and harmless; the
+assets below are what actually ship.
+
+First build the pinned whisper.cpp for the declared deployment target.
+`build_app.py` refuses Homebrew's `whisper-cpp` because it targets the host
+macOS, and `verify_distribution_targets` rejects anything above macOS 14 — that
+guardrail is what keeps the release runnable on macOS 14 and later:
+
+```sh
+git clone --depth 1 --branch v1.9.1 \
+  https://github.com/ggml-org/whisper.cpp.git /tmp/whisper.cpp
+test "$(git -C /tmp/whisper.cpp rev-parse HEAD)" \
+  = "f049fff95a089aa9969deb009cdd4892b3e74916"
+cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp-build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+  -DCMAKE_INSTALL_PREFIX=/tmp/whisper.cpp-install \
+  -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF \
+  -DGGML_METAL=ON -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=ON
+cmake --build /tmp/whisper.cpp-build --parallel
+cmake --install /tmp/whisper.cpp-build
+export WHISPER_CPP_PREFIX=/tmp/whisper.cpp-install
+export GGML_PREFIX=/tmp/whisper.cpp-install
+export HOMEBREW_PREFIX="$(brew --prefix)"
+```
+
+Then produce and upload the assets on the release commit:
 
 ```sh
 WHISPER_HOTKEY_BUNDLE_MODEL=1 WHISPER_HOTKEY_DISTRIBUTION=1 \
   WHISPER_HOTKEY_UNNOTARIZED=1 python3 build_app.py
+python3 tools/package_zip.py
 python3 tools/package_dmg.py --unnotarized
 python3 tools/package_release.py "v$(cat VERSION)"
+gh release create "v$(cat VERSION)" --title "whisper_hotkey $(cat VERSION)" \
+  --notes-file RELEASE_NOTES.md --verify-tag
 gh release upload "v$(cat VERSION)" --clobber dist/release/*
 ```
+
+`package_release.py` refuses a dirty tree and a tag that does not match
+`VERSION`, so commit and tag before packaging. The ZIP and DMG are ~1.2 GB
+each; uploading them in separate `gh release upload` calls makes a failure
+easier to retry. Confirm what landed with
+`shasum -a 256 -c dist/release/*.sha256` and by diffing the published
+`.sha256` files against the local ones.
 
 ## Guardrails
 
