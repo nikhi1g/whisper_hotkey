@@ -96,12 +96,24 @@ for this engine.
 Measured on the repository's own LibriSpeech benchmark (100 utterances across
 test-clean and test-other, Apple M5 Pro, warm model):
 
-| Engine | Combined WER | test-clean | test-other | Mean latency | Speed | Disk |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Turbo Q5 + Metal (Precision) | 4.32% | 2.26% | 6.67% | 321 ms | 21.5x | 547 MB |
-| Turbo Q5 + Metal (Smart Decode) | 4.04% | 2.15% | 6.20% | 305 ms | 22.7x | 547 MB |
-| Parakeet Fast | 3.88% | 2.36% | 5.61% | 34 ms | 206x | 219 MB |
-| Parakeet Balanced | 2.62% | 1.54% | 3.86% | 56 ms | 123x | 443 MB |
+| Engine | Combined WER | test-clean | test-other | Mean | p50 | p95 | Disk |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Turbo Q5 + Metal (Precision) | 4.32% | 2.26% | 6.67% | 336 ms | 320 ms | 426 ms | 547 MB |
+| Turbo Q5 + Metal (Smart Decode) | 4.04% | 2.15% | 6.20% | 316 ms | 303 ms | 365 ms | 547 MB |
+| Parakeet Fast | 3.88% | 2.36% | 5.61% | 36 ms | 33 ms | **55 ms** | 219 MB |
+| Parakeet Balanced | 2.62% | 1.54% | 3.86% | 60 ms | 56 ms | 88 ms | 443 MB |
+| **Parakeet Unified** (default) | **2.46%** | **1.44%** | **3.63%** | **54 ms** | **45 ms** | 117 ms | 594 MB |
+
+Unified is the shipping default and wins every accuracy measure and both mean
+and median latency. Its one regression is the tail: it transcribes audio longer
+than 15 s with overlapping windows, so its p95 is the worst of the three
+Parakeet variants. A dictation phrase is far shorter than that, which is why
+the median is the number that governs how the app feels.
+
+Latencies were re-measured on the 4.2.3 build and run 8-10% above the figures
+published with 3.5.0 across every engine, including the ones whose decode is
+byte-identical. That is machine load, not a regression; the ordering and the
+WER figures reproduce exactly.
 
 Two behaviors differ from the whisper engines and are intentional:
 
