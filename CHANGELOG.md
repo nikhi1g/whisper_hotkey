@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.2.4: 2026-08-07
+
+- Removed the accuracy coordinator, which never ran. It returned to the plain
+  recognizer on its first line for any engine other than Whisper, and Parakeet
+  has been the default since 3.7.0, so it was skipped on every dictation a
+  shipped install performs. On the Whisper path it was a pass-through. 1,542
+  lines left the app; no behaviour changed
+- Measured what it would have been worth before deleting it. An oracle that
+  always picks the better of Parakeet Unified and Balanced scores 2.13% WER
+  against Unified's 2.46%, and the per-token confidence needed to approach that
+  is not exposed by the Parakeet runtime. Both arbiters that need no confidence
+  score worse than shipping Unified alone. The analysis is kept in
+  `Benchmarks/Scripts/ensemble_ceiling.py` and the code on the
+  `accuracy/parakeet-dual-pass` branch
+- Smart Decode is unaffected. It never depended on the coordinator: the
+  recognizer derives its strategy from the stored decoding profile and the
+  adaptive fallback lives in the helper, still measured at 4.04% WER against
+  Precision's 4.32%
+- Fixed the LibriSpeech benchmark harness, which the v2 helper protocol had
+  broken three ways. One raised a `KeyError`; the other two were silent and
+  made Smart Decode look like it had stopped working, reporting the same WER as
+  greedy with a 0% fallback rate. It had not
+- Gave Parakeet Unified its own row in the engine table. It became the default
+  in 3.7.0 and the one configuration a new install runs was the one the table
+  did not describe
+
 ## 4.2.3: 2026-08-07
 
 - Fixed Return and Escape doing nothing during dictation. 3.7.0 stopped asking
