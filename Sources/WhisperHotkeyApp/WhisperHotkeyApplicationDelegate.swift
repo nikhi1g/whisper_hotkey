@@ -740,7 +740,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 guard let self else {
                     return
                 }
-                let transcript = try await self.transcribeWithCoordinator(
+                let transcript = try await self.recognizer.transcribe(
                     audio,
                     prompt: recognitionPrompt
                 )
@@ -823,7 +823,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             do {
                 let transcript: String
                 if predecodeFailed {
-                    transcript = try await self.transcribeWithCoordinator(
+                    transcript = try await self.recognizer.transcribe(
                         recording,
                         prompt: internalDictionary.prompt
                     )
@@ -922,59 +922,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             process(.chunkedSessionFinished)
         }
         return true
-    }
-
-    private func transcribeWithCoordinator(
-        _ audio: WhisperAudioFile,
-        prompt: String?
-    ) async throws -> String {
-        if selectedEngine != .whisperCppMetal {
-            return try await recognizer.transcribe(audio, prompt: prompt)
-        }
-        guard let sampleMetadata = recognitionSampleMetadata(for: audio),
-              sampleMetadata.count > 0 else {
-            return try await recognizer.transcribe(audio, prompt: prompt)
-        }
-        let strategy: RecognitionDecodeStrategy =
-            decodingProfile == .adaptive ? .adaptive : .beam
-        let emitTokenData = strategy == .adaptive
-        let request = RecognitionRequest(
-            requestID: UUID().uuidString,
-            audioURL: audio.url,
-            prompt: prompt,
-            window: RecognitionWindow(
-                startSample: 0,
-                endSample: sampleMetadata.count,
-                sampleRate: sampleMetadata.sampleRate
-            ),
-            strategy: strategy,
-            emitTokenData: emitTokenData,
-            protocolVersion: 2
-        )
-        let provider = WhisperTurboCandidateProvider()
-        let coordinator = AccuracyCoordinator(
-            primaryProvider: provider,
-            secondaryProvider: strategy == .adaptive ? provider : nil
-        )
-        let decision = try await coordinator.finalize(request: request)
-        let cleaned = WhisperTranscriptSanitizer.clean(decision.selected.text)
-        guard !cleaned.isEmpty else {
-            throw WhisperASRError.noSpeech
-        }
-        return cleaned
-    }
-
-    private func recognitionSampleMetadata(
-        for audio: WhisperAudioFile
-    ) -> (count: Int64, sampleRate: Int)? {
-        guard let file = try? AVAudioFile(forReading: audio.url) else {
-            return nil
-        }
-        let sampleRate = Int(file.processingFormat.sampleRate)
-        guard sampleRate > 0 else {
-            return nil
-        }
-        return (Int64(file.length), sampleRate)
     }
 
     private func flushPredecodeChunkAndContinue() {
