@@ -95,6 +95,21 @@ final class RecognitionTests: XCTestCase {
         XCTAssertEqual(metal.suffix(2), ["-l", "en"])
     }
 
+    func testAccuracyCapableCommandFallbackOmitsOnlyNoTimestampFlag() {
+        let options = WhisperRecognitionOptions()
+        let arguments = WhisperCommandLineInvocation.arguments(
+            modelURL: URL(fileURLWithPath: "/private/model.bin"),
+            audioURL: URL(fileURLWithPath: "/private/audio.wav"),
+            options: options,
+            accuracyCapable: true
+        )
+
+        XCTAssertFalse(arguments.contains("-nt"))
+        XCTAssertTrue(arguments.contains("-np"))
+        XCTAssertTrue(arguments.contains("-sns"))
+        XCTAssertTrue(arguments.contains("-fa"))
+    }
+
     func testMetalClassifierIgnoresRoutineBackendLoadingForOtherErrors() {
         let ordinaryFailure = WhisperCommandLineProcess.Failure(
             status: 1,
@@ -183,6 +198,52 @@ final class RecognitionTests: XCTestCase {
         )
         XCTAssertEqual(fallbackHypothesis.noSpeechProbability, 0.22)
         XCTAssertEqual(fallbackHypothesis.weakTokenFraction, 0.04)
+    }
+
+    func testHelperProtocolRetainsFlatSnakeCaseTimingAndEvidence() throws {
+        let event = #"{"event":"result","protocol_version":1,"request_id":"decode-1","engine":"whisperTurbo","model_id":"turbo-q5","pass":"primaryFullSession","text":"hello","window":{"start_sample":0,"end_sample":6400,"sample_rate":16000},"words":[{"text":"hello","start_seconds":0,"end_seconds":0.4,"posterior":0.8,"token_ids":[42],"token_log_probabilities":[-0.2]}],"segments":[{"text":"hello","start_seconds":0,"end_seconds":0.4,"words":[{"text":"hello","start_seconds":0,"end_seconds":0.4,"posterior":0.8}]}]}"#
+        let parsed = try WhisperHelperProtocol.parse(event)
+        guard case .resultRich(let hypothesis) = parsed else {
+            XCTFail("Expected resultRich")
+            return
+        }
+
+        XCTAssertEqual(hypothesis.metadata["requestID"], "decode-1")
+        XCTAssertEqual(hypothesis.modelID, "turbo-q5")
+        XCTAssertEqual(hypothesis.words.first?.startSeconds, 0)
+        XCTAssertEqual(hypothesis.words.first?.endSeconds, 0.4)
+        XCTAssertEqual(hypothesis.words.first?.confidence, 0.8)
+        XCTAssertEqual(hypothesis.segments.first?.words.count, 1)
+    }
+
+    func testHelperProtocolParsesNestedV2EvidenceWithoutInventingAlternatives()
+        throws
+    {
+        let line = #"{"protocol_version":2,"event":"result","request_id":"11111111-2222-3333-4444-555555555555","result":{"session_id":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","generation":7,"engine":"whisperTurbo","model":{"identifier":"turbo-q5","compute_units":"metal"},"pass":"primaryFullSession","text":"hello world","words":[{"id":{"session_id":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","provider_decode_id":"decode-1","word_index":0},"text":"hello","start_seconds":0,"end_seconds":0.4,"raw_evidence":{"token_ids":[42],"token_log_probabilities":[-0.2],"posterior":0.8,"availability":7}}],"segments":[{"id":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","text":"hello world","start_seconds":0,"end_seconds":0.8,"word_ids":[]}],"alternatives":[],"utterance_evidence":{"average_log_probability":-0.2,"no_speech_probability":0.01,"maximum_no_speech_probability":0.01,"weak_token_fraction":0.02,"repetition_detected":false},"timing":{"audio_duration_seconds":0.8,"decode_duration_seconds":0.02},"completeness":"finalSession","pass_metadata":{"strategy":"beam","beam_size":5,"used_prompt":true,"prompt_character_count":12,"protocol_version":2,"request_id":"11111111-2222-3333-4444-555555555555","adaptive_fallback":false}}}"#
+
+        let parsed = try WhisperHelperProtocol.parse(line)
+        guard case .resultCanonical(let result) = parsed else {
+            XCTFail("Expected canonical v2 result")
+            return
+        }
+
+        XCTAssertEqual(result.text, "hello world")
+        XCTAssertEqual(result.words.count, 1)
+        XCTAssertEqual(result.words[0].rawEvidence.tokenIDs, [42])
+        XCTAssertEqual(result.words[0].rawEvidence.tokenLogProbabilities, [-0.2])
+        XCTAssertEqual(result.words[0].rawEvidence.posterior, 0.8)
+        XCTAssertEqual(result.passMetadata.strategy, "beam")
+        XCTAssertEqual(result.passMetadata.beamSize, 5)
+        XCTAssertTrue(result.passMetadata.usedPrompt)
+        XCTAssertEqual(result.passMetadata.promptCharacterCount, 12)
+        XCTAssertTrue(result.alternatives.isEmpty)
+    }
+
+    func testHelperProtocolRejectsOversizedLineBeforeDecoding() {
+        let line = "{\"event\":\"result\",\"text\":\""
+            + String(repeating: "x", count: 1_048_577)
+            + "\"}"
+        XCTAssertThrowsError(try WhisperHelperProtocol.parse(line))
     }
 
     func testTranscribeCommandIsOneJSONLineWithPrivatePath() throws {

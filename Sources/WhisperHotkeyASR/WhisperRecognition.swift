@@ -217,7 +217,8 @@ enum WhisperCommandLineInvocation {
         modelURL: URL,
         audioURL: URL,
         options: WhisperRecognitionOptions,
-        disableGPU: Bool = false
+        disableGPU: Bool = false,
+        accuracyCapable: Bool = false
     ) -> [String] {
         var arguments = [
             "-m", modelURL.path,
@@ -226,12 +227,18 @@ enum WhisperCommandLineInvocation {
             "-bs", options.strategy == .greedy
                 ? "1"
                 : String(options.beamSize),
-            "-nt",
             "-np",
             "-sns",
             "-fa",
             "-l", "en",
         ]
+        // The text-only fallback keeps the historical no-timestamps flag so
+        // existing output remains stable.  Rich callers explicitly opt into
+        // timestamp generation; their output is still consumed as text by
+        // the sanitizer when no structured helper result is available.
+        if !accuracyCapable {
+            arguments.insert("-nt", at: arguments.firstIndex(of: "-np") ?? arguments.endIndex)
+        }
         if disableGPU {
             arguments.append("-ng")
         }
@@ -243,6 +250,7 @@ enum WhisperHelperEvent: Equatable, Sendable {
     case ready
     case result(String)
     case resultRich(RecognitionHypothesis)
+    case resultCanonical(RecognitionResult)
     case error(code: String, message: String)
 }
 
@@ -270,10 +278,144 @@ enum WhisperHelperProtocol {
         let latencyMs: Double?
         let words: [EventWord]?
         let segments: [EventSegment]?
+        let alternatives: [EventAlternative]?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let limits = RecognitionDecodingLimits.default
+            event = try container.decode(String.self, forKey: .event)
+            text = try container.decodeIfPresent(String.self, forKey: .text)
+            code = try container.decodeIfPresent(String.self, forKey: .code)
+            message = try container.decodeIfPresent(String.self, forKey: .message)
+            protocolVersion = try container.decodeIfPresent(
+                Int.self,
+                forKey: .protocolVersion
+            )
+            requestID = try container.decodeIfPresent(String.self, forKey: .requestID)
+                ?? (try container.decodeIfPresent(String.self, forKey: .legacyRequestID))
+            engine = try container.decodeIfPresent(String.self, forKey: .engine)
+            modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
+                ?? (try container.decodeIfPresent(String.self, forKey: .legacyModelID))
+            pass = try container.decodeIfPresent(String.self, forKey: .pass)
+            window = try container.decodeIfPresent(EventWindow.self, forKey: .window)
+            sequenceScore = try container.decodeIfPresent(
+                Double.self,
+                forKey: .sequenceScore
+            )
+            averageLogProbability = try container.decodeIfPresent(
+                Double.self,
+                forKey: .averageLogProbability
+            )
+            noSpeechProbability = try container.decodeIfPresent(
+                Double.self,
+                forKey: .noSpeechProbability
+            )
+            maximumNoSpeechProbability = try container.decodeIfPresent(
+                Double.self,
+                forKey: .maximumNoSpeechProbability
+            )
+            repetitionDetected = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .repetitionDetected
+            )
+            adaptiveFallback = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .adaptiveFallback
+            )
+            requestedStrategy = try container.decodeIfPresent(
+                String.self,
+                forKey: .requestedStrategy
+            )
+            weakTokenFraction = try container.decodeIfPresent(
+                Double.self,
+                forKey: .weakTokenFraction
+            )
+            metadata = try container.decodeIfPresent(EventMetadata.self, forKey: .metadata)
+            latencyMs = try container.decodeIfPresent(Double.self, forKey: .latencyMs)
+            words = try Self.decodeArray(
+                EventWord.self,
+                from: container,
+                forKey: .words,
+                maximum: limits.maxWords,
+                field: "words"
+            )
+            segments = try Self.decodeArray(
+                EventSegment.self,
+                from: container,
+                forKey: .segments,
+                maximum: limits.maxSegments,
+                field: "segments"
+            )
+            alternatives = try Self.decodeArray(
+                EventAlternative.self,
+                from: container,
+                forKey: .alternatives,
+                maximum: limits.maxAlternatives,
+                field: "alternatives"
+            )
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case event
+            case text
+            case code
+            case message
+            case protocolVersion
+            case requestID = "requestId"
+            case legacyRequestID = "requestID"
+            case engine
+            case modelID = "modelId"
+            case legacyModelID = "modelID"
+            case pass
+            case window
+            case sequenceScore
+            case averageLogProbability
+            case noSpeechProbability
+            case maximumNoSpeechProbability
+            case repetitionDetected
+            case adaptiveFallback
+            case requestedStrategy
+            case weakTokenFraction
+            case metadata
+            case latencyMs
+            case words
+            case segments
+            case alternatives
+        }
+
+        private static func decodeArray<Element: Decodable, Key: CodingKey>(
+            _ type: Element.Type,
+            from container: KeyedDecodingContainer<Key>,
+            forKey key: Key,
+            maximum: Int,
+            field: String
+        ) throws -> [Element]? {
+            guard container.contains(key), try !container.decodeNil(forKey: key) else {
+                return nil
+            }
+            let nested = try container.nestedUnkeyedContainer(forKey: key)
+            guard let count = nested.count else {
+                throw RecognitionContractError.malformed(
+                    "cannot determine (field) count"
+                )
+            }
+            guard count <= maximum else {
+                throw RecognitionContractError.limitExceeded(
+                    field: field,
+                    actual: count,
+                    maximum: maximum
+                )
+            }
+            return try container.decode([Element].self, forKey: key)
+        }
 
         struct EventMetadata: Decodable {
             let adaptiveFallback: Bool?
             let requestedStrategy: String?
+            let strategy: String?
+            let beamSize: Int?
+            let usedPrompt: Bool?
+            let promptCharacterCount: Int?
             let weakTokenFraction: Double?
             let noSpeechProbability: Double?
             let maximumNoSpeechProbability: Double?
@@ -290,12 +432,155 @@ enum WhisperHelperProtocol {
             let startSeconds: Double?
             let endSeconds: Double?
             let confidence: Double?
+            let posterior: Double?
+            let logProbability: Double?
+            let tokenIDs: [Int]?
+            let tokenLogProbabilities: [Double]?
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                let limits = RecognitionDecodingLimits.default
+                text = try container.decode(String.self, forKey: .text)
+                startSeconds = try container.decodeIfPresent(
+                    Double.self,
+                    forKey: .startSeconds
+                )
+                endSeconds = try container.decodeIfPresent(
+                    Double.self,
+                    forKey: .endSeconds
+                )
+                confidence = try container.decodeIfPresent(
+                    Double.self,
+                    forKey: .confidence
+                )
+                posterior = try container.decodeIfPresent(
+                    Double.self,
+                    forKey: .posterior
+                )
+                logProbability = try container.decodeIfPresent(
+                    Double.self,
+                    forKey: .logProbability
+                )
+                tokenIDs = try Self.decodeArray(
+                    Int.self,
+                    from: container,
+                    forKey: .tokenIDs,
+                    maximum: limits.maxTokensPerWord,
+                    field: "word.token_ids"
+                ) ?? (try Self.decodeArray(
+                    Int.self,
+                    from: container,
+                    forKey: .legacyTokenIDs,
+                    maximum: limits.maxTokensPerWord,
+                    field: "word.token_ids"
+                ))
+                tokenLogProbabilities = try Self.decodeArray(
+                    Double.self,
+                    from: container,
+                    forKey: .tokenLogProbabilities,
+                    maximum: limits.maxTokenLogProbabilitiesPerWord,
+                    field: "word.token_log_probabilities"
+                )
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case text
+                case startSeconds
+                case endSeconds
+                case confidence
+                case posterior
+                case logProbability
+                case tokenIDs = "tokenIds"
+                case legacyTokenIDs = "tokenIDs"
+                case tokenLogProbabilities
+            }
+
+            private static func decodeArray<Element: Decodable, Key: CodingKey>(
+                _ type: Element.Type,
+                from container: KeyedDecodingContainer<Key>,
+                forKey key: Key,
+                maximum: Int,
+                field: String
+            ) throws -> [Element]? {
+                guard container.contains(key), try !container.decodeNil(forKey: key) else {
+                    return nil
+                }
+                let nested = try container.nestedUnkeyedContainer(forKey: key)
+                guard let count = nested.count else {
+                    throw RecognitionContractError.malformed(
+                        "cannot determine (field) count"
+                    )
+                }
+                guard count <= maximum else {
+                    throw RecognitionContractError.limitExceeded(
+                        field: field,
+                        actual: count,
+                        maximum: maximum
+                    )
+                }
+                return try container.decode([Element].self, forKey: key)
+            }
         }
 
         struct EventSegment: Decodable {
             let text: String
             let startSeconds: Double
             let endSeconds: Double
+            let words: [EventWord]
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                text = try container.decode(String.self, forKey: .text)
+                startSeconds = try container.decode(Double.self, forKey: .startSeconds)
+                endSeconds = try container.decode(Double.self, forKey: .endSeconds)
+                let limits = RecognitionDecodingLimits.default
+                words = try Self.decodeArray(
+                    EventWord.self,
+                    from: container,
+                    forKey: .words,
+                    maximum: limits.maxWords,
+                    field: "segment.words"
+                ) ?? []
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case text
+                case startSeconds
+                case endSeconds
+                case words
+            }
+
+            private static func decodeArray<Element: Decodable, Key: CodingKey>(
+                _ type: Element.Type,
+                from container: KeyedDecodingContainer<Key>,
+                forKey key: Key,
+                maximum: Int,
+                field: String
+            ) throws -> [Element]? {
+                guard container.contains(key), try !container.decodeNil(forKey: key) else {
+                    return nil
+                }
+                let nested = try container.nestedUnkeyedContainer(forKey: key)
+                guard let count = nested.count else {
+                    throw RecognitionContractError.malformed(
+                        "cannot determine (field) count"
+                    )
+                }
+                guard count <= maximum else {
+                    throw RecognitionContractError.limitExceeded(
+                        field: field,
+                        actual: count,
+                        maximum: maximum
+                    )
+                }
+                return try container.decode([Element].self, forKey: key)
+            }
+        }
+
+        struct EventAlternative: Decodable {
+            let text: String
+            let score: Double?
+            let rank: Int?
         }
     }
 
@@ -341,11 +626,54 @@ enum WhisperHelperProtocol {
     }
 
     static func parse(_ line: String) throws -> WhisperHelperEvent {
-        guard let data = line.data(using: .utf8),
-              let envelope = try? JSONDecoder().decode(
-                  EventEnvelope.self,
-                  from: data
-              ) else {
+        guard let data = line.data(using: .utf8) else {
+            throw WhisperASRError.helperProtocolFailure
+        }
+        let limits = RecognitionDecodingLimits.default
+        guard data.count <= limits.maxLineBytes else {
+            throw WhisperASRError.helperProtocolFailure
+        }
+
+        // Protocol v2 carries the provider-neutral result under `result`.
+        // Decode it with the contract's bounded decoder before attempting the
+        // legacy flat envelope.  A malformed nested result must not be
+        // silently downgraded to a text-only result.
+        if let object = try? JSONSerialization.jsonObject(with: data),
+           let dictionary = object as? [String: Any],
+           dictionary["result"] is [String: Any] {
+            do {
+                let envelope = try RecognitionProtocolV2.decode(
+                    data: data,
+                    limits: limits
+                )
+                switch envelope.event {
+                case .result:
+                    guard let result = envelope.result else {
+                        throw WhisperASRError.helperProtocolFailure
+                    }
+                    return .resultCanonical(result)
+                case .ready:
+                    return .ready
+                case .error:
+                    guard let code = envelope.code else {
+                        throw WhisperASRError.helperProtocolFailure
+                    }
+                    return .error(
+                        code: code,
+                        message: envelope.message ?? "unknown error"
+                    )
+                }
+            } catch is RecognitionContractError {
+                throw WhisperASRError.helperProtocolFailure
+            }
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let envelope: EventEnvelope
+        do {
+            envelope = try decoder.decode(EventEnvelope.self, from: data)
+        } catch {
             throw WhisperASRError.helperProtocolFailure
         }
         switch envelope.event {
@@ -355,18 +683,35 @@ enum WhisperHelperProtocol {
             guard let text = envelope.text else {
                 throw WhisperASRError.helperProtocolFailure
             }
-            guard let protocolVersion = envelope.protocolVersion,
-                  protocolVersion >= 2,
-                  let engine = envelope.engine,
-                  let window = envelope.window
+            guard text.utf8.count <= limits.maxStringBytes else {
+                throw WhisperASRError.helperProtocolFailure
+            }
+            guard let protocolVersion = envelope.protocolVersion else {
+                return .result(text)
+            }
+            guard (1...RecognitionProtocolV2Envelope.version).contains(protocolVersion) else {
+                throw WhisperASRError.helperProtocolFailure
+            }
+            guard let engine = envelope.engine,
+                  let window = envelope.window,
+                  window.sampleRate > 0,
+                  window.startSample >= 0,
+                  window.endSample >= window.startSample
             else {
                 return .result(text)
+            }
+            guard Self.validLegacyEnvelope(
+                envelope,
+                limits: limits
+            ) else {
+                throw WhisperASRError.helperProtocolFailure
             }
             let adaptiveFallback = envelope.adaptiveFallback
                 ?? envelope.metadata?.adaptiveFallback
                 ?? false
             let requestedStrategy = envelope.requestedStrategy
                 ?? envelope.metadata?.requestedStrategy
+                ?? envelope.metadata?.strategy
             let weakTokenFraction = envelope.weakTokenFraction
                 ?? envelope.metadata?.weakTokenFraction
             let noSpeechProbability = envelope.noSpeechProbability
@@ -378,14 +723,28 @@ enum WhisperHelperProtocol {
                     text: $0.text,
                     startSeconds: $0.startSeconds,
                     endSeconds: $0.endSeconds,
-                    confidence: $0.confidence
+                    confidence: $0.posterior
+                        ?? ($0.confidence.flatMap {
+                            $0 >= 0 && $0 <= 1 ? $0 : nil
+                        })
                 )
             }
             let segments = (envelope.segments ?? []).map {
                 TimedSegment(
                     startSeconds: $0.startSeconds,
                     endSeconds: $0.endSeconds,
-                    text: $0.text
+                    text: $0.text,
+                    words: $0.words.map {
+                        TimedWord(
+                            text: $0.text,
+                            startSeconds: $0.startSeconds,
+                            endSeconds: $0.endSeconds,
+                            confidence: $0.posterior
+                                ?? ($0.confidence.flatMap {
+                                    $0 >= 0 && $0 <= 1 ? $0 : nil
+                                })
+                        )
+                    }
                 )
             }
             return .resultRich(
@@ -418,6 +777,11 @@ enum WhisperHelperProtocol {
                         "weakTokenFraction": weakTokenFraction != nil
                             ? String(weakTokenFraction!)
                             : "",
+                        "beamSize": envelope.metadata?.beamSize.map(String.init)
+                            ?? "",
+                        "usedPrompt": String(envelope.metadata?.usedPrompt ?? false),
+                        "promptCharacterCount": envelope.metadata?.promptCharacterCount
+                            .map(String.init) ?? "",
                     ],
                     latencyMilliseconds: envelope.latencyMs
                 )
@@ -433,6 +797,162 @@ enum WhisperHelperProtocol {
         default:
             throw WhisperASRError.helperProtocolFailure
         }
+    }
+
+    private static func validLegacyEnvelope(
+        _ envelope: EventEnvelope,
+        limits: RecognitionDecodingLimits
+    ) -> Bool {
+        func validTiming(start: Double?, end: Double?) -> Bool {
+            if let start, (!start.isFinite || start < 0) {
+                return false
+            }
+            if let end, (!end.isFinite || end < 0) {
+                return false
+            }
+            if let start, let end, end < start {
+                return false
+            }
+            return true
+        }
+
+        func validWord(_ word: EventEnvelope.EventWord) -> Bool {
+            guard word.text.utf8.count <= limits.maxStringBytes,
+                  validTiming(start: word.startSeconds, end: word.endSeconds)
+            else {
+                return false
+            }
+            if let posterior = word.posterior,
+               (!posterior.isFinite || posterior < 0 || posterior > 1) {
+                return false
+            }
+            if let logProbability = word.logProbability,
+               !logProbability.isFinite {
+                return false
+            }
+            if let confidence = word.confidence,
+               !confidence.isFinite {
+                return false
+            }
+            return word.tokenLogProbabilities?.allSatisfy(\.isFinite) ?? true
+        }
+
+        guard envelope.alternatives?.allSatisfy({
+            $0.text.utf8.count <= limits.maxStringBytes
+        }) ?? true else {
+            return false
+        }
+        guard envelope.words?.allSatisfy(validWord) ?? true else {
+            return false
+        }
+        return envelope.segments?.allSatisfy { segment in
+            segment.text.utf8.count <= limits.maxStringBytes
+                && validTiming(
+                    start: segment.startSeconds,
+                    end: segment.endSeconds
+                )
+                && segment.words.allSatisfy(validWord)
+        } ?? true
+    }
+
+    /// Converts either a nested v2 result or a legacy flat result into the
+    /// provider-neutral contract.  This is intentionally separate from
+    /// `parse`, whose `resultRich` case preserves the pre-v2 hypothesis API.
+    static func parseRichResult(_ line: String) throws -> RecognitionResult {
+        switch try parse(line) {
+        case .resultCanonical(let result):
+            return result
+        case .resultRich(let hypothesis):
+            return try canonicalResult(from: hypothesis)
+        case .result(let text):
+            let hypothesis = RecognitionHypothesis(
+                engine: .whisperTurbo,
+                pass: .primaryFullSession,
+                window: RecognitionWindow(startSample: 0, endSample: 0),
+                text: text
+            )
+            return try canonicalResult(from: hypothesis)
+        case .ready, .error:
+            throw WhisperASRError.helperProtocolFailure
+        }
+    }
+
+    private static func canonicalResult(
+        from hypothesis: RecognitionHypothesis
+    ) throws -> RecognitionResult {
+        let sessionID = UUID(
+            uuidString: hypothesis.metadata["sessionID"] ?? ""
+        ) ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        let providerDecodeID = hypothesis.metadata["requestID"].flatMap {
+            $0.isEmpty ? nil : $0
+        } ?? hypothesis.id.uuidString
+        let words = hypothesis.words.enumerated().map { index, word in
+            RecognizedWord(
+                id: StableWordID(
+                    sessionID: sessionID,
+                    providerDecodeID: providerDecodeID,
+                    wordIndex: index
+                ),
+                text: word.text,
+                startSeconds: word.startSeconds,
+                endSeconds: word.endSeconds,
+                rawEvidence: word.confidence.map {
+                    WordEvidence(posterior: $0, availability: .posterior)
+                } ?? .unavailable
+            )
+        }
+        let segments = hypothesis.segments.map { segment in
+            RecognizedSegment(
+                text: segment.text,
+                startSeconds: segment.startSeconds,
+                endSeconds: segment.endSeconds,
+                wordIDs: words.compactMap { word in
+                    guard let start = word.startSeconds,
+                          let end = word.endSeconds,
+                          start >= segment.startSeconds,
+                          end <= segment.endSeconds else { return nil }
+                    return word.id
+                }
+            )
+        }
+        return RecognitionResult(
+            sessionID: sessionID,
+            engine: hypothesis.engine,
+            model: ModelIdentity(
+                identifier: hypothesis.modelID ?? "unknown",
+                version: hypothesis.engineVersion
+            ),
+            pass: hypothesis.pass,
+            text: hypothesis.text,
+            words: words,
+            segments: segments,
+            utteranceEvidence: UtteranceEvidence(
+                sequenceScore: hypothesis.sequenceScore,
+                averageLogProbability: hypothesis.averageLogProbability,
+                noSpeechProbability: hypothesis.noSpeechProbability,
+                weakTokenFraction: hypothesis.weakTokenFraction,
+                repetitionDetected: hypothesis.repetitionDetected
+            ),
+            timing: RecognitionTiming(
+                audioDurationSeconds: hypothesis.window.durationSeconds,
+                decodeDurationSeconds: hypothesis.latencyMilliseconds.map {
+                    $0 / 1_000
+                }
+            ),
+            passMetadata: RecognitionPassMetadata(
+                strategy: hypothesis.metadata["requestedStrategy"],
+                beamSize: hypothesis.metadata["beamSize"].flatMap(Int.init),
+                usedPrompt: hypothesis.metadata["usedPrompt"] == "true",
+                promptCharacterCount: hypothesis.metadata["promptCharacterCount"].flatMap(
+                    Int.init
+                ),
+                protocolVersion: Int(
+                    hypothesis.metadata["protocolVersion"] ?? "2"
+                ) ?? 2,
+                requestID: hypothesis.metadata["requestID"],
+                adaptiveFallback: hypothesis.adaptiveFallback
+            )
+        )
     }
 
     static func transcribeCommand(
@@ -465,6 +985,29 @@ enum WhisperHelperProtocol {
         )
         data.append(0x0A)
         return data
+    }
+}
+
+private enum WhisperRecognitionPayload: Sendable {
+    case hypothesis(RecognitionHypothesis)
+    case result(RecognitionResult)
+
+    var hypothesisValue: RecognitionHypothesis {
+        switch self {
+        case .hypothesis(let hypothesis):
+            return hypothesis
+        case .result(let result):
+            return result.asHypothesis()
+        }
+    }
+
+    var resultValue: RecognitionResult {
+        switch self {
+        case .hypothesis(let hypothesis):
+            return hypothesis.asRecognitionResult()
+        case .result(let result):
+            return result
+        }
     }
 }
 
@@ -556,12 +1099,12 @@ public actor WhisperRecognizer {
         prompt: String? = nil,
         preserveAudio: Bool = false
     ) async throws -> String {
-        try await transcribe(
+        try await transcribePayload(
             audio,
             keepHelperLoaded: false,
             preserveAudio: preserveAudio,
             prompt: prompt
-        ).text
+        ).hypothesisValue.text
     }
 
     public func transcribeHypothesis(
@@ -570,14 +1113,14 @@ public actor WhisperRecognizer {
         pass: RecognitionPassKind = .primaryFullSession,
         strategy: WhisperDecodingStrategy = .beam,
         beamSize: Int = 5,
-        protocolVersion: Int = 1,
+        protocolVersion: Int = 2,
         requestID: String = UUID().uuidString,
         sampleStart: Int64? = nil,
         sampleEnd: Int64? = nil,
-        emitMetadata: Bool = false,
+        emitMetadata: Bool = true,
         preserveAudio: Bool = false
     ) async throws -> RecognitionHypothesis {
-        try await transcribe(
+        try await transcribePayload(
             audio,
             keepHelperLoaded: false,
             preserveAudio: preserveAudio,
@@ -590,7 +1133,39 @@ public actor WhisperRecognizer {
             sampleStart: sampleStart,
             sampleEnd: sampleEnd,
             emitMetadata: emitMetadata
-        )
+        ).hypothesisValue
+    }
+
+    /// Returns the complete provider-neutral result when the helper emits a
+    /// nested protocol-v2 envelope.  Legacy and command-line fallbacks remain
+    /// available through the same migration adapter.
+    public func transcribeResult(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil,
+        pass: RecognitionPassKind = .primaryFullSession,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        protocolVersion: Int = 2,
+        requestID: String = UUID().uuidString,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitMetadata: Bool = true,
+        preserveAudio: Bool = false
+    ) async throws -> RecognitionResult {
+        try await transcribePayload(
+            audio,
+            keepHelperLoaded: false,
+            preserveAudio: preserveAudio,
+            prompt: prompt,
+            pass: pass,
+            strategy: strategy,
+            beamSize: beamSize,
+            protocolVersion: protocolVersion,
+            requestID: requestID,
+            sampleStart: sampleStart,
+            sampleEnd: sampleEnd,
+            emitMetadata: emitMetadata
+        ).resultValue
     }
 
     /// Transcribes one ordered chunk while retaining the model process for the
@@ -600,12 +1175,12 @@ public actor WhisperRecognizer {
         prompt: String? = nil,
         preserveAudio: Bool = false
     ) async throws -> String {
-        try await transcribe(
+        try await transcribePayload(
             audio,
             keepHelperLoaded: true,
             preserveAudio: preserveAudio,
             prompt: prompt
-        ).text
+        ).hypothesisValue.text
     }
 
     public func transcribeChunkHypothesis(
@@ -614,14 +1189,14 @@ public actor WhisperRecognizer {
         pass: RecognitionPassKind = .provisional,
         strategy: WhisperDecodingStrategy = .beam,
         beamSize: Int = 5,
-        protocolVersion: Int = 1,
+        protocolVersion: Int = 2,
         requestID: String = UUID().uuidString,
         sampleStart: Int64? = nil,
         sampleEnd: Int64? = nil,
-        emitMetadata: Bool = false,
+        emitMetadata: Bool = true,
         preserveAudio: Bool = false
     ) async throws -> RecognitionHypothesis {
-        try await transcribe(
+        try await transcribePayload(
             audio,
             keepHelperLoaded: true,
             preserveAudio: preserveAudio,
@@ -634,7 +1209,7 @@ public actor WhisperRecognizer {
             sampleStart: sampleStart,
             sampleEnd: sampleEnd,
             emitMetadata: emitMetadata
-        )
+        ).hypothesisValue
     }
 
     public func finishContinuousSession() async {
@@ -652,7 +1227,7 @@ public actor WhisperRecognizer {
         }
     }
 
-    private func transcribe(
+    private func transcribePayload(
         _ audio: WhisperAudioFile,
         keepHelperLoaded: Bool,
         preserveAudio: Bool = false,
@@ -665,8 +1240,8 @@ public actor WhisperRecognizer {
         sampleStart: Int64? = nil,
         sampleEnd: Int64? = nil,
         emitMetadata: Bool = false
-    ) async throws -> RecognitionHypothesis {
-        let transcribeOperation: () async throws -> RecognitionHypothesis = { [self] in
+    ) async throws -> WhisperRecognitionPayload {
+        let transcribeOperation: () async throws -> WhisperRecognitionPayload = { [self] in
             let configuration = try resolvedConfiguration()
             if configuration.engine == .parakeetCoreML {
                 let transcript = try await transcribeWithParakeet(
@@ -674,7 +1249,7 @@ public actor WhisperRecognizer {
                     configuration: configuration,
                     keepLoaded: keepHelperLoaded || keepsModelReady
                 )
-                return RecognitionHypothesis(
+                return .hypothesis(RecognitionHypothesis(
                     engine: configuration.parakeetVariant.candidateEngineID,
                     pass: pass,
                     window: recognitionWindow(
@@ -685,7 +1260,7 @@ public actor WhisperRecognizer {
                     text: transcript,
                     modelID: configuration.parakeetVariant.rawValue,
                     engineVersion: "FluidAudio"
-                )
+                ))
             }
             let lease = try ensureLease()
             defer {
@@ -719,7 +1294,7 @@ public actor WhisperRecognizer {
                     switch event {
                     case .result(let text):
                         let transcript = try cleanedTranscript(text)
-                        return try fallbackHypothesis(
+                        return .hypothesis(try fallbackHypothesis(
                             configuration: configuration,
                             pass: pass,
                             audio: audio,
@@ -728,10 +1303,10 @@ public actor WhisperRecognizer {
                             protocolVersion: protocolVersion,
                             sampleStart: sampleStart,
                             sampleEnd: sampleEnd
-                        )
+                        ))
                     case .resultRich(let hypothesis):
                         let transcript = try cleanedTranscript(hypothesis.text)
-                        return RecognitionHypothesis(
+                        return .hypothesis(RecognitionHypothesis(
                             engine: hypothesis.engine,
                             pass: hypothesis.pass,
                             window: hypothesis.window,
@@ -746,7 +1321,10 @@ public actor WhisperRecognizer {
                             engineVersion: hypothesis.engineVersion,
                             metadata: hypothesis.metadata,
                             latencyMilliseconds: hypothesis.latencyMilliseconds
-                        )
+                        ))
+                    case .resultCanonical(let result):
+                        let transcript = try cleanedTranscript(result.text)
+                        return .result(sanitizedResult(result, text: transcript))
                     case .error:
                         throw helper.error(for: event)
                     case .ready:
@@ -772,7 +1350,8 @@ public actor WhisperRecognizer {
                         audioURL: audio.url,
                         options: options,
                         processController: processController,
-                        lease: lease
+                        lease: lease,
+                        emitEvidence: emitMetadata
                     )
                     if keepHelperLoaded {
                         readiness = .idle
@@ -781,7 +1360,7 @@ public actor WhisperRecognizer {
                         cachedHelperFailure = nil
                         readiness = .idle
                     }
-                    return try fallbackHypothesis(
+                    return .hypothesis(try fallbackHypothesis(
                         configuration: configuration,
                         pass: pass,
                         audio: audio,
@@ -790,7 +1369,7 @@ public actor WhisperRecognizer {
                         protocolVersion: protocolVersion,
                         sampleStart: sampleStart,
                         sampleEnd: sampleEnd
-                    )
+                    ))
                 }
             } onCancel: {
                 self.processController.cancel(lease, wait: false)
@@ -802,9 +1381,9 @@ public actor WhisperRecognizer {
         }
 
         do {
-            let hypothesis = try await transcribeOperation()
+            let payload = try await transcribeOperation()
             audio.delete()
-            return hypothesis
+            return payload
         } catch {
             audio.delete()
             throw error
@@ -1140,12 +1719,35 @@ public actor WhisperRecognizer {
         return transcript
     }
 
+    private func sanitizedResult(
+        _ result: RecognitionResult,
+        text: String
+    ) -> RecognitionResult {
+        guard result.text != text else { return result }
+        return RecognitionResult(
+            sessionID: result.sessionID,
+            generation: result.generation,
+            engine: result.engine,
+            model: result.model,
+            pass: result.pass,
+            text: text,
+            words: result.words,
+            segments: result.segments,
+            alternatives: result.alternatives,
+            utteranceEvidence: result.utteranceEvidence,
+            timing: result.timing,
+            completeness: result.completeness,
+            passMetadata: result.passMetadata
+        )
+    }
+
     private static func runCommandLineFallback(
         configuration: WhisperRuntimeConfiguration,
         audioURL: URL,
         options: WhisperRecognitionOptions,
         processController: OwnedProcessController,
-        lease: OwnedProcessController.Lease
+        lease: OwnedProcessController.Lease,
+        emitEvidence: Bool = false
     ) async throws -> String {
         guard let executableURL = configuration.commandLineExecutableURL else {
             throw WhisperASRError.commandLineUnavailable
@@ -1156,7 +1758,8 @@ public actor WhisperRecognizer {
                 arguments: WhisperCommandLineInvocation.arguments(
                     modelURL: configuration.modelURL,
                     audioURL: audioURL,
-                    options: options
+                    options: options,
+                    accuracyCapable: emitEvidence
                 ),
                 timeout: options.transcriptionTimeout,
                 processController: processController,
@@ -1171,7 +1774,8 @@ public actor WhisperRecognizer {
                         modelURL: configuration.modelURL,
                         audioURL: audioURL,
                         options: options,
-                        disableGPU: true
+                        disableGPU: true,
+                        accuracyCapable: emitEvidence
                     ),
                     timeout: options.transcriptionTimeout,
                     processController: processController,
@@ -1327,6 +1931,8 @@ private final class WhisperHelperSession: @unchecked Sendable {
         case .result:
             return event
         case .resultRich:
+            return event
+        case .resultCanonical:
             return event
         case .error:
             throw error(for: event)
