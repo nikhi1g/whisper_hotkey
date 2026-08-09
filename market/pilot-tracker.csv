@@ -1,0 +1,2 @@
+participant_id,segment,consent_date,mac_chip,ram_gb,macos,microphone,current_tool,install_attempted,gatekeeper_passed,permissions_complete,first_dictation_success,scripted_trials,first_word_losses,double_insertions,wrong_target_events,stuck_ui_events,correction_count_per_100_words,week1_three_sessions,week2_three_sessions,week4_active,top_problem_code,follow_up_allowed,testimonial_permission,notes_link
+P001,"","","","","","","",false,false,false,false,0,0,0,0,0,"",false,false,false,"",false,none,""

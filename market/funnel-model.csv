@@ -1,0 +1,13 @@
+scenario,stage,conversion_from_prior,people_per_100_visitors,assumption_not_observation
+Current_unnotarized,Relevant landing visitor,100%,100,"Starting cohort"
+Current_unnotarized,Clicks or starts download,22%,22,"Hypothetical until traffic is measured"
+Current_unnotarized,Launches after Open Anyway,50%,11,"Hypothetical Gatekeeper completion"
+Current_unnotarized,Completes three permissions,60%,6.6,"Hypothetical permission completion"
+Current_unnotarized,Completes first dictation,85%,5.61,"Hypothetical post-permission success"
+Current_unnotarized,Active in week two,50%,2.805,"Hypothetical retention"
+Notarized_and_clear_onboarding,Relevant landing visitor,100%,100,"Starting cohort"
+Notarized_and_clear_onboarding,Clicks or starts download,25%,25,"Hypothetical trust/CTA improvement"
+Notarized_and_clear_onboarding,Launches app,90%,22.5,"Hypothetical normal Gatekeeper path"
+Notarized_and_clear_onboarding,Completes permissions,70%,15.75,"Hypothetical clearer permission UX"
+Notarized_and_clear_onboarding,Completes first dictation,85%,13.3875,"Hypothetical post-permission success"
+Notarized_and_clear_onboarding,Active in week two,55%,7.3631,"Hypothetical retention"
