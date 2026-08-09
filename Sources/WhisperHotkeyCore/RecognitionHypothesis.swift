@@ -204,3 +204,24 @@ public struct RecognitionCapabilities: OptionSet, Sendable, Codable {
         self.rawValue = rawValue
     }
 }
+
+public extension RecognitionHypothesis {
+    /// Compatibility projection for callers that have not migrated from the
+    /// string-only recognition boundary yet.
+    var renderedText: String { text }
+
+    /// Migration adapter for callers that still receive a hypothesis from a
+    /// provider.  Supplying the session ID keeps word identity deterministic.
+    func asRecognitionResult(
+        sessionID: UUID = UUID(),
+        generation: UInt64 = 0,
+        completeness: DecodeCompleteness = .finalSession
+    ) -> RecognitionResult {
+        RecognitionResult(
+            hypothesis: self,
+            sessionID: sessionID,
+            generation: generation,
+            completeness: completeness
+        )
+    }
+}
