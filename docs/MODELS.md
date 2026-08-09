@@ -29,6 +29,24 @@ migrates to Turbo.
 Memory varies with whisper.cpp, Metal allocation, and recording length, so the
 menu shows download size rather than promising a fixed RAM number.
 
+## Phase 1 enhancement status
+
+The app contains a bounded selective-repair pipeline, but the shipping policy
+is currently **primary-only**. Repair is disabled unless a provider/model/profile
+specific calibration artifact matches the runtime and the frozen benchmark,
+safety, latency, memory, and thermal gates all pass. No verifier is downloaded,
+loaded, or kept resident by this Phase 1 change.
+
+The offline experiment matrix considers Parakeet Unified, full Whisper
+large-v3, Parakeet 1.1B variants, and optional Qwen3-ASR as possible local
+verifiers. Those artifacts/runtimes are not installed or pinned for production,
+their additional disk and peak-memory costs are unmeasured on this checkout,
+and the required consented application/public-recovery corpora are absent.
+Consequently no candidate is promoted and no sub-1% WER claim is made. The
+default `repairPolicy: .disabled` is the tested rollback: the selected primary
+engine remains authoritative while deterministic lexical-invariant formatting
+may still restore presentation without changing words.
+
 ## Processing
 
 Settings provides three processing chips directly below the model picker:

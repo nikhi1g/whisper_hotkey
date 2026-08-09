@@ -11,9 +11,12 @@ flowchart LR
     H["Global hotkey event tap"] --> A["App orchestrator"]
     A --> R["AVAudioEngine recorder"]
     R --> W["Private 16 kHz mono WAV"]
-    A --> M["WhisperModelHelper"]
-    W --> M
-    M --> T["Local transcript"]
+    A --> C["Recognition pipeline coordinator"]
+    W --> C
+    C --> M["Selected local Whisper or Parakeet runtime"]
+    M --> E["Rich words, timing, and evidence"]
+    E --> C
+    C --> T["Canonical local transcript"]
     T --> P["Clipboard transaction"]
     P --> D["Focused macOS app"]
     A --> B["Non-activating caret badge"]
@@ -98,6 +101,37 @@ search once. Smart Decode runs a deterministic one-candidate greedy pass,
 checks token confidence and repetition in memory, and runs the same Precision
 beam only when the first pass is uncertain. Confidence metadata is consumed
 only for the active inference and is never logged or persisted.
+
+## Phase 1 recognition pipeline
+
+Both provider adapters now return the same bounded rich-result contract:
+stable word identifiers, word/segment timing when the runtime supplies it,
+alternatives and acoustic/decoder evidence when available, pass provenance,
+and explicit missing-evidence states. No provider-facing application path
+collapses recognition to a bare string before orchestration.
+
+`RecognitionPipelineCoordinator` owns the active generation, canonical words,
+original session audio, optional bounded enhancement work, and the only route
+to text delivery. Decode While Speaking reconciles overlapping windows through
+one bounded stable-prefix/revisable-tail accumulator. Pause Mode crosses the
+delivery boundary only for accumulator-approved complete sentences; its
+provisional tail stays in memory until final reconciliation. Cancellation
+invalidates the generation before waiting for child work, so late results
+cannot paste, and canonical audio is deleted only after every borrower unwinds.
+
+The formatter is deterministic and lexically invariant: it may label spacing,
+capitalization, punctuation, and sentence boundaries but cannot replace words.
+The selective-repair components use calibrated provider evidence, bounded
+original-audio spans, timestamp-aware alignment, and locked-word fusion.
+Shipping configuration deliberately sets repair to `disabled`; it can become
+eligible only with a matching calibration artifact and measured promotion
+gates. Formatter, verifier, or deadline failures fall back to the selected
+primary result. This default is also the instant primary-only rollback path.
+
+The Phase 1 code adds no speaker identity, user acoustic profile, training,
+ordinary-user corpus, transcript history, cloud request, or persistent
+recognition evidence. Benchmark and verifier reports are aggregate-only and
+reject content-bearing fields.
 
 ## State and delivery
 
