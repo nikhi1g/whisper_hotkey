@@ -29,9 +29,12 @@ public final class WhisperAudioFile: @unchecked Sendable {
     public let url: URL
 
     private let directoryURL: URL
-    private let fileManager: FileManager
+    private let storage: WhisperAudioLease.Storage
+    private let resourceID: WhisperAudioLease.Storage.ResourceID
+    private let holder: WhisperAudioLease.Holder
+    private let sessionOwned: Bool
+    private let maximumSpanDuration: TimeInterval
     private let lock = NSLock()
-    private var deleted = false
     private var recordedSpeechPresence: WhisperSpeechPresence
 
     init(
@@ -40,9 +43,69 @@ public final class WhisperAudioFile: @unchecked Sendable {
         fileManager: FileManager = .default,
         speechPresence: WhisperSpeechPresence = .unknown
     ) {
+        let storage = WhisperAudioLease.Storage(
+            rootURL: directoryURL,
+            fileManager: fileManager,
+            initiallyFinished: false
+        )
+        guard let resourceID = storage.register(
+            directoryURL: directoryURL,
+            canonical: true
+        ) else {
+            preconditionFailure("A standalone audio file must be borrowable.")
+        }
+        guard let holder = storage.acquire(resourceID) else {
+            preconditionFailure("A standalone audio file must be borrowable.")
+        }
         self.url = url
         self.directoryURL = directoryURL
-        self.fileManager = fileManager
+        self.storage = storage
+        self.resourceID = resourceID
+        self.holder = holder
+        sessionOwned = false
+        maximumSpanDuration = WhisperAudioLease.defaultMaximumSpanDuration
+        recordedSpeechPresence = speechPresence
+    }
+
+    convenience init(
+        url: URL,
+        directoryURL: URL,
+        storage: WhisperAudioLease.Storage,
+        resourceID: WhisperAudioLease.Storage.ResourceID,
+        speechPresence: WhisperSpeechPresence,
+        maximumSpanDuration: TimeInterval = WhisperAudioLease
+            .defaultMaximumSpanDuration
+    ) {
+        guard let holder = storage.acquire(resourceID) else {
+            preconditionFailure("A session audio file must be borrowable.")
+        }
+        self.init(
+            url: url,
+            directoryURL: directoryURL,
+            storage: storage,
+            resourceID: resourceID,
+            speechPresence: speechPresence,
+            maximumSpanDuration: maximumSpanDuration,
+            holder: holder
+        )
+    }
+
+    init(
+        url: URL,
+        directoryURL: URL,
+        storage: WhisperAudioLease.Storage,
+        resourceID: WhisperAudioLease.Storage.ResourceID,
+        speechPresence: WhisperSpeechPresence,
+        maximumSpanDuration: TimeInterval,
+        holder: WhisperAudioLease.Holder
+    ) {
+        self.url = url
+        self.directoryURL = directoryURL
+        self.storage = storage
+        self.resourceID = resourceID
+        self.holder = holder
+        sessionOwned = true
+        self.maximumSpanDuration = maximumSpanDuration
         recordedSpeechPresence = speechPresence
     }
 
@@ -51,14 +114,58 @@ public final class WhisperAudioFile: @unchecked Sendable {
     }
 
     public func delete() {
-        let shouldDelete = lock.withLock {
-            guard !deleted else { return false }
-            deleted = true
-            return true
+        holder.release()
+        if !sessionOwned {
+            storage.finish()
         }
-        if shouldDelete {
-            try? fileManager.removeItem(at: directoryURL)
+    }
+
+
+    /// Borrows this file for one asynchronous child task. The recognizer
+    /// releases this holder after cancellation, failure, or completion.
+    func acquireLeaseHolder() -> WhisperAudioLease.Holder? {
+        storage.acquire(resourceID)
+    }
+
+    /// Marks an inference segment as no longer writable. Its directory is
+    /// removed after the last holder releases, without waiting for the
+    /// canonical recording's session to finish.
+    func retire() {
+        storage.retire(resourceID)
+    }
+
+    /// Returns an immutable bounded view without copying or materializing WAV.
+    public func makeSpan(
+        startSample: Int64,
+        endSample: Int64,
+        sampleRate: Int
+    ) throws -> WhisperAudioSpan {
+        guard !storage.isFinished else {
+            throw WhisperAudioLeaseError.leaseFinished
         }
+        guard sampleRate > 0,
+              startSample >= 0,
+              endSample > startSample,
+              endSample >= 0
+        else {
+            throw WhisperAudioLeaseError.invalidSpanBounds
+        }
+        let sampleCount = endSample - startSample
+        guard Double(sampleCount)
+            <= maximumSpanDuration * Double(sampleRate)
+        else {
+            throw WhisperAudioLeaseError.spanTooLong
+        }
+        guard let holder = storage.acquire(resourceID) else {
+            throw WhisperAudioLeaseError.leaseFinished
+        }
+        return WhisperAudioSpan(
+            url: url,
+            startSample: startSample,
+            endSample: endSample,
+            sampleRate: sampleRate,
+            holder: holder
+        )
     }
 
     public var speechPresence: WhisperSpeechPresence {
@@ -79,6 +186,7 @@ public final class WhisperAudioRecorder {
     private let temporaryDirectory: URL
     private var writer: WhisperWAVWriter?
     private var audioFile: WhisperAudioFile?
+    private var audioLease: WhisperAudioLease?
     private var inputTapInstalled = false
 
     public init(
@@ -136,9 +244,11 @@ public final class WhisperAudioRecorder {
     }
 
     deinit {
+        let lease = audioLease
         engineBox.stop(removeInputTap: inputTapInstalled)
         writer?.finish()
         audioFile?.delete()
+        lease?.finish()
     }
 
     @discardableResult
@@ -215,6 +325,7 @@ public final class WhisperAudioRecorder {
             try engineBox.engine.start()
             return audioFile.url
         } catch {
+            let lease = audioLease
             engineBox.engine.stop()
             removeInputTap()
             writer?.finish()
@@ -222,6 +333,8 @@ public final class WhisperAudioRecorder {
             self.audioFile = nil
             audioFile.delete()
             segmentAudioFile?.delete()
+            lease?.finish()
+            audioLease = nil
             if let error = error as? WhisperASRError {
                 throw error
             }
@@ -235,6 +348,7 @@ public final class WhisperAudioRecorder {
         guard let audioFile else {
             throw WhisperASRError.noActiveRecording
         }
+        let lease = audioLease
         engineBox.engine.stop()
         removeInputTap()
         let speechPresence = writer?.speechPresence ?? .unknown
@@ -244,11 +358,15 @@ public final class WhisperAudioRecorder {
 
         if writeError != nil {
             audioFile.delete()
+            lease?.finish()
+            audioLease = nil
             throw WhisperASRError.captureFailed(
                 "Writing microphone audio failed."
             )
         }
         audioFile.setSpeechPresence(speechPresence)
+        lease?.finish()
+        audioLease = nil
         return audioFile
     }
 
@@ -288,6 +406,7 @@ public final class WhisperAudioRecorder {
         guard let audioFile, let writer else {
             throw WhisperASRError.noActiveRecording
         }
+        let lease = audioLease
         engineBox.engine.stop()
         removeInputTap()
         let speechPresence = writer.speechPresence
@@ -298,43 +417,49 @@ public final class WhisperAudioRecorder {
         guard result.error == nil, let finalSegment = result.segment else {
             audioFile.delete()
             result.segment?.delete()
+            lease?.finish()
+            audioLease = nil
             throw WhisperASRError.captureFailed(
                 "Writing microphone audio failed."
             )
         }
         audioFile.setSpeechPresence(speechPresence)
+        lease?.finish()
+        audioLease = nil
         return (audioFile, finalSegment)
     }
 
     public func cancel() {
+        let lease = audioLease
         engineBox.engine.stop()
         removeInputTap()
         writer?.finish()
         writer = nil
         audioFile?.delete()
         audioFile = nil
+        lease?.finish()
+        audioLease = nil
     }
 
     private func makePrivateAudioFile() throws -> WhisperAudioFile {
-        let directory = temporaryDirectory
-            .appendingPathComponent(
-                "whisper_hotkey-\(UUID().uuidString)",
-                isDirectory: true
-            )
+        if let audioLease {
+            do {
+                return try audioLease.makeChildFile()
+            } catch {
+                throw WhisperASRError.captureFailed(
+                    "Could not create private temporary storage."
+                )
+            }
+        }
+
         do {
-            try fileManager.createDirectory(
-                at: directory,
-                withIntermediateDirectories: false,
-                attributes: [.posixPermissions: 0o700]
-            )
-            let url = directory.appendingPathComponent("dictation.wav")
-            return WhisperAudioFile(
-                url: url,
-                directoryURL: directory,
+            let lease = try WhisperAudioLease.create(
+                in: temporaryDirectory,
                 fileManager: fileManager
             )
+            audioLease = lease
+            return lease.makeCanonicalFile()
         } catch {
-            try? fileManager.removeItem(at: directory)
             throw WhisperASRError.captureFailed(
                 "Could not create private temporary storage."
             )
@@ -530,6 +655,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
                 throw WhisperASRError.noActiveRecording
             }
             segmentFile = nil
+            completedAudioFile.retire()
             completedAudioFile.setSpeechPresence(
                 segmentSpeechDetector.presence
             )
@@ -550,13 +676,12 @@ final class WhisperWAVWriter: @unchecked Sendable {
             file = nil
             segmentFile = nil
             segmentFrameCount = 0
-            converter = nil
-            latestNormalizedInputLevel = 0
             let finalSegment = segmentAudioFile
             segmentAudioFile = nil
             finalSegment?.setSpeechPresence(
                 segmentSpeechDetector.presence
             )
+            finalSegment?.retire()
             if !retainSegment {
                 finalSegment?.delete()
             }
