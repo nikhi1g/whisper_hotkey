@@ -6,6 +6,45 @@ import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 final class ModeMatrixTests: XCTestCase {
+    func testEveryProcessingModePreparesSelectedModelDuringCapture() async {
+        for mode in ModelProcessingMode.allCases {
+            let counter = PreparationCounter()
+            let providers = RecognitionPipelineProviders(
+                primary: { _, request in
+                    RecognitionResult(
+                        sessionID: request.sessionID,
+                        generation: request.generation,
+                        engine: .parakeetUnifiedCoreML,
+                        text: "ready"
+                    )
+                },
+                preparePrimary: { await counter.increment() }
+            )
+            let coordinator = RecognitionPipelineCoordinator(
+                providers: providers,
+                configuration: RecognitionPipelineConfiguration(
+                    activationMode: .toggle,
+                    processingMode: mode
+                ),
+                delivery: { _ in }
+            )
+
+            await coordinator.beginSession(
+                generation: UInt64(mode.hashValue.magnitude + 1),
+                activationMode: .toggle,
+                processingMode: mode
+            )
+
+            let preparationCount = await counter.value()
+            XCTAssertEqual(
+                preparationCount,
+                1,
+                "\(mode) must hide model cold-start behind recording time."
+            )
+            await coordinator.cancel()
+        }
+    }
+
     @MainActor
     func testToggleFinalDeliveryTransitionsThroughInsertionAndClosesSession() {
         var machine = DictationStateMachine()
@@ -259,4 +298,10 @@ private actor MatrixEvents {
     private var events: [RecognitionPipelineDelivery] = []
     func append(_ event: RecognitionPipelineDelivery) { events.append(event) }
     func values() -> [RecognitionPipelineDelivery] { events }
+}
+
+private actor PreparationCounter {
+    private var count = 0
+    func increment() { count += 1 }
+    func value() -> Int { count }
 }

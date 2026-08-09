@@ -9,7 +9,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
-            GlobalInputRouting(consume: false, actions: [.armHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture), .armHold]
+            )
         )
         XCTAssertEqual(reducer.holdActivationFired(), .pressed)
         XCTAssertEqual(
@@ -64,7 +67,7 @@ final class HotkeyTests: XCTestCase {
             reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
             GlobalInputRouting(
                 consume: false,
-                actions: [.disarmHold]
+                actions: [.disarmHold, .hotkey(.cancelPrimedCapture)]
             )
         )
         XCTAssertNil(reducer.holdActivationFired())
@@ -103,7 +106,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, 56, command: true)),
-            GlobalInputRouting(consume: false, actions: [.disarmHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.disarmHold, .hotkey(.cancelPrimedCapture)]
+            )
         )
         XCTAssertNil(reducer.holdActivationFired())
     }
@@ -114,7 +120,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.routePointerDown(),
-            GlobalInputRouting(consume: false, actions: [.disarmHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.disarmHold, .hotkey(.cancelPrimedCapture)]
+            )
         )
         XCTAssertNil(reducer.holdActivationFired())
     }
@@ -147,16 +156,19 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.keyDown, MacVirtualKey.escape, command: true)),
-            GlobalInputRouting(consume: false, actions: [.disarmHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.disarmHold, .hotkey(.cancelPrimedCapture)]
+            )
         )
         XCTAssertNil(reducer.reset())
     }
 
-    func testResetDoesNotCancelAnArmedButUnstartedHold() {
+    func testResetDiscardsPrimedCaptureForAnUnacceptedHold() {
         var reducer = GlobalInputReducer()
         _ = reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true))
 
-        XCTAssertNil(reducer.reset())
+        XCTAssertEqual(reducer.reset(), .cancelPrimedCapture)
     }
 
     func testResetCancelsOneActiveHold() {
@@ -173,7 +185,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
-            GlobalInputRouting(consume: false)
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture)]
+            )
         )
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
@@ -245,7 +260,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
-            GlobalInputRouting(consume: false)
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.cancelPrimedCapture)]
+            )
         )
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
@@ -384,7 +402,10 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.reset())
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
-            GlobalInputRouting(consume: false, actions: [.armHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture), .armHold]
+            )
         )
     }
 
@@ -397,7 +418,10 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.reset())
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: true)),
-            GlobalInputRouting(consume: false)
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture)]
+            )
         )
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightCommand, command: false)),
@@ -433,7 +457,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.rightShift, command: true)),
-            GlobalInputRouting(consume: false, actions: [.armHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture), .armHold]
+            )
         )
         XCTAssertEqual(reducer.holdActivationFired(), .pressed)
         XCTAssertEqual(
@@ -451,7 +478,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.keyDown, MacVirtualKey.c, command: true)),
-            GlobalInputRouting(consume: false, actions: [.disarmHold])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.disarmHold, .hotkey(.cancelPrimedCapture)]
+            )
         )
         XCTAssertNil(reducer.holdActivationFired())
     }
@@ -486,7 +516,10 @@ final class HotkeyTests: XCTestCase {
 
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.function, command: true)),
-            GlobalInputRouting(consume: false)
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture)]
+            )
         )
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.function, command: false)),
@@ -565,7 +598,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
         )
         await fulfillment(of: [released], timeout: 1)
-        XCTAssertEqual(deliveries, [.pressed, .released])
+        XCTAssertEqual(deliveries, [.primeCapture, .pressed, .released])
     }
 
     func testHotkeyDeliveryIsDeferredOrderedAndUsesPhysicalTimestamps() async {
@@ -602,15 +635,15 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
         )
         await fulfillment(of: [started], timeout: 1)
-        XCTAssertEqual(deliveries.map(\.0), [.pressed])
+        XCTAssertEqual(deliveries.map(\.0), [.primeCapture, .pressed])
         XCTAssertFalse(didCaptureInsertionContext)
 
         XCTAssertFalse(
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
         )
         await fulfillment(of: [released], timeout: 1)
-        XCTAssertEqual(deliveries.map(\.0), [.pressed, .released])
-        XCTAssertEqual(deliveries.map(\.1), [1_000, 1_250])
+        XCTAssertEqual(deliveries.map(\.0), [.primeCapture, .pressed, .released])
+        XCTAssertEqual(deliveries.map(\.1), [1_000, 1_000, 1_250])
         XCTAssertTrue(didCaptureInsertionContext)
     }
 
@@ -618,7 +651,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         var deliveries: [HotkeyAction] = []
         var contextCaptureCount = 0
         let delivered = expectation(description: "toggle start and finish")
-        delivered.expectedFulfillmentCount = 2
+        delivered.expectedFulfillmentCount = 3
         let monitor = GlobalHotkeyMonitor(
             captureInsertionContext: {
                 contextCaptureCount += 1
@@ -672,7 +705,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         )
 
         await fulfillment(of: [delivered], timeout: 1)
-        XCTAssertEqual(deliveries, [.pressed, .released])
+        XCTAssertEqual(deliveries, [.primeCapture, .pressed, .released])
         XCTAssertEqual(contextCaptureCount, 1)
     }
 
@@ -686,7 +719,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         )
         var deliveries: [(HotkeyAction, DictationInsertionContext?)] = []
         let delivered = expectation(description: "toggle start and send")
-        delivered.expectedFulfillmentCount = 2
+        delivered.expectedFulfillmentCount = 3
         let monitor = GlobalHotkeyMonitor(
             captureInsertionContext: { expectedContext }
         ) { action, context, _ in
@@ -737,9 +770,13 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
         )
 
         await fulfillment(of: [delivered], timeout: 1)
-        XCTAssertEqual(deliveries.map(\.0), [.pressed, .insertAndSubmit])
+        XCTAssertEqual(
+            deliveries.map(\.0),
+            [.primeCapture, .pressed, .insertAndSubmit]
+        )
         XCTAssertNil(deliveries[0].1)
-        XCTAssertEqual(deliveries[1].1, expectedContext)
+        XCTAssertNil(deliveries[1].1)
+        XCTAssertEqual(deliveries[2].1, expectedContext)
     }
 
     func testTapDisableCancellationUsesDisablingEventTimestamp() async {
@@ -779,20 +816,22 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             )
         )
         await fulfillment(of: [cancelled], timeout: 1)
-        XCTAssertEqual(deliveries.map(\.0), [.pressed, .cancel])
-        XCTAssertEqual(deliveries.map(\.1), [2_000, 2_100])
+        XCTAssertEqual(deliveries.map(\.0), [.primeCapture, .pressed, .cancel])
+        XCTAssertEqual(deliveries.map(\.1), [2_000, 2_000, 2_100])
     }
 
     func testCommandChordCancelsPendingHoldTimer() async {
         var deliveries: [HotkeyAction] = []
-        let unexpectedDelivery = expectation(description: "no dictation")
-        unexpectedDelivery.isInverted = true
+        let provisionalCaptureDiscarded = expectation(
+            description: "provisional capture discarded"
+        )
+        provisionalCaptureDiscarded.expectedFulfillmentCount = 2
         let monitor = GlobalHotkeyMonitor(
             captureInsertionContext: { nil },
             holdActivationDelay: .milliseconds(20)
         ) { action, _, _ in
             deliveries.append(action)
-            unexpectedDelivery.fulfill()
+            provisionalCaptureDiscarded.fulfill()
         }
         let press = event(
             keyCode: MacVirtualKey.rightCommand,
@@ -820,13 +859,14 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: release)
         )
 
-        await fulfillment(of: [unexpectedDelivery], timeout: 0.08)
-        XCTAssertTrue(deliveries.isEmpty)
+        await fulfillment(of: [provisionalCaptureDiscarded], timeout: 1)
+        XCTAssertEqual(deliveries, [.primeCapture, .cancelPrimedCapture])
     }
 
     func testMonitorUsesSelectedModifierFlag() async {
         var deliveries: [HotkeyAction] = []
         let started = expectation(description: "right shift hold starts")
+        started.expectedFulfillmentCount = 2
         let monitor = GlobalHotkeyMonitor(
             captureInsertionContext: { nil },
             holdActivationDelay: .milliseconds(1)
@@ -847,7 +887,7 @@ final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
             monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
         )
         await fulfillment(of: [started], timeout: 1)
-        XCTAssertEqual(deliveries, [.pressed])
+        XCTAssertEqual(deliveries, [.primeCapture, .pressed])
     }
 
     private func event(

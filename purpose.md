@@ -48,8 +48,11 @@ The Settings **Dictation key** picker selects Right/Left Command, Shift,
 Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Option is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
-does not trigger dictation. Hold-to-talk is the default: a one-shot 150 ms dwell
-arms capture without polling, after which the microphone starts. Releasing
+does not trigger dictation. Private provisional microphone capture starts on
+the physical key-down edge so the beginning of speech is never lost. A
+shortcut, modifier-click, or rejected quick tap discards that audio without
+recognition, insertion, or runtime UI. Hold-to-talk is the default: a one-shot
+150 ms dwell accepts the provisional capture without polling. Releasing
 after at least 250 milliseconds transcribes once and pastes at the current
 focus. The selected Processing policy controls when the model loads and whether
 hidden background decoding occurs. A faster tap does nothing.
@@ -57,7 +60,9 @@ hidden background decoding occurs. A faster tap does nothing.
 The **Input behavior** picker offers explicit **Press and Hold**, **Toggle**, and
 **Pause Mode** choices. The selected mode persists across launches. The three
 choices appear as one-click segmented chips, avoiding an extra menu interaction.
-Toggle changes the bare gesture to tap-to-start and tap-again-to-finish. Pause Mode
+Toggle changes the bare gesture to tap-to-start and tap-again-to-finish. Its
+first key-down primes capture and the bare release accepts it, making capture
+latency independent of the selected model. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
 and remains between 300 and 750 milliseconds. An accepted start prioritizes
@@ -150,8 +155,9 @@ The persistent **Processing** selector sits directly below the model picker.
 On a fresh first launch, Macs with at least 8 GB select **Decode While
 Speaking** for the shortest completion latency; lower-memory Macs select
 **After Recording**. Existing preferences are never replaced. **After
-Recording** loads and decodes only after capture finishes for the lowest idle
-memory. **Model Ready** keeps the selected helper
+Recording** prepares the selected model after capture is accepted, while the
+user is speaking, but performs no decode until capture finishes. It still keeps
+no model at idle. **Model Ready** keeps the selected helper
 and model loaded between dictations. **Decode While Speaking** also keeps one
 model loaded, then privately decodes bounded inference segments concurrently
 with ongoing capture. It prefers a detected pause after five seconds and rotates

@@ -202,6 +202,7 @@ public struct GlobalInputReducer: Sendable {
     private var bareHotkeyCandidate = false
     private var dictationHoldIsActive = false
     private var toggleSessionIsActive = false
+    private var captureIsPrimed = false
 
     public init(
         activationMode: HotkeyActivationMode = .hold,
@@ -224,14 +225,21 @@ public struct GlobalInputReducer: Sendable {
         guard activationMode != effectiveMode else {
             return nil
         }
-        let action: HotkeyAction? =
-            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        let action: HotkeyAction?
+        if dictationHoldIsActive || toggleSessionIsActive {
+            action = .cancel
+        } else if captureIsPrimed {
+            action = .cancelPrimedCapture
+        } else {
+            action = nil
+        }
         activationMode = effectiveMode
         hotkeyIsDown = false
         bareHotkeyCandidate = false
         completionKeyBeingConsumed = nil
         dictationHoldIsActive = false
         toggleSessionIsActive = false
+        captureIsPrimed = false
         return action
     }
 
@@ -239,8 +247,14 @@ public struct GlobalInputReducer: Sendable {
         guard hotkey != newHotkey else {
             return nil
         }
-        let action: HotkeyAction? =
-            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        let action: HotkeyAction?
+        if dictationHoldIsActive || toggleSessionIsActive {
+            action = .cancel
+        } else if captureIsPrimed {
+            action = .cancelPrimedCapture
+        } else {
+            action = nil
+        }
         hotkey = newHotkey
         if newHotkey.requiresToggleMode && activationMode == .hold {
             activationMode = .toggle
@@ -250,6 +264,7 @@ public struct GlobalInputReducer: Sendable {
         completionKeyBeingConsumed = nil
         dictationHoldIsActive = false
         toggleSessionIsActive = false
+        captureIsPrimed = false
         return action
     }
 
@@ -312,18 +327,26 @@ public struct GlobalInputReducer: Sendable {
             return nil
         }
         dictationHoldIsActive = true
+        captureIsPrimed = false
         return .pressed
     }
 
     /// Resets state after an event-tap disable or monitor stop. An active hold
     /// becomes exactly one cancellation.
     public mutating func reset() -> HotkeyAction? {
-        let action: HotkeyAction? =
-            dictationHoldIsActive || toggleSessionIsActive ? .cancel : nil
+        let action: HotkeyAction?
+        if dictationHoldIsActive || toggleSessionIsActive {
+            action = .cancel
+        } else if captureIsPrimed {
+            action = .cancelPrimedCapture
+        } else {
+            action = nil
+        }
         hotkeyIsDown = false
         bareHotkeyCandidate = false
         dictationHoldIsActive = false
         toggleSessionIsActive = false
+        captureIsPrimed = false
         completionKeyBeingConsumed = nil
         return action
     }
@@ -369,9 +392,10 @@ public struct GlobalInputReducer: Sendable {
     private mutating func armHoldHotkey() -> GlobalInputRouting {
         hotkeyIsDown = true
         bareHotkeyCandidate = true
+        captureIsPrimed = true
         return GlobalInputRouting(
             consume: false,
-            actions: [.armHold]
+            actions: [.hotkey(.primeCapture), .armHold]
         )
     }
 
@@ -381,6 +405,9 @@ public struct GlobalInputReducer: Sendable {
         var actions: [GlobalInputAction] = [.disarmHold]
         if dictationHoldIsActive {
             actions.append(.hotkey(.released))
+        } else if captureIsPrimed {
+            captureIsPrimed = false
+            actions.append(.hotkey(.cancelPrimedCapture))
         }
         dictationHoldIsActive = false
         return GlobalInputRouting(
@@ -419,7 +446,14 @@ public struct GlobalInputReducer: Sendable {
     private mutating func armToggleHotkey() -> GlobalInputRouting {
         hotkeyIsDown = true
         bareHotkeyCandidate = true
-        return GlobalInputRouting(consume: false)
+        guard !toggleSessionIsActive else {
+            return GlobalInputRouting(consume: false)
+        }
+        captureIsPrimed = true
+        return GlobalInputRouting(
+            consume: false,
+            actions: [.hotkey(.primeCapture)]
+        )
     }
 
     private mutating func releaseToggleHotkey() -> GlobalInputRouting {
@@ -430,6 +464,9 @@ public struct GlobalInputReducer: Sendable {
             return GlobalInputRouting(consume: false)
         }
         let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
+        if !toggleSessionIsActive {
+            captureIsPrimed = false
+        }
         toggleSessionIsActive.toggle()
         return GlobalInputRouting(
             consume: false,
@@ -501,7 +538,13 @@ public struct GlobalInputReducer: Sendable {
             if dictationHoldIsActive {
                 dictationHoldIsActive = false
                 actions.append(.hotkey(.cancel))
+            } else if captureIsPrimed {
+                captureIsPrimed = false
+                actions.append(.hotkey(.cancelPrimedCapture))
             }
+        } else if captureIsPrimed {
+            captureIsPrimed = false
+            actions.append(.hotkey(.cancelPrimedCapture))
         }
         return actions
     }
@@ -764,7 +807,7 @@ public final class GlobalHotkeyMonitor {
                 switch hotkeyAction {
                 case .released, .stopAndInsert, .insertAndSubmit:
                     insertionContext = captureInsertionContext()
-                case .pressed, .cancel:
+                case .primeCapture, .cancelPrimedCapture, .pressed, .cancel:
                     insertionContext = nil
                 }
                 handler(

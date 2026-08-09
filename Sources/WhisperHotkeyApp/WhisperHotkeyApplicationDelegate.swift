@@ -241,6 +241,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var machine = DictationStateMachine()
     private var controlServer: ControlServer?
     private var preloadTask: Task<Void, Never>?
+    private var hasPrimedAudioCapture = false
     private var recognitionTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
     private var recordingPresentationTask: Task<Void, Never>?
@@ -564,6 +565,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch action {
+        case .primeCapture:
+            primeAudioCapture(pressedAt: eventTime)
+
+        case .cancelPrimedCapture:
+            cancelPrimedAudioCapture()
+
         case .pressed:
             if !machine.phase.isBusy, machine.phase != .failed {
                 badgeCaretRect = nil
@@ -671,10 +678,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeFailed = false
 
         do {
-            try recorder.start(
-                pauseSegmentation:
-                    isPauseMode || processingMode.decodesWhileSpeaking
-            )
+            let adoptedPrimedCapture =
+                hasPrimedAudioCapture && recorder.isRecording
+            hasPrimedAudioCapture = false
+            if !adoptedPrimedCapture {
+                try recorder.start(
+                    pauseSegmentation:
+                        isPauseMode || processingMode.decodesWhileSpeaking
+                )
+            }
             process(.captureStarted)
             startRecordingPresentation(
                 generation: generation,
@@ -732,6 +744,47 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             process(.maximumDurationReached)
         }
         return true
+    }
+
+    /// Starts the microphone on the physical key-down edge so speech during a
+    /// Toggle/Pause tap or Hold dwell is retained. Dictation state, UI,
+    /// Accessibility work, recognition, and insertion wait for confirmation.
+    private func primeAudioCapture(pressedAt: TimeInterval) {
+        guard !machine.phase.isBusy,
+              machine.phase != .failed,
+              runtimeReadyForHotkey,
+              !isTerminating,
+              !hasPrimedAudioCapture
+        else {
+            return
+        }
+        do {
+            try recorder.start(
+                pauseSegmentation:
+                    isPauseMode || processingMode.decodesWhileSpeaking
+            )
+            hasPrimedAudioCapture = true
+            let latencyMilliseconds = max(
+                0,
+                (ProcessInfo.processInfo.systemUptime - pressedAt) * 1_000
+            )
+            logger.debug(
+                "Provisional audio capture ready in \(latencyMilliseconds, privacy: .public) ms"
+            )
+        } catch {
+            // Confirmation retries through beginSession(), whose existing
+            // user-facing failure path remains authoritative.
+            recorder.cancel()
+            hasPrimedAudioCapture = false
+        }
+    }
+
+    private func cancelPrimedAudioCapture() {
+        guard hasPrimedAudioCapture, !machine.phase.isBusy else {
+            return
+        }
+        hasPrimedAudioCapture = false
+        recorder.cancel()
     }
 
     private func finalizeRecording() -> Bool {
@@ -1218,6 +1271,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         cancelledRecognition?.cancel()
         recognitionTask = nil
         recorder.cancel()
+        hasPrimedAudioCapture = false
         insertionContext = nil
 
         let precedingCleanup = recognizerCleanupTask
@@ -2428,6 +2482,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         modelConfigurationTask = nil
         hotkeyMonitor.stop()
         recorder.cancel()
+        hasPrimedAudioCapture = false
         badge.hide()
         clipboard.completePendingRestoration()
         controlServer?.stop()

@@ -20,6 +20,12 @@ public enum DictationPhase: String, Codable, CaseIterable, Sendable {
 }
 
 public enum HotkeyAction: Equatable, Sendable {
+    /// Starts private provisional capture on the physical key-down edge. The
+    /// recording is adopted only if the gesture is later accepted.
+    case primeCapture
+    /// Discards provisional audio when a gesture becomes a shortcut, pointer
+    /// chord, or rejected quick tap.
+    case cancelPrimedCapture
     case pressed
     case released
     case stopAndInsert

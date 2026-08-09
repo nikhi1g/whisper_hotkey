@@ -423,9 +423,10 @@ public actor RecognitionPipelineCoordinator {
     public var deliveredEventCount: Int { deliveryCount }
     public var pendingChunkCountForTesting: Int { pendingChunkCount }
 
-    /// Invalidates any prior generation before accepting a new session.  A
-    /// model-ready/decode-while-speaking session prepares its primary lease;
-    /// after-recording remains cold until finalization.
+    /// Invalidates any prior generation before accepting a new session, then
+    /// prepares the selected primary while capture is already running. This
+    /// keeps zero idle model cost for after-recording without paying cold-load
+    /// latency after the user finishes speaking.
     public func beginSession(
         sessionID: UUID = UUID(),
         generation: UInt64? = nil,
@@ -474,7 +475,6 @@ public actor RecognitionPipelineCoordinator {
             generation: nextGeneration
         )
 
-        guard resolvedProcessing != .afterRecording else { return }
         try? await withPipelineTimeout(
             30,
             stage: .primary,
