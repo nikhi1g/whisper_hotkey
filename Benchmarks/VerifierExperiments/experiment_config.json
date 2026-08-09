@@ -1,0 +1,176 @@
+{
+  "schema": "whisper_hotkey_verifier_experiment_config_v1",
+  "schema_version": 1,
+  "normalization": {
+    "id": "token-position-v1",
+    "description": "Opaque aligned word positions only; no text is accepted or retained.",
+    "source": "W06 bounded-span experiment contract"
+  },
+  "runtimes": {
+    "whisper_cpp": {
+      "version": "1.9.1",
+      "commit": "f049fff95a089aa9969deb009cdd4892b3e74916",
+      "license": "MIT",
+      "source_url": "https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.1",
+      "status": "pinned_by_repository_build_policy"
+    },
+    "fluid_audio": {
+      "version": "0.15.5",
+      "revision": "19600a485baa4998812e4654b70d2bab8f2c9949",
+      "license": "MIT",
+      "source_url": "https://github.com/FluidInference/FluidAudio/releases/tag/0.15.5",
+      "status": "pinned_by_benchmark_package"
+    },
+    "parakeet_cpp": {
+      "version": null,
+      "commit": null,
+      "license": "MIT (runtime repository; verify the checked-out revision)",
+      "source_url": "https://github.com/mudler/parakeet.cpp",
+      "status": "not_present_in_checkout"
+    },
+    "qwen_asr": {
+      "version": null,
+      "commit": null,
+      "license": "Apache-2.0 (upstream model card)",
+      "source_url": "https://github.com/QwenLM/Qwen3-ASR",
+      "status": "experimental_runtime_not_present"
+    }
+  },
+  "primary": {
+    "id": "whisper-large-v3-turbo-q5",
+    "engine": "whisper.cpp-metal",
+    "model_id": "ggml-large-v3-turbo-q5_0.bin",
+    "model_sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+    "model_license": "Apache-2.0 (upstream openai/whisper-large-v3 model card; converted artifact license must be retained)",
+    "model_source_url": "https://huggingface.co/openai/whisper-large-v3",
+    "runtime": "whisper_cpp",
+    "status": "repository_pin_only_until_local_artifact_is_verified"
+  },
+  "candidates": [
+    {
+      "id": "parakeet-unified-0.6b",
+      "role": "existing cross-engine Parakeet Unified selective verifier",
+      "engine": "FluidAudio-CoreML-ANE",
+      "model_id": "nvidia/parakeet-unified-en-0.6b",
+      "artifact_name": "parakeet-unified-en-0.6b",
+      "artifact_sha256": null,
+      "artifact_sha256_status": "missing_until_local_model_directory_is_supplied",
+      "model_license": "CC-BY-4.0",
+      "model_source_url": "https://huggingface.co/nvidia/parakeet-unified-en-0.6b",
+      "runtime": "fluid_audio",
+      "required_for_promotion": true
+    },
+    {
+      "id": "whisper-large-v3",
+      "role": "full Whisper large-v3 selective verifier",
+      "engine": "whisper.cpp-metal",
+      "model_id": "openai/whisper-large-v3",
+      "artifact_name": "ggml-large-v3.bin",
+      "artifact_sha256": null,
+      "artifact_sha256_status": "missing_until_local_conversion_is_supplied",
+      "model_license": "Apache-2.0",
+      "model_source_url": "https://huggingface.co/openai/whisper-large-v3",
+      "runtime": "whisper_cpp",
+      "required_for_promotion": true
+    },
+    {
+      "id": "parakeet-tdt-ctc-1.1b",
+      "role": "larger Parakeet hybrid TDT-CTC selective verifier",
+      "engine": "parakeet.cpp-metal",
+      "model_id": "nvidia/parakeet-tdt_ctc-1.1b",
+      "artifact_name": "parakeet-tdt_ctc-1.1b",
+      "artifact_sha256": null,
+      "artifact_sha256_status": "missing_until_local_artifact_is_supplied",
+      "model_license": "CC-BY-4.0",
+      "model_source_url": "https://huggingface.co/nvidia/parakeet-tdt_ctc-1.1b",
+      "runtime": "parakeet_cpp",
+      "required_for_promotion": true
+    },
+    {
+      "id": "parakeet-tdt-1.1b",
+      "role": "larger Parakeet TDT selective verifier",
+      "engine": "parakeet.cpp-metal",
+      "model_id": "nvidia/parakeet-tdt-1.1b",
+      "artifact_name": "parakeet-tdt-1.1b",
+      "artifact_sha256": null,
+      "artifact_sha256_status": "missing_until_local_artifact_is_supplied",
+      "model_license": "CC-BY-4.0",
+      "model_source_url": "https://huggingface.co/nvidia/parakeet-tdt-1.1b",
+      "runtime": "parakeet_cpp",
+      "required_for_promotion": true
+    },
+    {
+      "id": "qwen3-asr-1.7b",
+      "role": "optional experimental selective verifier",
+      "engine": "qwen-asr-local",
+      "model_id": "Qwen/Qwen3-ASR-1.7B",
+      "artifact_name": "Qwen3-ASR-1.7B",
+      "artifact_sha256": null,
+      "artifact_sha256_status": "missing_until_apple_local_runtime_is_supplied",
+      "model_license": "Apache-2.0",
+      "model_source_url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B",
+      "runtime": "qwen_asr",
+      "required_for_promotion": false
+    }
+  ],
+  "corpora": [
+    {
+      "id": "librispeech_test100_local",
+      "role": "repository smoke only",
+      "license": "CC BY 4.0",
+      "source_url": "https://www.openslr.org/12/",
+      "manifest_path": "Benchmarks/BenchmarkSuite/datasets/merged/librispeech-100/manifest.json",
+      "manifest_sha256": "68a5faba032d266e415ab17b933e690803505e6a18222f4d5c91426af92123bb",
+      "case_ids_path": "Benchmarks/BenchmarkSuite/datasets/merged/librispeech-100/case_ids.txt",
+      "case_ids_sha256": "aad0550ac8a92e44163b0ed6f151c50c6cdeb6038ee843095b13c411835b1d5f",
+      "audio_required": true,
+      "promotion_track": false
+    },
+    {
+      "id": "application_consent_frozen",
+      "role": "promotion-required application dictation corpus",
+      "license": "consented local evaluation set; provenance required at collection",
+      "source_url": null,
+      "manifest_path": null,
+      "manifest_sha256": null,
+      "case_ids_path": null,
+      "case_ids_sha256": null,
+      "audio_required": true,
+      "promotion_track": true
+    },
+    {
+      "id": "public_recovery_tracks",
+      "role": "promotion-required public robustness tracks",
+      "license": "per-dataset terms; see BenchmarkSuite catalog",
+      "source_url": null,
+      "manifest_path": null,
+      "manifest_sha256": null,
+      "case_ids_path": null,
+      "case_ids_sha256": null,
+      "audio_required": true,
+      "promotion_track": true
+    }
+  ],
+  "bounds": {
+    "max_items": 1000,
+    "max_reference_words_per_item": 4096,
+    "max_positions_per_set": 4096,
+    "max_edits_per_item": 256,
+    "max_span_duration_ms": 8000,
+    "max_spans_per_item": 8,
+    "max_total_spans": 64,
+    "max_verifier_audio_ratio": 0.25,
+    "max_case_audio_duration_ms": 3600000,
+    "max_candidate_text_context_chars": 240,
+    "max_concurrent_calls_per_runtime": 1
+  },
+  "promotion_gates": {
+    "application_wer_improvement_required": true,
+    "repair_precision_floor": 0.98,
+    "high_confidence_corruption_ceiling": 0.0005,
+    "protected_number_unit_negation_regressions": 0,
+    "formatting_lexical_mutations": 0,
+    "latency_p95_required": true,
+    "peak_rss_required": true
+  }
+}

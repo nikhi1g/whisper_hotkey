@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/verifier-experiment-v1.json",
+  "title": "WhisperHotkeyVerifierExperimentV1",
+  "description": "Aggregate-only records for bounded verifier experiments. No transcript or audio fields are permitted.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "runId", "harness", "provenance", "privacy"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "metadata"},
+        "runId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "harness": {"type": "object"},
+        "provenance": {"type": "object"},
+        "privacy": {"$ref": "#/$defs/privacy"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "status", "checks"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "preflight"},
+        "status": {"enum": ["ready", "blocked"]},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "blockers": {"type": "array", "items": {"type": "string", "maxLength": 240}}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "candidateId", "status", "provenance", "metrics", "blockers"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "candidate"},
+        "candidateId": {"type": "string", "minLength": 1},
+        "status": {"enum": ["measured", "not_run", "blocked", "measurement_invalid"]},
+        "provenance": {"type": "object"},
+        "metrics": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/metrics"}]},
+        "blockers": {"type": "array", "items": {"type": "string", "maxLength": 240}}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "decision", "reasons", "measuredCandidates"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "decision"},
+        "decision": {"enum": ["no-promotion", "eligible-for-review"]},
+        "reasons": {"type": "array", "items": {"type": "string", "maxLength": 240}},
+        "measuredCandidates": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  ],
+  "$defs": {
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audioPersisted", "transcriptsPersisted", "ordinaryUserContent", "aggregateOnly"],
+      "properties": {
+        "audioPersisted": {"const": false},
+        "transcriptsPersisted": {"const": false},
+        "ordinaryUserContent": {"const": false},
+        "aggregateOnly": {"const": true}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "required", "status"],
+      "properties": {
+        "id": {"type": "string"},
+        "required": {"type": "boolean"},
+        "status": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "expectedSha256": {"type": ["string", "null"]},
+        "fileCount": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accuracy", "errorOverlap", "oracleRepair", "guardedRepair", "latency", "rss", "spanBudget", "contention"],
+      "properties": {
+        "accuracy": {"$ref": "#/$defs/accuracy"},
+        "errorOverlap": {"$ref": "#/$defs/errorOverlap"},
+        "oracleRepair": {"$ref": "#/$defs/oracleRepair"},
+        "guardedRepair": {"$ref": "#/$defs/guardedRepair"},
+        "latency": {"$ref": "#/$defs/latency"},
+        "rss": {"$ref": "#/$defs/rss"},
+        "spanBudget": {"$ref": "#/$defs/spanBudget"},
+        "contention": {"$ref": "#/$defs/contention"}
+      }
+    },
+    "accuracy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "applicationPrimaryWer", "applicationCandidateWer", "pairedImprovementSupported", "publicRegressionPassed", "protectedRegressionCount"],
+      "properties": {
+        "status": {"enum": ["measured", "unmeasured"]},
+        "applicationPrimaryWer": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "applicationCandidateWer": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "pairedImprovementSupported": {"type": ["boolean", "null"]},
+        "publicRegressionPassed": {"type": ["boolean", "null"]},
+        "protectedRegressionCount": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "errorOverlap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "primaryErrors", "verifierErrors", "intersection", "union", "jaccard", "primaryOverlapRate"],
+      "properties": {
+        "items": {"type": "integer", "minimum": 0},
+        "primaryErrors": {"type": "integer", "minimum": 0},
+        "verifierErrors": {"type": "integer", "minimum": 0},
+        "intersection": {"type": "integer", "minimum": 0},
+        "union": {"type": "integer", "minimum": 0},
+        "jaccard": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "primaryOverlapRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "oracleRepair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["opportunities", "corrected", "rate"],
+      "properties": {
+        "opportunities": {"type": "integer", "minimum": 0},
+        "corrected": {"type": "integer", "minimum": 0},
+        "rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "guardedRepair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted", "corrected", "introduced", "precision", "recall", "falseRewriteRate", "unsafeAccepts", "highConfidenceCorruptions", "highConfidenceCorruptionRate"],
+      "properties": {
+        "accepted": {"type": "integer", "minimum": 0},
+        "corrected": {"type": "integer", "minimum": 0},
+        "introduced": {"type": "integer", "minimum": 0},
+        "precision": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "recall": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "falseRewriteRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "unsafeAccepts": {"type": "integer", "minimum": 0},
+        "highConfidenceCorruptions": {"type": "integer", "minimum": 0},
+        "highConfidenceCorruptionRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "completionP50Ms", "completionP95Ms", "completionP99Ms", "coldLoadP50Ms", "warmP50Ms", "warmP95Ms"],
+      "properties": {
+        "samples": {"type": "integer", "minimum": 0},
+        "completionP50Ms": {"type": ["number", "null"], "minimum": 0},
+        "completionP95Ms": {"type": ["number", "null"], "minimum": 0},
+        "completionP99Ms": {"type": ["number", "null"], "minimum": 0},
+        "coldLoadP50Ms": {"type": ["number", "null"], "minimum": 0},
+        "warmP50Ms": {"type": ["number", "null"], "minimum": 0},
+        "warmP95Ms": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "rss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "peakRSSMiB", "meanPeakRSSMiB"],
+      "properties": {
+        "samples": {"type": "integer", "minimum": 0},
+        "peakRSSMiB": {"type": ["number", "null"], "minimum": 0},
+        "meanPeakRSSMiB": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "spanBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "spans", "audioMs", "verifierAudioMs", "coverageRatio", "maxSpanMs", "withinBounds"],
+      "properties": {
+        "items": {"type": "integer", "minimum": 0},
+        "spans": {"type": "integer", "minimum": 0},
+        "audioMs": {"type": "number", "minimum": 0},
+        "verifierAudioMs": {"type": "number", "minimum": 0},
+        "coverageRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "maxSpanMs": {"type": ["number", "null"], "minimum": 0},
+        "withinBounds": {"type": "boolean"}
+      }
+    },
+    "contention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "samples", "cpuP95Percent", "metalP95Percent", "aneP95Percent", "thermalState"],
+      "properties": {
+        "status": {"enum": ["measured", "unmeasured"]},
+        "samples": {"type": "integer", "minimum": 0},
+        "cpuP95Percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "metalP95Percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "aneP95Percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "thermalState": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
