@@ -144,6 +144,18 @@ def _sigmoid(value: float) -> float:
     return z / (1 + z)
 
 
+def _binary_cross_entropy(probability: float, label: bool) -> float:
+    """Stable binary cross entropy with exact zero loss at perfect bounds."""
+
+    if label and probability >= 1:
+        return 0.0
+    if not label and probability <= 0:
+        return 0.0
+    probability = min(max(probability, 1e-7), 1 - 1e-7)
+    target = 1.0 if label else 0.0
+    return -(target * math.log(probability) + (1 - target) * math.log(1 - probability))
+
+
 def fit_temperature(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     scores = [float(row["raw_error_probability"]) for row in rows]
     labels = [1.0 if row["is_error"] else 0.0 for row in rows]
@@ -299,8 +311,7 @@ def metric_summary(
         mce = max(mce, gap)
     prevalence = errors / count
     nll = sum(
-        -(int(label) * math.log(min(max(probability, 1e-7), 1 - 1e-7))
-          + int(not label) * math.log(1 - min(max(probability, 1e-7), 1 - 1e-7)))
+        _binary_cross_entropy(probability, label)
         for probability, label in zip(probabilities, labels)
     ) / count
     baseline_entropy = 0.0 if prevalence in (0, 1) else -prevalence * math.log(prevalence) - (1 - prevalence) * math.log(1 - prevalence)
@@ -315,7 +326,9 @@ def metric_summary(
         "auprc": _average_precision(list(zip(probabilities, labels))),
         "ece": ece,
         "mce": mce,
-        "nce": nll / baseline_entropy if baseline_entropy else None,
+        # Standard ASR NCE: 1 is perfect, 0 matches the prevalence baseline,
+        # and negative values are worse than that baseline.
+        "nce": 1 - nll / baseline_entropy if baseline_entropy else None,
         "errorRecallAtVerifierBudget25Pct": recall_at_25,
         "falseUnlockRate": (sum(unlocked) / len(unlocked)) if unlocked else None,
     }

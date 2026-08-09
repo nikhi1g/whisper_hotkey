@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from calibrate import CalibrationError, build_artifact, load_rows
+from calibrate import CalibrationError, build_artifact, load_rows, metric_summary
 
 
 ROOT = Path(__file__).resolve().parent
@@ -47,6 +47,18 @@ class CalibrationTests(unittest.TestCase):
         first = json.dumps(build_artifact(rows), sort_keys=True, indent=2)
         second = json.dumps(build_artifact(rows), sort_keys=True, indent=2)
         self.assertEqual(first, second)
+
+    def test_nce_uses_standard_asr_one_minus_ratio_convention(self) -> None:
+        rows = [
+            {"is_error": False},
+            {"is_error": True},
+        ]
+        perfect = metric_summary(rows, [0.0, 1.0])
+        baseline = metric_summary(rows, [0.5, 0.5])
+        worse = metric_summary(rows, [1.0, 0.0])
+        self.assertAlmostEqual(perfect["nce"], 1.0, places=12)
+        self.assertAlmostEqual(baseline["nce"], 0.0, places=12)
+        self.assertLess(worse["nce"], 0.0)
 
 
 if __name__ == "__main__":

@@ -1182,6 +1182,11 @@ public struct ConfidenceBudgetMetric: Codable, Hashable, Sendable {
 
 /// Privacy-safe, label-based confidence metrics.  No accuracy value is
 /// inferred when labels are absent; empty/degenerate metrics remain `nil`.
+///
+/// `normalizedCrossEntropy` follows the standard ASR convention:
+/// `1 - meanBinaryCrossEntropy / labelEntropy`. Thus `1` is perfect, `0`
+/// matches the prevalence baseline, and negative values are worse than that
+/// baseline.
 public struct ConfidenceMetrics: Codable, Hashable, Sendable {
     public let sampleCount: Int
     public let errorCount: Int
@@ -1274,14 +1279,12 @@ public struct ConfidenceMetrics: Codable, Hashable, Sendable {
         var brier = 0.0
         var negativeLogLikelihood = 0.0
         for prediction in predictions {
-            let p = ConfidenceCalibrator.clampProbability(
-                prediction.errorProbability
-            )
             let label = prediction.isError ? 1.0 : 0.0
             brier += (prediction.errorProbability - label)
                 * (prediction.errorProbability - label)
-            negativeLogLikelihood += -(
-                label * log(p) + (1 - label) * log(1 - p)
+            negativeLogLikelihood += binaryCrossEntropy(
+                probability: prediction.errorProbability,
+                label: label
             )
         }
         brier /= Double(count)
@@ -1317,7 +1320,9 @@ public struct ConfidenceMetrics: Codable, Hashable, Sendable {
             -prevalence * log(prevalence)
                 - (1 - prevalence) * log(1 - prevalence)
         }
-        let nce = entropy > 0 ? negativeLogLikelihood / entropy : nil
+        let nce = entropy > 0
+            ? 1 - negativeLogLikelihood / entropy
+            : nil
 
         let sortedDescending = predictions.enumerated().sorted {
             if $0.element.errorProbability != $1.element.errorProbability {
@@ -1403,6 +1408,20 @@ public struct ConfidenceMetrics: Codable, Hashable, Sendable {
             verifierBudgets: verifierBudgets,
             falseUnlockThreshold: falseUnlockThreshold,
             maximumRiskCoveragePoints: maximumRiskCoveragePoints
+        )
+    }
+
+    private static func binaryCrossEntropy(
+        probability: Double,
+        label: Double
+    ) -> Double {
+        // Keep exact perfect predictions at zero loss.  Non-perfect boundary
+        // values are clamped so malformed extremes cannot produce infinity.
+        if label == 1, probability >= 1 { return 0 }
+        if label == 0, probability <= 0 { return 0 }
+        let p = ConfidenceCalibrator.clampProbability(probability)
+        return -(
+            label * log(p) + (1 - label) * log(1 - p)
         )
     }
 

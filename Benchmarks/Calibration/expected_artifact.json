@@ -15,7 +15,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.0,
             "falseUnlockRate": null,
             "mce": 0.5,
-            "nce": 6.063374238377484,
+            "nce": -5.063374166242727,
             "sampleCount": 4
           },
           "parameters": {
@@ -52,7 +52,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.5,
             "falseUnlockRate": null,
             "mce": 0.48910020915923025,
-            "nce": 1.1087094110935303,
+            "nce": -0.10870941109353027,
             "sampleCount": 4
           },
           "parameters": {
@@ -69,7 +69,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.5,
             "falseUnlockRate": null,
             "mce": 0.7387682335762699,
-            "nce": 0.9183339592367191,
+            "nce": 0.08166604076328088,
             "sampleCount": 4
           },
           "parameters": {
@@ -99,7 +99,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.0,
             "falseUnlockRate": null,
             "mce": 0.5,
-            "nce": 6.063374238377484,
+            "nce": -5.063374166242727,
             "sampleCount": 4
           },
           "parameters": {
@@ -144,7 +144,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.5,
             "falseUnlockRate": null,
             "mce": 0.7704514654227601,
-            "nce": 0.8782393058229444,
+            "nce": 0.1217606941770556,
             "sampleCount": 4
           },
           "parameters": {
@@ -161,7 +161,7 @@
             "errorRecallAtVerifierBudget25Pct": 0.5,
             "falseUnlockRate": null,
             "mce": 0.7330921759027577,
-            "nce": 0.8355678699387408,
+            "nce": 0.16443213006125923,
             "sampleCount": 4
           },
           "parameters": {

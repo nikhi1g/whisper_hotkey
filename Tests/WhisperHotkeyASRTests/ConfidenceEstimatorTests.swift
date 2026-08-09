@@ -259,6 +259,22 @@ final class ConfidenceEstimatorTests: XCTestCase {
         XCTAssertEqual(metrics.falseUnlockRate, 0)
         XCTAssertEqual(metrics.riskCoverage.last?.coverage, 1)
         XCTAssertEqual(metrics.errorRecallAtVerifierBudget.first?.errorRecall, 1)
+
+        let perfect = ConfidenceMetrics.evaluate([
+            ConfidenceLabeledPrediction(errorProbability: 0, isError: false),
+            ConfidenceLabeledPrediction(errorProbability: 1, isError: true),
+        ])
+        let baseline = ConfidenceMetrics.evaluate([
+            ConfidenceLabeledPrediction(errorProbability: 0.5, isError: false),
+            ConfidenceLabeledPrediction(errorProbability: 0.5, isError: true),
+        ])
+        let worse = ConfidenceMetrics.evaluate([
+            ConfidenceLabeledPrediction(errorProbability: 1, isError: false),
+            ConfidenceLabeledPrediction(errorProbability: 0, isError: true),
+        ])
+        XCTAssertEqual(perfect.nce ?? -1, 1, accuracy: 0.000_000_000_001)
+        XCTAssertEqual(baseline.nce ?? -1, 0, accuracy: 0.000_000_000_001)
+        XCTAssertLessThan(worse.nce ?? 0, 0)
     }
 
     func testFalseUnlockRateIsAbsentWithoutAnExplicitOperatingPoint() {
