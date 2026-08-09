@@ -138,6 +138,10 @@ public final class WhisperAudioLease: @unchecked Sendable {
     }
 
     /// Borrows the canonical file as one immutable file holder.
+    ///
+    /// The canonical file retains this lease so a recorder can hand it to
+    /// post-recording work without closing the session first. Deleting the
+    /// canonical owner closes the lease; child files only release holders.
     internal func makeCanonicalFile(
         speechPresence: WhisperSpeechPresence = .unknown
     ) -> WhisperAudioFile {
@@ -151,7 +155,8 @@ public final class WhisperAudioLease: @unchecked Sendable {
             resourceID: canonicalResource,
             speechPresence: speechPresence,
             maximumSpanDuration: maximumSpanDuration,
-            holder: holder
+            holder: holder,
+            sessionOwner: self
         )
     }
 
@@ -175,7 +180,8 @@ public final class WhisperAudioLease: @unchecked Sendable {
                 resourceID: resourceID,
                 speechPresence: .unknown,
                 maximumSpanDuration: maximumSpanDuration,
-                holder: holder
+                holder: holder,
+                sessionOwner: nil
             )
         } catch {
             // The storage method removes a directory it created when

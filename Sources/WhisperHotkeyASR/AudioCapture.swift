@@ -33,8 +33,10 @@ public final class WhisperAudioFile: @unchecked Sendable {
     private let resourceID: WhisperAudioLease.Storage.ResourceID
     private let holder: WhisperAudioLease.Holder
     private let sessionOwned: Bool
+    private let sessionOwner: WhisperAudioLease?
     private let maximumSpanDuration: TimeInterval
     private let lock = NSLock()
+    private var deleted = false
     private var recordedSpeechPresence: WhisperSpeechPresence
 
     init(
@@ -63,6 +65,7 @@ public final class WhisperAudioFile: @unchecked Sendable {
         self.resourceID = resourceID
         self.holder = holder
         sessionOwned = false
+        sessionOwner = nil
         maximumSpanDuration = WhisperAudioLease.defaultMaximumSpanDuration
         recordedSpeechPresence = speechPresence
     }
@@ -74,7 +77,8 @@ public final class WhisperAudioFile: @unchecked Sendable {
         resourceID: WhisperAudioLease.Storage.ResourceID,
         speechPresence: WhisperSpeechPresence,
         maximumSpanDuration: TimeInterval = WhisperAudioLease
-            .defaultMaximumSpanDuration
+            .defaultMaximumSpanDuration,
+        sessionOwner: WhisperAudioLease? = nil
     ) {
         guard let holder = storage.acquire(resourceID) else {
             preconditionFailure("A session audio file must be borrowable.")
@@ -86,7 +90,8 @@ public final class WhisperAudioFile: @unchecked Sendable {
             resourceID: resourceID,
             speechPresence: speechPresence,
             maximumSpanDuration: maximumSpanDuration,
-            holder: holder
+            holder: holder,
+            sessionOwner: sessionOwner
         )
     }
 
@@ -97,7 +102,8 @@ public final class WhisperAudioFile: @unchecked Sendable {
         resourceID: WhisperAudioLease.Storage.ResourceID,
         speechPresence: WhisperSpeechPresence,
         maximumSpanDuration: TimeInterval,
-        holder: WhisperAudioLease.Holder
+        holder: WhisperAudioLease.Holder,
+        sessionOwner: WhisperAudioLease?
     ) {
         self.url = url
         self.directoryURL = directoryURL
@@ -105,6 +111,7 @@ public final class WhisperAudioFile: @unchecked Sendable {
         self.resourceID = resourceID
         self.holder = holder
         sessionOwned = true
+        self.sessionOwner = sessionOwner
         self.maximumSpanDuration = maximumSpanDuration
         recordedSpeechPresence = speechPresence
     }
@@ -114,10 +121,21 @@ public final class WhisperAudioFile: @unchecked Sendable {
     }
 
     public func delete() {
-        holder.release()
-        if !sessionOwned {
+        let shouldFinishSession = lock.withLock {
+            guard !deleted else { return false }
+            deleted = true
+            return !sessionOwned || sessionOwner != nil
+        }
+        guard shouldFinishSession else {
+            holder.release()
+            return
+        }
+        if let sessionOwner {
+            sessionOwner.finish()
+        } else {
             storage.finish()
         }
+        holder.release()
     }
 
 
@@ -365,7 +383,6 @@ public final class WhisperAudioRecorder {
             )
         }
         audioFile.setSpeechPresence(speechPresence)
-        lease?.finish()
         audioLease = nil
         return audioFile
     }
@@ -424,7 +441,6 @@ public final class WhisperAudioRecorder {
             )
         }
         audioFile.setSpeechPresence(speechPresence)
-        lease?.finish()
         audioLease = nil
         return (audioFile, finalSegment)
     }

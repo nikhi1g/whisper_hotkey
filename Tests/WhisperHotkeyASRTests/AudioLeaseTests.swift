@@ -124,6 +124,73 @@ final class AudioLeaseTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: lease.directoryURL.path))
     }
 
+    func testChildDeletionDoesNotFinishCanonicalSession() throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let lease = try WhisperAudioLease.create(in: parent)
+        let canonical = lease.makeCanonicalFile()
+        let child = try lease.makeChildFile()
+        let childDirectory = child.url.deletingLastPathComponent()
+
+        child.retire()
+        child.delete()
+
+        XCTAssertFalse(lease.isFinished)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: childDirectory.path))
+
+        let span = try canonical.makeSpan(
+            startSample: 0,
+            endSample: 1,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(span.sampleCount, 1)
+        canonical.delete()
+    }
+
+    func testCanonicalHandoffKeepsNewHoldersAndSpansUntilOwnerDeletion()
+        throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        var lease: WhisperAudioLease? = try WhisperAudioLease.create(
+            in: parent,
+            maximumSpanDuration: 1
+        )
+        let canonical = try XCTUnwrap(lease).makeCanonicalFile()
+        let directory = canonical.url.deletingLastPathComponent()
+
+        // Dropping the recorder's lease is the stop-time handoff. The
+        // canonical file must retain session ownership for post-recording
+        // recognition and selective verification.
+        lease = nil
+        var span: WhisperAudioSpan? = try canonical.makeSpan(
+            startSample: 0,
+            endSample: 16_000,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(span?.sampleCount, 16_000)
+        let childHolder = try XCTUnwrap(canonical.acquireLeaseHolder())
+
+        canonical.delete()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+        XCTAssertNil(canonical.acquireLeaseHolder())
+        XCTAssertThrowsError(
+            try canonical.makeSpan(
+                startSample: 0,
+                endSample: 1,
+                sampleRate: 16_000
+            )
+        ) { error in
+            XCTAssertEqual(error as? WhisperAudioLeaseError, .leaseFinished)
+        }
+
+        childHolder.release()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+        span = nil
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
     func testCancellationWaitsForEveryChildHolderBeforeDeletingSession() throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
