@@ -7,6 +7,12 @@ import WhisperHotkeyCore
 import WhisperHotkeyShell
 import WhisperHotkeySystem
 
+enum PipelineDeliveryDisposition: Equatable {
+    case ignore
+    case pauseSentence(String)
+    case finalTranscript(String)
+}
+
 @MainActor
 final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private static let postPasteSubmitDelay: Duration = .milliseconds(80)
@@ -834,41 +840,48 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     finalTailAudio: finalTailAudio,
                     prompt: recognitionPrompt
                 )
-                guard generation == self.sessionGeneration,
-                      self.machine.phase == .transcribing
-                else {
+                guard generation == self.sessionGeneration else {
                     return
                 }
-                if self.isPauseMode {
-                    self.completionBehavior = .insert
-                    if !self.pauseSessionDidInsert,
-                       outcome.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    {
-                        self.fail(
-                            "No speech detected.",
-                            presentationDuration: BadgePresentationDuration.noSpeech
-                        )
+                if !self.isPauseMode {
+                    // Delivery normally advances transcribing -> inserting ->
+                    // idle inside the coordinator callback. If that callback
+                    // was suppressed without a generation change, use the
+                    // canonical outcome once so the badge cannot remain stuck.
+                    if self.machine.phase == .transcribing {
+                        self.process(.transcriptReady, transcript: outcome.text)
+                    }
+                    return
+                }
+                guard self.machine.phase == .transcribing else { return }
+                self.completionBehavior = .insert
+                if !self.pauseSessionDidInsert,
+                   outcome.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    self.fail(
+                        "No speech detected.",
+                        presentationDuration: BadgePresentationDuration.noSpeech
+                    )
+                    return
+                }
+                if shouldSubmit {
+                    do {
+                        try await Task.sleep(for: Self.postPasteSubmitDelay)
+                    } catch {
                         return
                     }
-                    if shouldSubmit {
-                        do {
-                            try await Task.sleep(for: Self.postPasteSubmitDelay)
-                        } catch {
-                            return
-                        }
-                        guard generation == self.sessionGeneration,
-                              self.machine.phase == .transcribing
-                        else {
-                            return
-                        }
-                        guard self.delivery.pressReturn() else {
-                            self.fail("Could not press Return in the destination app.")
-                            return
-                        }
+                    guard generation == self.sessionGeneration,
+                          self.machine.phase == .transcribing
+                    else {
+                        return
                     }
-                    self.deliversToInternalDictionaryDraft = false
-                    self.process(.chunkedSessionFinished)
+                    guard self.delivery.pressReturn() else {
+                        self.fail("Could not press Return in the destination app.")
+                        return
+                    }
                 }
+                self.deliversToInternalDictionaryDraft = false
+                self.process(.chunkedSessionFinished)
             } catch is CancellationError {
                 return
             } catch let error as RecognitionPipelineError {
@@ -1081,18 +1094,48 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func handlePipelineDelivery(
         _ event: RecognitionPipelineDelivery
     ) {
-        guard !isTerminating,
-              event.generation == sessionGeneration,
-              machine.phase == .transcribing
-                || machine.phase == .listening
-        else {
+        switch Self.pipelineDeliveryDisposition(
+            event,
+            currentGeneration: sessionGeneration,
+            phase: machine.phase,
+            isPauseMode: isPauseMode,
+            isTerminating: isTerminating
+        ) {
+        case .ignore:
             return
+        case .pauseSentence(let text):
+            deliverPauseChunk(text)
+        case .finalTranscript(let text):
+            // The coordinator owns recognition delivery, but the app state
+            // machine still owns insertion and badge teardown. Skipping this
+            // transition leaves Toggle Mode in `.transcribing` forever even
+            // though the text was pasted successfully.
+            process(.transcriptReady, transcript: text)
         }
+    }
+
+    static func pipelineDeliveryDisposition(
+        _ event: RecognitionPipelineDelivery,
+        currentGeneration: UInt64,
+        phase: DictationPhase,
+        isPauseMode: Bool,
+        isTerminating: Bool
+    ) -> PipelineDeliveryDisposition {
+        guard !isTerminating,
+              event.generation == currentGeneration
+        else { return .ignore }
+
         if isPauseMode {
-            deliverPauseChunk(event.text)
-        } else {
-            _ = deliver(event.text)
+            guard phase == .listening || phase == .transcribing,
+                  event.kind == .pauseSentence || event.kind == .finalTranscript
+            else { return .ignore }
+            return .pauseSentence(event.text)
         }
+
+        guard phase == .transcribing, event.kind == .finalTranscript else {
+            return .ignore
+        }
+        return .finalTranscript(event.text)
     }
 
     private func deliver(_ transcript: String) -> Bool {

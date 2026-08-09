@@ -601,9 +601,9 @@ final class RecognitionTests: XCTestCase {
             options: options
         )
 
-        let transcript = try await recognizer.transcribe(audio)
+        let transcript = try await recognizer.transcribeResult(audio)
 
-        XCTAssertEqual(transcript, "fallback words")
+        XCTAssertEqual(transcript.text, "fallback words")
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: audioDirectory.path)
         )
@@ -636,7 +636,7 @@ final class RecognitionTests: XCTestCase {
         )
 
         do {
-            _ = try await recognizer.transcribe(audio)
+            _ = try await recognizer.transcribeResult(audio)
             XCTFail("Known silence should not be decoded")
         } catch let error as WhisperASRError {
             XCTAssertEqual(error, .noSpeech)
@@ -670,17 +670,17 @@ final class RecognitionTests: XCTestCase {
             configuration: fixture.configuration
         )
 
-        let first = try await recognizer.transcribeChunk(
+        let first = try await recognizer.transcribeChunkResult(
             fixture.makeAudio()
         )
-        let second = try await recognizer.transcribeChunk(
+        let second = try await recognizer.transcribeChunkResult(
             fixture.makeAudio(),
             prompt: "The first phrase continues,"
         )
         await recognizer.finishContinuousSession()
 
-        XCTAssertEqual(first, "chunk 1")
-        XCTAssertEqual(second, "chunk 2")
+        XCTAssertEqual(first.text, "chunk 1")
+        XCTAssertEqual(second.text, "chunk 2")
         XCTAssertEqual(try fixture.helperAttemptCount(), 1)
         XCTAssertTrue(
             try fixture.helperCommands().contains(
@@ -708,12 +708,12 @@ final class RecognitionTests: XCTestCase {
             configuration: fixture.configuration
         )
 
-        let transcript = try await recognizer.transcribe(
+        let transcript = try await recognizer.transcribeResult(
             fixture.makeAudio(),
             prompt: "Codex, Claude Code"
         )
 
-        XCTAssertEqual(transcript, "Codex")
+        XCTAssertEqual(transcript.text, "Codex")
         XCTAssertTrue(
             try fixture.helperCommands().contains(
                 #""prompt":"Codex, Claude Code""#
@@ -742,11 +742,11 @@ final class RecognitionTests: XCTestCase {
         )
 
         try await recognizer.setKeepsModelReady(true)
-        let first = try await recognizer.transcribe(fixture.makeAudio())
-        let second = try await recognizer.transcribe(fixture.makeAudio())
+        let first = try await recognizer.transcribeResult(fixture.makeAudio())
+        let second = try await recognizer.transcribeResult(fixture.makeAudio())
 
-        XCTAssertEqual(first, "warm 1")
-        XCTAssertEqual(second, "warm 2")
+        XCTAssertEqual(first.text, "warm 1")
+        XCTAssertEqual(second.text, "warm 2")
         XCTAssertEqual(try fixture.helperAttemptCount(), 1)
         let warmReadiness = await recognizer.readiness
         XCTAssertEqual(warmReadiness, .ready)
@@ -774,9 +774,9 @@ final class RecognitionTests: XCTestCase {
             options: options
         )
 
-        let transcript = try await recognizer.transcribe(audio)
+        let transcript = try await recognizer.transcribeResult(audio)
 
-        XCTAssertEqual(transcript, "fallback words")
+        XCTAssertEqual(transcript.text, "fallback words")
     }
 
     func testSignalTerminatedMetalAttemptRetriesOnceWithoutGPU()
@@ -806,9 +806,9 @@ final class RecognitionTests: XCTestCase {
         let audio = try fixture.makeAudio()
         let audioDirectory = audio.url.deletingLastPathComponent()
 
-        let transcript = try await recognizer.transcribe(audio)
+        let transcript = try await recognizer.transcribeResult(audio)
 
-        XCTAssertEqual(transcript, "cpu fallback words")
+        XCTAssertEqual(transcript.text, "cpu fallback words")
         XCTAssertEqual(try fixture.commandLineAttemptCount(), 2)
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: audioDirectory.path)
@@ -844,7 +844,7 @@ final class RecognitionTests: XCTestCase {
         let audioDirectory = audio.url.deletingLastPathComponent()
 
         do {
-            _ = try await recognizer.transcribe(audio)
+            _ = try await recognizer.transcribeResult(audio)
             XCTFail("Expected the ordinary CLI failure.")
         } catch {
             XCTAssertEqual(
@@ -887,10 +887,10 @@ final class RecognitionTests: XCTestCase {
             )
         }
 
-        let transcript = try await recognizer.transcribe(
+        let transcript = try await recognizer.transcribeResult(
             fixture.makeAudio()
         )
-        XCTAssertEqual(transcript, "fallback words")
+        XCTAssertEqual(transcript.text, "fallback words")
         XCTAssertEqual(try fixture.helperAttemptCount(), 1)
 
         do {
@@ -929,7 +929,7 @@ final class RecognitionTests: XCTestCase {
         )
 
         do {
-            _ = try await recognizer.transcribe(audio)
+            _ = try await recognizer.transcribeResult(audio)
             XCTFail("Expected local fallback availability failure.")
         } catch {
             XCTAssertEqual(
@@ -1013,7 +1013,7 @@ final class RecognitionTests: XCTestCase {
         let audio = try fixture.makeAudio()
         let audioDirectory = audio.url.deletingLastPathComponent()
         do {
-            _ = try await recognizer.transcribe(audio)
+            _ = try await recognizer.transcribeResult(audio)
             XCTFail("Transcription must remain rejected after shutdown.")
         } catch is CancellationError {
         } catch {

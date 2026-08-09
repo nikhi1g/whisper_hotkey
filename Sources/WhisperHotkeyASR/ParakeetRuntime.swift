@@ -73,12 +73,8 @@ actor ParakeetRuntime {
         }
     }
 
-    func transcribe(audioURL: URL) async throws -> String {
-        try await transcribeResult(audioURL: audioURL).renderedText
-    }
-
     /// Returns FluidAudio's provider-neutral rich result without discarding
-    /// evidence that is not representable by the legacy String API.
+    /// evidence unavailable from the selected runtime.
     ///
     /// The TDT managers expose token timings and per-token confidence through
     /// `ASRResult`. Unified's pinned offline manager exposes only its final

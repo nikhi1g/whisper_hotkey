@@ -1160,19 +1160,6 @@ public actor WhisperRecognizer {
         }
     }
 
-    public func transcribe(
-        _ audio: WhisperAudioFile,
-        prompt: String? = nil,
-        preserveAudio: Bool = false
-    ) async throws -> String {
-        try await transcribePayload(
-            audio,
-            keepHelperLoaded: false,
-            preserveAudio: preserveAudio,
-            prompt: prompt
-        ).hypothesisValue.text
-    }
-
     public func transcribeHypothesis(
         _ audio: WhisperAudioFile,
         prompt: String? = nil,
@@ -1244,21 +1231,6 @@ public actor WhisperRecognizer {
         )
     }
 
-    /// Transcribes one ordered chunk while retaining the model process for the
-    /// next chunk in the same active pause-mode session.
-    public func transcribeChunk(
-        _ audio: WhisperAudioFile,
-        prompt: String? = nil,
-        preserveAudio: Bool = false
-    ) async throws -> String {
-        try await transcribePayload(
-            audio,
-            keepHelperLoaded: true,
-            preserveAudio: preserveAudio,
-            prompt: prompt
-        ).hypothesisValue.text
-    }
-
     public func transcribeChunkHypothesis(
         _ audio: WhisperAudioFile,
         prompt: String? = nil,
@@ -1288,9 +1260,9 @@ public actor WhisperRecognizer {
         ).hypothesisValue
     }
 
-    /// Rich-result counterpart to `transcribeChunk`.  The canonical session
-    /// owns the audio, so chunk recognition always preserves it for the
-    /// coordinator and any later final-tail/fallback work.
+    /// Transcribes an ordered chunk while retaining the model process for the
+    /// next chunk. The canonical session owns the audio, so chunk recognition
+    /// preserves it for the coordinator and later final-tail/fallback work.
     public func transcribeChunkResult(
         _ audio: WhisperAudioFile,
         prompt: String? = nil,

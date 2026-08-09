@@ -6,6 +6,65 @@ import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 final class ModeMatrixTests: XCTestCase {
+    @MainActor
+    func testToggleFinalDeliveryTransitionsThroughInsertionAndClosesSession() {
+        var machine = DictationStateMachine()
+        _ = machine.handle(.hotkeyPressed(at: 1))
+        _ = machine.handle(.captureStarted)
+        _ = machine.handle(.hotkeyReleased(at: 2))
+        XCTAssertEqual(machine.phase, .transcribing)
+
+        let event = RecognitionPipelineDelivery(
+            kind: .finalTranscript,
+            text: "toggle result",
+            sessionID: UUID(),
+            generation: 42
+        )
+        let disposition = WhisperHotkeyApplicationDelegate
+            .pipelineDeliveryDisposition(
+                event,
+                currentGeneration: 42,
+                phase: machine.phase,
+                isPauseMode: false,
+                isTerminating: false
+            )
+        XCTAssertEqual(disposition, .finalTranscript("toggle result"))
+
+        XCTAssertEqual(
+            machine.handle(.transcriptReady),
+            [.deliverTranscript]
+        )
+        XCTAssertEqual(machine.phase, .inserting)
+        XCTAssertEqual(
+            machine.handle(.deliveryFinished),
+            [.showBadge(.hidden)]
+        )
+        XCTAssertEqual(machine.phase, .idle)
+
+        XCTAssertEqual(
+            WhisperHotkeyApplicationDelegate.pipelineDeliveryDisposition(
+                event,
+                currentGeneration: 43,
+                phase: .transcribing,
+                isPauseMode: false,
+                isTerminating: false
+            ),
+            .ignore,
+            "A stale callback must not paste or alter badge state."
+        )
+        XCTAssertEqual(
+            WhisperHotkeyApplicationDelegate.pipelineDeliveryDisposition(
+                event,
+                currentGeneration: 42,
+                phase: .listening,
+                isPauseMode: false,
+                isTerminating: false
+            ),
+            .ignore,
+            "Only Pause Mode may deliver while capture is still active."
+        )
+    }
+
     func testAllNineActivationAndProcessingCombinationsDeliverOnce() async throws {
         let activations: [HotkeyActivationMode] = [.hold, .toggle, .pause]
         let processing: [ModelProcessingMode] = [

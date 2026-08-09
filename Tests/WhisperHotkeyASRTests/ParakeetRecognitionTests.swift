@@ -317,7 +317,7 @@ final class ParakeetRecognitionTests: XCTestCase {
             return
         }
         do {
-            _ = try await runtime.transcribe(
+            _ = try await runtime.transcribeResult(
                 audioURL: URL(fileURLWithPath: "/dev/null")
             )
             XCTFail("a missing checkpoint should not transcribe")
@@ -412,8 +412,8 @@ final class ParakeetRecognitionTests: XCTestCase {
             environment: [:]
         )
         let recognizer = WhisperRecognizer(configuration: configuration)
-        let transcript = try await recognizer.transcribe(audio)
-        XCTAssertFalse(transcript.isEmpty)
+        let transcript = try await recognizer.transcribeResult(audio)
+        XCTAssertFalse(transcript.text.isEmpty)
     }
 
     /// End-to-end recognition against a real checkpoint. Skipped unless
@@ -448,7 +448,7 @@ final class ParakeetRecognitionTests: XCTestCase {
             environment: [:]
         )
         let recognizer = WhisperRecognizer(configuration: configuration)
-        let transcript = try await recognizer.transcribe(audio)
-        XCTAssertFalse(transcript.isEmpty)
+        let transcript = try await recognizer.transcribeResult(audio)
+        XCTAssertFalse(transcript.text.isEmpty)
     }
 }
