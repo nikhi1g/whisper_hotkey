@@ -61,6 +61,46 @@
       "license": "CC0",
       "status": "ready",
       "notes": "Conversation-like/commands and noisy speech coverage; large-scale benchmark coverage"
+    },
+    {
+      "id": "earnings22",
+      "name": "Earnings-22",
+      "source": "Rev",
+      "source_url": "https://github.com/revdotcom/speech-datasets/tree/main/earnings22",
+      "category": "speech-recognition",
+      "license": "Verify upstream terms before local evaluation",
+      "status": "metadata-only",
+      "notes": "Long-form, accented, real-world business speech with entities and numbers; no automatic download."
+    },
+    {
+      "id": "contextual_earnings22",
+      "name": "Contextual Earnings-22",
+      "source": "Research artifact",
+      "source_url": "https://arxiv.org/abs/2604.07354",
+      "category": "speech-recognition",
+      "license": "Verify artifact terms before local evaluation",
+      "status": "metadata-only",
+      "notes": "Rare/custom vocabulary evaluation; artifact availability and terms require confirmation."
+    },
+    {
+      "id": "musan",
+      "name": "MUSAN controlled mixtures",
+      "source": "OpenSLR",
+      "source_url": "https://www.openslr.org/17/",
+      "category": "noise-robustness",
+      "license": "Verify upstream terms before local evaluation",
+      "status": "metadata-only",
+      "notes": "Fixed-seed music, speech, and noise mixtures for controlled SNR tests."
+    },
+    {
+      "id": "gigaspeech",
+      "name": "GigaSpeech evaluation split",
+      "source": "SpeechColab",
+      "source_url": "https://github.com/SpeechColab/GigaSpeech",
+      "category": "speech-recognition",
+      "license": "Verify upstream terms before local evaluation",
+      "status": "planned",
+      "notes": "Recommended large-scale English reference; use only a permitted evaluation split."
     }
   ]
 }

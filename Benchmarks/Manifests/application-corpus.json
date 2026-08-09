@@ -1,0 +1,32 @@
+{
+  "$schema": "../Schemas/dataset-manifest-v1.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "phase1-application-corpus-synthetic-descriptors",
+  "track": "application",
+  "frozen": true,
+  "normalizationVersion": "whisper-hotkey-wer-normalization-v1",
+  "normalizationSha256": "2b76e7b39594da73f01f3fe7de0f3453852068db828976e344cee79a31599edb",
+  "caseCount": 28,
+  "source": {
+    "name": "Synthetic application-dictation descriptors",
+    "url": "https://local.whisper-hotkey.dev/fixtures/application-corpus-v1",
+    "version": "v1"
+  },
+  "license": "CC0-1.0 synthetic descriptors",
+  "licenseVerified": true,
+  "partitions": [
+    {"id":"train","speakerSessionDisjoint":true,"caseCount":8,"tags":["hotkey_length","technical_terms","names","acronyms","paths","numbers","dates","units","thinking_pauses","self_restarts","questions","compound_sentences","sentence_fragments","long_sentences"]},
+    {"id":"calibration","speakerSessionDisjoint":true,"caseCount":5,"tags":["confidence","homophones","thinking_pauses","self_restarts","numbers","units"]},
+    {"id":"dev","speakerSessionDisjoint":true,"caseCount":5,"tags":["boundaries","paths","dates","proper_names","fan","keyboard","tv","cafe"]},
+    {"id":"test","speakerSessionDisjoint":true,"caseCount":10,"tags":["protected_slices","noise_conditions","multiple_rates","multiple_distances"]}
+  ],
+  "protectedSlices": ["proper_names", "product_names", "acronyms", "numbers", "dates", "units", "homophones", "thinking_pauses", "self_corrections", "questions", "sentence_fragments", "long_sentences", "background_speech"],
+  "requiredMetrics": ["normalizedWER", "displayWER", "cer", "entityAccuracy", "numberUnitAccuracy", "homophoneExactMatch", "punctuationF1", "boundaryF1", "falsePeriodRate", "capitalizationErrorRate", "properNounAccuracy", "confidenceAuprc", "ece", "repairPrecision", "repairRecall", "falseRewriteRate", "highConfidenceCorruptionRate", "latencyP50Ms", "latencyP95Ms", "latencyP99Ms", "peakRSSMiB"],
+  "privacy": {
+    "containsOrdinaryUserAudio": false,
+    "containsTranscriptText": false,
+    "redistribution": "synthetic",
+    "fixturePath": "../Fixtures/application-corpus.synthetic.jsonl",
+    "fixtureSha256": "9d1c87b9dd785c82ea68c3946e7ac4a79145f69a5fcf23f35d4e0c21d1b5b4f4"
+  }
+}

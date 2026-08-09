@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/dataset-manifest-v1.json",
+  "title": "FrozenBenchmarkDatasetManifestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestId",
+    "track",
+    "frozen",
+    "normalizationVersion",
+    "caseCount",
+    "source",
+    "license",
+    "privacy"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "manifestId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "track": { "enum": ["smoke", "full_public", "application"] },
+    "frozen": { "type": "boolean", "const": true },
+    "normalizationVersion": { "type": "string", "minLength": 1 },
+    "normalizationSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "caseCount": { "type": "integer", "minimum": 0 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "version": { "type": "string" },
+        "termsUrl": { "type": "string", "format": "uri" }
+      }
+    },
+    "license": { "type": "string", "minLength": 1 },
+    "licenseVerified": { "type": "boolean" },
+    "caseList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "required", "license", "sourceUrl"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["ready", "metadata-only", "planned"] },
+          "required": { "type": "boolean" },
+          "license": { "type": "string", "minLength": 1 },
+          "licenseVerified": { "type": "boolean" },
+          "sourceUrl": { "type": "string", "format": "uri" },
+          "termsUrl": { "type": "string", "format": "uri" },
+          "splits": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "partitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "speakerSessionDisjoint", "caseCount", "tags"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "speakerSessionDisjoint": { "type": "boolean", "const": true },
+          "caseCount": { "type": "integer", "minimum": 0 },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "protectedSlices": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "requiredMetrics": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["containsOrdinaryUserAudio", "containsTranscriptText", "redistribution"],
+      "properties": {
+        "containsOrdinaryUserAudio": { "const": false },
+        "containsTranscriptText": { "const": false },
+        "redistribution": { "enum": ["metadata-only", "licensed-fixture", "synthetic"] },
+        "fixturePath": { "type": "string" },
+        "fixtureSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

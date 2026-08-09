@@ -37,6 +37,31 @@ The suite catalog of broader benchmark candidates is in:
 Benchmarks/BenchmarkSuite/datasets/catalog.json
 ```
 
+## Frozen tracks and scoring
+
+The frozen track manifests live in `Benchmarks/Manifests/`:
+
+- `smoke-100.json` is the existing 100-utterance LibriSpeech smoke selection;
+  its case-list checksum prevents accidental selection drift.
+- `full-public.json` records LibriSpeech, Earnings-22, Contextual Earnings-22,
+  TED-LIUM 3, AMI, MUSAN, and the optional GigaSpeech evaluation track. Public
+  artifacts remain metadata-only until their upstream terms are verified.
+- `application-corpus.json` and its synthetic descriptor fixture define
+  speaker/session-disjoint train, calibration, dev, and test partitions without
+  storing audio or transcript text.
+
+`Benchmarks/Metrics/` contains the frozen normalizer, privacy-safe result
+schema tooling, paired utterance bootstrap, and required primary/confidence/
+verifier/fusion/formatting ablation report. Text is consumed only as ephemeral
+scoring input; generated results contain IDs and numeric measurements.
+
+```sh
+python3 Benchmarks/Metrics/tests/run_metrics_tests.py
+python3 Benchmarks/Metrics/score_benchmark.py input.jsonl --output result.json
+python3 Benchmarks/Metrics/paired_bootstrap.py paired.jsonl --output paired.json
+python3 Benchmarks/Metrics/ablation_report.py ablations.jsonl --output ablations.json
+```
+
 ## Parakeet
 
 The Parakeet engine is measured with a separate harness, kept in its own

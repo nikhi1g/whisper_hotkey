@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/ablation-report-v1.json",
+  "title": "AblationReportV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "normalization", "requiredAblations", "missingAblations", "profiles"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "normalization": { "$ref": "benchmark-result-v1.schema.json#/properties/normalization" },
+    "requiredAblations": {
+      "const": ["primary", "+confidence", "+verifier", "+fusion", "+formatting"]
+    },
+    "missingAblations": { "type": "array", "items": { "type": "string" }, "maxItems": 0 },
+    "profiles": {
+      "type": "object",
+      "required": ["primary", "+confidence", "+verifier", "+fusion", "+formatting"],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(primary|\\+confidence|\\+verifier|\\+fusion|\\+formatting)$": {
+          "type": "object",
+          "required": ["profile", "utterances", "errors", "referenceWords", "normalizedWER", "deltaWERvsPrimary", "regressionCount", "improvementCount", "pairedBootstrap"],
+          "properties": {
+            "profile": { "type": "string" },
+            "utterances": { "type": "integer", "minimum": 2 },
+            "errors": { "type": "integer", "minimum": 0 },
+            "referenceWords": { "type": "integer", "minimum": 1 },
+            "normalizedWER": { "type": ["number", "null"], "minimum": 0 },
+            "deltaWERvsPrimary": { "type": "number" },
+            "regressionCount": { "type": "integer", "minimum": 0 },
+            "improvementCount": { "type": "integer", "minimum": 0 },
+            "pairedBootstrap": { "type": ["object", "null"] }
+          }
+        }
+      }
+    }
+  }
+}

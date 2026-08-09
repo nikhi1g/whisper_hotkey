@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/paired-bootstrap-v1.json",
+  "title": "PairedBootstrapWERV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "normalization", "n", "baselineWER", "candidateWER", "deltaCandidateMinusBaseline", "absoluteImprovement", "confidenceLevel", "ci", "bootstrapSamples", "seed", "improvementCount", "regressionCount", "tieCount", "bySubset"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "normalization": { "$ref": "benchmark-result-v1.schema.json#/properties/normalization" },
+    "n": { "type": "integer", "minimum": 2 },
+    "baselineWER": { "$ref": "#/$defs/wer" },
+    "candidateWER": { "$ref": "#/$defs/wer" },
+    "deltaCandidateMinusBaseline": { "type": "number" },
+    "delta_candidate_minus_baseline": { "type": "number" },
+    "absoluteImprovement": { "type": "number" },
+    "relativeImprovement": { "type": ["number", "null"] },
+    "confidenceLevel": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": { "lower": { "type": "number" }, "upper": { "type": "number" } }
+    },
+    "ci95": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+    "bootstrapSamples": { "type": "integer", "minimum": 100 },
+    "seed": { "type": "integer" },
+    "improvementCount": { "type": "integer", "minimum": 0 },
+    "regressionCount": { "type": "integer", "minimum": 0 },
+    "tieCount": { "type": "integer", "minimum": 0 },
+    "bySubset": { "type": "object", "additionalProperties": { "type": "object" } }
+  },
+  "$defs": { "wer": { "type": "number", "minimum": 0 } }
+}

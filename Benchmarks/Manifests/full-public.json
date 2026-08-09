@@ -1,0 +1,109 @@
+{
+  "$schema": "../Schemas/dataset-manifest-v1.schema.json",
+  "schemaVersion": 1,
+  "manifestId": "phase1-full-public-tracks",
+  "track": "full_public",
+  "frozen": true,
+  "normalizationVersion": "whisper-hotkey-wer-normalization-v1",
+  "normalizationSha256": "2b76e7b39594da73f01f3fe7de0f3453852068db828976e344cee79a31599edb",
+  "caseCount": 0,
+  "source": {
+    "name": "Phase 1 public benchmark catalog",
+    "url": "https://www.openslr.org/12/",
+    "version": "metadata manifest v1"
+  },
+  "license": "Each upstream dataset's terms apply; no restricted artifact is redistributed",
+  "licenseVerified": false,
+  "entries": [
+    {
+      "id": "librispeech-test-clean",
+      "status": "ready",
+      "required": true,
+      "license": "CC BY 4.0",
+      "licenseVerified": true,
+      "sourceUrl": "https://www.openslr.org/12/",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "splits": ["test-clean"],
+      "notes": "Use the checksum-verified OpenSLR archive; do not commit audio."
+    },
+    {
+      "id": "librispeech-test-other",
+      "status": "ready",
+      "required": true,
+      "license": "CC BY 4.0",
+      "licenseVerified": true,
+      "sourceUrl": "https://www.openslr.org/12/",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "splits": ["test-other"],
+      "notes": "Use the checksum-verified OpenSLR archive; do not commit audio."
+    },
+    {
+      "id": "earnings22",
+      "status": "metadata-only",
+      "required": true,
+      "license": "Upstream terms must be verified before local use",
+      "licenseVerified": false,
+      "sourceUrl": "https://github.com/revdotcom/speech-datasets/tree/main/earnings22",
+      "splits": ["test"],
+      "notes": "Long-form business speech with entities and numbers; no download is automatic."
+    },
+    {
+      "id": "contextual-earnings22",
+      "status": "metadata-only",
+      "required": true,
+      "license": "Artifact terms must be verified before local use",
+      "licenseVerified": false,
+      "sourceUrl": "https://arxiv.org/abs/2604.07354",
+      "splits": ["evaluation"],
+      "notes": "Contextual rare-vocabulary slice; retain only an approved evaluation artifact."
+    },
+    {
+      "id": "tedlium3",
+      "status": "metadata-only",
+      "required": true,
+      "license": "CC BY-NC-ND 3.0",
+      "licenseVerified": false,
+      "sourceUrl": "https://www.openslr.org/51/",
+      "termsUrl": "https://creativecommons.org/licenses/by-nc-nd/3.0/",
+      "splits": ["test"],
+      "notes": "Prepared presentation speech; external terms still govern the local copy."
+    },
+    {
+      "id": "ami-single-distant-microphone",
+      "status": "metadata-only",
+      "required": true,
+      "license": "Upstream terms must be verified before local use",
+      "licenseVerified": false,
+      "sourceUrl": "https://groups.inf.ed.ac.uk/ami/corpus/",
+      "splits": ["single-distant-microphone"],
+      "notes": "Conversation and far-field behavior; report overlap separately."
+    },
+    {
+      "id": "musan-controlled-mixtures",
+      "status": "metadata-only",
+      "required": true,
+      "license": "Upstream terms must be verified before local use",
+      "licenseVerified": false,
+      "sourceUrl": "https://www.openslr.org/17/",
+      "splits": ["music", "speech", "noise"],
+      "notes": "Controlled mixtures only; fixed SNR and seed must be recorded in a run configuration."
+    },
+    {
+      "id": "gigaspeech-evaluation",
+      "status": "planned",
+      "required": false,
+      "license": "Upstream terms must be verified before local use",
+      "licenseVerified": false,
+      "sourceUrl": "https://github.com/SpeechColab/GigaSpeech",
+      "splits": ["test"],
+      "notes": "Recommended large-scale reference; use only a permitted evaluation split."
+    }
+  ],
+  "protectedSlices": ["proper_names", "product_names", "acronyms", "numbers", "units", "homophones", "thinking_pauses", "self_corrections", "questions", "sentence_fragments", "long_sentences", "background_speech"],
+  "requiredMetrics": ["normalizedWER", "displayWER", "cer", "entityAccuracy", "numberUnitAccuracy", "homophoneExactMatch", "punctuationF1", "boundaryF1", "confidenceAuprc", "ece", "repairPrecision", "repairRecall", "highConfidenceCorruptionRate", "latencyP50Ms", "latencyP95Ms", "latencyP99Ms", "peakRSSMiB"],
+  "privacy": {
+    "containsOrdinaryUserAudio": false,
+    "containsTranscriptText": false,
+    "redistribution": "metadata-only"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/benchmark-input-v1.json",
+  "title": "EphemeralBenchmarkInputV1",
+  "description": "Scoring input. Do not persist ordinary user audio or transcript text.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "reference", "hypothesis"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "reference": { "type": "string" },
+    "hypothesis": { "type": "string" },
+    "subset": { "type": "string" },
+    "latencyMs": { "type": "number", "minimum": 0 },
+    "audioDurationMs": { "type": "number", "minimum": 0 },
+    "peakRSSMiB": { "type": "number", "minimum": 0 },
+    "metadata": { "type": "object" }
+  }
+}

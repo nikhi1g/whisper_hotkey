@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.whisper-hotkey.dev/schema/benchmark-result-v1.json",
+  "title": "PrivacySafeBenchmarkResultV1",
+  "description": "A benchmark result contains identifiers and measurements, never audio or transcript text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runID", "commit", "hardware", "configuration", "normalization", "summary", "slices", "items"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runID": { "type": "string", "minLength": 1 },
+    "commit": { "type": "string", "minLength": 1 },
+    "hardware": { "type": "object" },
+    "configuration": { "type": "object" },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "normalizedWER", "displayWER", "wer", "cer", "entityAccuracy", "numberUnitAccuracy", "homophoneExactMatch",
+        "punctuationF1", "punctuationMacroF1", "punctuationMicroF1", "boundaryF1", "sentenceBoundaryF1", "falsePeriodRate", "capitalizationErrorRate", "properNounAccuracy", "numberErrorRate", "numberDateUnitAccuracy",
+        "incorrectWordAuprc", "confidenceAuprc", "ece", "mce", "nce", "errorRecallAtVerifierBudget",
+        "repairPrecision", "repairRecall", "falseRewriteRate", "highConfidenceCorruptionRate", "lexicalMutationCount",
+        "verifierAudioRatio", "verifierInvocationRate", "latencyP50Ms", "latencyP95Ms", "latencyP99Ms",
+        "realTimeFactor", "peakRSSMiB", "timeToFirstResultMs", "timeToStableSentenceMs", "cpuUtilizationPct", "gpuUtilizationPct", "aneUtilizationPct", "energyThermalState", "cancellationFailureRate", "rapidRestartFailureRate", "hallucinationRate", "repetitionRate", "hallucinationRepetitionRate", "utteranceCount"
+      ],
+      "properties": {
+        "normalizedWER": { "$ref": "#/$defs/rate" },
+        "displayWER": { "$ref": "#/$defs/rate" },
+        "wer": { "$ref": "#/$defs/rate" },
+        "cer": { "$ref": "#/$defs/rate" },
+        "entityAccuracy": { "$ref": "#/$defs/rate" },
+        "numberUnitAccuracy": { "$ref": "#/$defs/rate" },
+        "homophoneExactMatch": { "$ref": "#/$defs/rate" },
+        "punctuationF1": { "$ref": "#/$defs/rate" },
+        "punctuationMacroF1": { "$ref": "#/$defs/rate" },
+        "punctuationMicroF1": { "$ref": "#/$defs/rate" },
+        "boundaryF1": { "$ref": "#/$defs/rate" },
+        "sentenceBoundaryF1": { "$ref": "#/$defs/rate" },
+        "falsePeriodRate": { "$ref": "#/$defs/rate" },
+        "capitalizationErrorRate": { "$ref": "#/$defs/rate" },
+        "properNounAccuracy": { "$ref": "#/$defs/rate" },
+        "numberErrorRate": { "$ref": "#/$defs/rate" },
+        "numberDateUnitAccuracy": { "$ref": "#/$defs/rate" },
+        "incorrectWordAuprc": { "$ref": "#/$defs/rate" },
+        "confidenceAuprc": { "$ref": "#/$defs/rate" },
+        "ece": { "$ref": "#/$defs/rate" },
+        "mce": { "$ref": "#/$defs/rate" },
+        "nce": { "$ref": "#/$defs/rate" },
+        "errorRecallAtVerifierBudget": { "$ref": "#/$defs/rate" },
+        "repairPrecision": { "$ref": "#/$defs/rate" },
+        "repairRecall": { "$ref": "#/$defs/rate" },
+        "falseRewriteRate": { "$ref": "#/$defs/rate" },
+        "highConfidenceCorruptionRate": { "$ref": "#/$defs/rate" },
+        "lexicalMutationCount": { "type": "integer", "minimum": 0 },
+        "verifierAudioRatio": { "$ref": "#/$defs/rate" },
+        "verifierInvocationRate": { "$ref": "#/$defs/rate" },
+        "latencyP50Ms": { "$ref": "#/$defs/nonNegativeNumber" },
+        "latencyP95Ms": { "$ref": "#/$defs/nonNegativeNumber" },
+        "latencyP99Ms": { "$ref": "#/$defs/nonNegativeNumber" },
+        "realTimeFactor": { "$ref": "#/$defs/nonNegativeNumber" },
+        "peakRSSMiB": { "$ref": "#/$defs/nonNegativeNumber" },
+        "timeToFirstResultMs": { "$ref": "#/$defs/nonNegativeNumber" },
+        "timeToStableSentenceMs": { "$ref": "#/$defs/nonNegativeNumber" },
+        "cpuUtilizationPct": { "$ref": "#/$defs/nonNegativeNumber" },
+        "gpuUtilizationPct": { "$ref": "#/$defs/nonNegativeNumber" },
+        "aneUtilizationPct": { "$ref": "#/$defs/nonNegativeNumber" },
+        "energyThermalState": { "type": ["string", "null"] },
+        "cancellationFailureRate": { "$ref": "#/$defs/rate" },
+        "rapidRestartFailureRate": { "$ref": "#/$defs/rate" },
+        "hallucinationRate": { "$ref": "#/$defs/rate" },
+        "repetitionRate": { "$ref": "#/$defs/rate" },
+        "hallucinationRepetitionRate": { "$ref": "#/$defs/rate" },
+        "utteranceCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "slices": { "type": "object" },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "subset", "referenceWordCount", "normalizedSubstitutions", "normalizedDeletions", "normalizedInsertions",
+          "normalizedWordErrors", "displayUnitCount", "displayErrors", "charUnitCount", "charErrors", "latencyMs", "audioDurationMs"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "subset": { "type": "string", "minLength": 1 },
+          "referenceWordCount": { "type": "integer", "minimum": 0 },
+          "normalizedSubstitutions": { "type": "integer", "minimum": 0 },
+          "normalizedDeletions": { "type": "integer", "minimum": 0 },
+          "normalizedInsertions": { "type": "integer", "minimum": 0 },
+          "normalizedWordErrors": { "type": "integer", "minimum": 0 },
+          "displayUnitCount": { "type": "integer", "minimum": 0 },
+          "displayErrors": { "type": "integer", "minimum": 0 },
+          "charUnitCount": { "type": "integer", "minimum": 0 },
+          "charErrors": { "type": "integer", "minimum": 0 },
+          "latencyMs": { "type": "number", "minimum": 0 },
+          "audioDurationMs": { "type": "number", "minimum": 0 },
+          "peakRSSMiB": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonNegativeNumber": { "type": ["number", "null"], "minimum": 0 },
+    "rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+  }
+}
