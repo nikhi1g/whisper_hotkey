@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://whisper-hotkey.local/schemas/performance-v1.json",
+  "title": "whisper_hotkey content-free performance result",
+  "type": "object",
+  "required": [
+    "schema",
+    "run",
+    "host",
+    "tools",
+    "thermal",
+    "bounds",
+    "preflight",
+    "lower_memory_matrix",
+    "profiles",
+    "comparisons",
+    "privacy"
+  ],
+  "properties": {
+    "schema": { "const": "whisper_hotkey_performance_v1" },
+    "run": {
+      "type": "object",
+      "required": ["kind", "started_utc"],
+      "properties": {
+        "kind": { "enum": ["preflight", "engine_profile", "soak_cancel"] },
+        "started_utc": { "type": "string", "format": "date-time" },
+        "revision": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "host": {
+      "type": "object",
+      "required": ["architecture", "model_identifier", "chip", "memory_gb_reported", "os"],
+      "properties": {
+        "architecture": { "type": ["string", "null"] },
+        "model_identifier": { "type": ["string", "null"] },
+        "chip": { "type": ["string", "null"] },
+        "cpu_cores_reported": { "type": ["integer", "null"], "minimum": 1 },
+        "gpu_cores_reported": { "type": ["integer", "null"], "minimum": 1 },
+        "memory_gb_reported": { "type": ["number", "null"], "minimum": 0 },
+        "os": {
+          "type": "object",
+          "properties": {
+            "name": { "type": ["string", "null"] },
+            "version": { "type": ["string", "null"] },
+            "build": { "type": ["string", "null"] },
+            "kernel": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["available", "unavailable"] },
+          "version": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "thermal": {
+      "type": "object",
+      "required": ["status", "raw_output_recorded"],
+      "properties": {
+        "status": { "enum": ["queried", "unavailable"] },
+        "source": { "type": "string" },
+        "raw_output_recorded": { "const": false },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "bounds": {
+      "type": "object",
+      "required": ["max_cases", "max_measurements", "max_audio_seconds_per_case", "max_event_line_bytes", "max_discovered_paths", "max_concurrent_engine_processes"],
+      "properties": {
+        "max_cases": { "type": "integer", "minimum": 1 },
+        "max_measurements": { "type": "integer", "minimum": 1 },
+        "max_audio_seconds_per_case": { "type": "number", "exclusiveMinimum": 0 },
+        "max_event_line_bytes": { "type": "integer", "minimum": 1 },
+        "max_discovered_paths": { "type": "integer", "minimum": 1 },
+        "max_concurrent_engine_processes": { "const": 2 }
+      },
+      "additionalProperties": false
+    },
+    "preflight": { "type": "object" },
+    "lower_memory_matrix": {
+      "type": "object",
+      "required": ["procedure", "tiers"],
+      "properties": {
+        "procedure": { "type": "string" },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["memory_gb", "status", "metrics", "blockers"],
+            "properties": {
+              "memory_gb": { "type": "integer", "minimum": 1 },
+              "status": { "enum": ["measured", "unmeasured"] },
+              "metrics": { "type": ["object", "null"] },
+              "blockers": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["measured", "unavailable"] },
+          "engine": { "type": "string" },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "metrics": { "type": ["object", "null"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "policy", "blockers"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["measured", "unavailable"] },
+          "policy": { "type": "string" },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "sequential": { "type": ["object", "null"] },
+          "heterogeneous_concurrent": { "type": ["object", "null"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["content_free_report", "audio_written", "transcript_written", "child_output_persisted"],
+      "properties": {
+        "content_free_report": { "const": true },
+        "audio_written": { "const": false },
+        "transcript_written": { "const": false },
+        "child_output_persisted": { "const": false },
+        "ordinary_user_content": { "const": false },
+        "temporary_directories_owner_only": { "const": true },
+        "temporary_storage_scope": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
