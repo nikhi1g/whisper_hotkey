@@ -4,6 +4,147 @@ import XCTest
 @testable import WhisperHotkeyASR
 
 final class AudioCaptureTests: XCTestCase {
+    func testFastPathActivatesCaptureBeforePreparingWriter() throws {
+        var events: [String] = []
+
+        let prepared = try activateWhisperCaptureFastPath(
+            activateCapture: {
+                events.append("capture")
+            },
+            prepareWriter: {
+                events.append("writer")
+                return 42
+            },
+            adoptWriter: { value in
+                XCTAssertEqual(value, 42)
+                events.append("adopt")
+            }
+        )
+
+        XCTAssertEqual(prepared, 42)
+        XCTAssertEqual(events, ["capture", "writer", "adopt"])
+    }
+
+    func testBufferedSinkRetainsFirstBufferAndWritesFIFOAfterAttach()
+        throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "whisper_hotkey-buffered-audio-test-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("dictation.wav")
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let fileFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        var outputFile: AVAudioFile? = try AVAudioFile(
+            forWriting: url,
+            settings: fileFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let processingFormat = try XCTUnwrap(outputFile?.processingFormat)
+        let converter = try XCTUnwrap(
+            AVAudioConverter(from: format, to: processingFormat)
+        )
+        let timing = LockedAudioTiming()
+        let writer = WhisperWAVWriter(
+            file: try XCTUnwrap(outputFile),
+            segmentFile: nil,
+            segmentAudioFile: nil,
+            converter: converter,
+            outputFormat: processingFormat,
+            onFirstSamplesCommitted: timing.recordCommitted
+        )
+        let sink = WhisperBufferedAudioSink(
+            onFirstBuffer: timing.recordBuffer
+        )
+        let first = try makeConstantBuffer(format: format, value: 0.25)
+        let second = try makeConstantBuffer(format: format, value: -0.25)
+
+        // This is the startup race: Core Audio delivers speech before private
+        // file/converter preparation has attached the writer.
+        sink.consume(first)
+        sink.attach(writer)
+        sink.consume(second)
+        XCTAssertNil(sink.finishAcceptingAndWait())
+        XCTAssertNil(writer.finish())
+        outputFile = nil
+
+        let written = try AVAudioFile(forReading: url)
+        let samples = try XCTUnwrap(
+            AVAudioPCMBuffer(
+                pcmFormat: written.processingFormat,
+                frameCapacity: AVAudioFrameCount(written.length)
+            )
+        )
+        try written.read(into: samples)
+        let channel = try XCTUnwrap(samples.floatChannelData?[0])
+        XCTAssertEqual(samples.frameLength, 640)
+        XCTAssertGreaterThan(channel[0], 0.2)
+        XCTAssertLessThan(channel[320], -0.2)
+
+        let timestamps = timing.snapshot
+        XCTAssertNotNil(timestamps.buffer)
+        XCTAssertNotNil(timestamps.committed)
+        XCTAssertLessThanOrEqual(
+            try XCTUnwrap(timestamps.buffer),
+            try XCTUnwrap(timestamps.committed)
+        )
+    }
+
+    func testBufferedSinkOverflowFailsInsteadOfTruncatingSilently()
+        throws
+    {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let input = try makeConstantBuffer(format: format, value: 0.1)
+        let sink = WhisperBufferedAudioSink(maximumQueuedBytes: 1)
+
+        sink.consume(input)
+
+        XCTAssertNotNil(sink.finishAcceptingAndWait())
+    }
+
+    func testCaptureTimingUsesIntegerUptimeDeltas() {
+        let timing = WhisperAudioCaptureTiming(
+            requestedAtUptimeNanoseconds: 100,
+            firstBufferAtUptimeNanoseconds: 145,
+            firstCommittedSampleAtUptimeNanoseconds: 210
+        )
+
+        XCTAssertEqual(timing.requestToFirstBufferNanoseconds, 45)
+        XCTAssertEqual(
+            timing.requestToFirstCommittedSampleNanoseconds,
+            110
+        )
+    }
+
     func testCompletionGraceAppliesOnlyToConfirmedRecentSpeech() {
         XCTAssertEqual(
             CompletionCaptureGracePolicy.delay(
@@ -132,8 +273,10 @@ final class AudioCaptureTests: XCTestCase {
             }
         }
 
+        let sink = WhisperBufferedAudioSink()
+        sink.attach(writer)
         let callback = AudioTapInvocation(
-            block: makeWhisperAudioTapHandler(writer: writer),
+            block: makeWhisperAudioTapHandler(sink: sink),
             buffer: input
         )
         let callbackFinished = DispatchSemaphore(value: 0)
@@ -145,12 +288,14 @@ final class AudioCaptureTests: XCTestCase {
             callbackFinished.wait(timeout: .now() + 2),
             .success
         )
+        _ = try sink.performWriterAction { _ in () }
         XCTAssertGreaterThan(writer.normalizedInputLevel, 0.3)
         XCTAssertLessThanOrEqual(writer.normalizedInputLevel, 1)
 
         for _ in 0..<9 {
-            writer.consume(input)
+            sink.consume(input)
         }
+        _ = try sink.performWriterAction { _ in () }
         XCTAssertEqual(writer.speechPresence, .present)
         XCTAssertGreaterThan(writer.segmentDuration, 0.9)
         XCTAssertEqual(writer.segmentSpeechPresence, .present)
@@ -176,17 +321,20 @@ final class AudioCaptureTests: XCTestCase {
             url: nextSegmentURL,
             directoryURL: nextSegmentDirectory
         )
-        let completedSegment = try writer.rotateSegment(
-            to: nextSegmentFile,
-            audioFile: nextSegmentAudio
-        )
+        let completedSegment = try sink.performWriterAction { writer in
+            try writer.rotateSegment(
+                to: nextSegmentFile,
+                audioFile: nextSegmentAudio
+            )
+        }
         XCTAssertEqual(completedSegment.speechPresence, .present)
         XCTAssertEqual(writer.trailingSilenceDuration, 0)
         XCTAssertEqual(writer.segmentDuration, 0)
 
         for _ in 0..<5 {
-            writer.consume(input)
+            sink.consume(input)
         }
+        XCTAssertNil(sink.finishAcceptingAndWait())
         XCTAssertGreaterThan(writer.segmentDuration, 0.4)
         let finishResult = writer.finishRetainingSegment()
         XCTAssertNil(finishResult.error)
@@ -364,6 +512,49 @@ final class AudioCaptureTests: XCTestCase {
         )
         XCTAssertEqual(next.trailingSilenceDuration, 0)
         XCTAssertEqual(next.presence, .absent)
+    }
+
+    private func makeConstantBuffer(
+        format: AVAudioFormat,
+        value: Float
+    ) throws -> AVAudioPCMBuffer {
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 320)
+        )
+        buffer.frameLength = 320
+        let samples = try XCTUnwrap(buffer.floatChannelData?[0])
+        for index in 0..<320 {
+            samples[index] = value
+        }
+        return buffer
+    }
+}
+
+private final class LockedAudioTiming: @unchecked Sendable {
+    private let lock = NSLock()
+    private var firstBuffer: UInt64?
+    private var firstCommitted: UInt64?
+
+    var snapshot: (buffer: UInt64?, committed: UInt64?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (firstBuffer, firstCommitted)
+    }
+
+    func recordBuffer(_ uptimeNanoseconds: UInt64) {
+        lock.lock()
+        if firstBuffer == nil {
+            firstBuffer = uptimeNanoseconds
+        }
+        lock.unlock()
+    }
+
+    func recordCommitted(_ uptimeNanoseconds: UInt64) {
+        lock.lock()
+        if firstCommitted == nil {
+            firstCommitted = uptimeNanoseconds
+        }
+        lock.unlock()
     }
 }
 

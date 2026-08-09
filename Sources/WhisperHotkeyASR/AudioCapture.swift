@@ -197,52 +197,80 @@ public final class WhisperAudioFile: @unchecked Sendable {
     }
 }
 
+public struct WhisperAudioCaptureToken: Hashable, Sendable {
+    fileprivate let rawValue: UInt64
+}
+
+public struct WhisperAudioCaptureTiming: Equatable, Sendable {
+    public let requestedAtUptimeNanoseconds: UInt64
+    public let firstBufferAtUptimeNanoseconds: UInt64?
+    public let firstCommittedSampleAtUptimeNanoseconds: UInt64?
+
+    public var requestToFirstBufferNanoseconds: UInt64? {
+        guard let firstBufferAtUptimeNanoseconds,
+              firstBufferAtUptimeNanoseconds
+                >= requestedAtUptimeNanoseconds
+        else {
+            return nil
+        }
+        return firstBufferAtUptimeNanoseconds
+            - requestedAtUptimeNanoseconds
+    }
+
+    public var requestToFirstCommittedSampleNanoseconds: UInt64? {
+        guard let firstCommittedSampleAtUptimeNanoseconds,
+              firstCommittedSampleAtUptimeNanoseconds
+                >= requestedAtUptimeNanoseconds
+        else {
+            return nil
+        }
+        return firstCommittedSampleAtUptimeNanoseconds
+            - requestedAtUptimeNanoseconds
+    }
+}
+
 @MainActor
 public final class WhisperAudioRecorder {
-    private let engineBox: WhisperAudioEngineBox
-    private let fileManager: FileManager
-    private let temporaryDirectory: URL
-    private var writer: WhisperWAVWriter?
-    private var audioFile: WhisperAudioFile?
-    private var audioLease: WhisperAudioLease?
-    private var inputTapInstalled = false
+    private nonisolated let backend: WhisperAudioRecorderBackend
 
     public init(
         audioEngine: AVAudioEngine = AVAudioEngine(),
         fileManager: FileManager = .default,
         temporaryDirectory: URL = FileManager.default.temporaryDirectory
     ) {
-        engineBox = WhisperAudioEngineBox(audioEngine)
-        self.fileManager = fileManager
-        self.temporaryDirectory = temporaryDirectory
+        backend = WhisperAudioRecorderBackend(
+            audioEngine: audioEngine,
+            fileManager: fileManager,
+            temporaryDirectory: temporaryDirectory
+        )
     }
 
     public var isRecording: Bool {
-        audioFile != nil && engineBox.engine.isRunning
+        backend.isRecording
     }
 
     /// A normalized 0...1 microphone level for lightweight presentation.
     /// Reading this value does not touch AVAudioEngine and is useful only while
     /// recording.
     public var normalizedInputLevel: Float {
-        writer?.normalizedInputLevel ?? 0
+        backend.normalizedInputLevel
     }
 
     /// Silence following confirmed speech in the current recording. This is
     /// updated by the existing audio callback and adds no timer or audio pass.
     public var trailingSilenceDuration: TimeInterval {
-        writer?.trailingSilenceDuration ?? 0
+        backend.trailingSilenceDuration
     }
 
     /// Duration and speech state for the current inference segment. Both are
     /// maintained by the existing audio callback and read only while capture
     /// is active.
     public var currentSegmentDuration: TimeInterval {
-        writer?.segmentDuration ?? 0
+        backend.currentSegmentDuration
     }
 
     public var currentSegmentSpeechPresence: WhisperSpeechPresence {
-        writer?.segmentSpeechPresence ?? .unknown
+        backend.currentSegmentSpeechPresence
     }
 
     /// A bounded post-roll used only when confirmed speech reaches the
@@ -257,49 +285,455 @@ public final class WhisperAudioRecorder {
     /// The current cadence-aware pause boundary. It is learned only from the
     /// existing audio callback and remains bounded for predictable latency.
     public var pauseBoundarySilence: TimeInterval {
-        writer?.pauseBoundarySilence
-            ?? WhisperSpeechActivityDetector.defaultPauseBoundary
+        backend.pauseBoundarySilence
     }
 
     deinit {
-        let lease = audioLease
-        engineBox.stop(removeInputTap: inputTapInstalled)
-        writer?.finish()
-        audioFile?.delete()
-        lease?.finish()
+        backend.shutdown()
+    }
+
+    /// Enqueues provisional microphone activation and returns immediately.
+    /// This method is safe to call from a global event callback: all engine,
+    /// storage, and conversion work runs on recorder-owned queues.
+    public nonisolated func primeCapture(
+        pauseSegmentation: Bool = false,
+        requestedAtUptimeNanoseconds: UInt64 = DispatchTime.now()
+            .uptimeNanoseconds
+    ) -> WhisperAudioCaptureToken {
+        backend.prime(
+            pauseSegmentation: pauseSegmentation,
+            requestedAtUptimeNanoseconds: requestedAtUptimeNanoseconds
+        )
+    }
+
+    /// Returns content-free monotonic timing for startup diagnostics. Values
+    /// remain optional until the corresponding callback/write has occurred.
+    public nonisolated func captureTiming(
+        for token: WhisperAudioCaptureToken
+    ) -> WhisperAudioCaptureTiming? {
+        backend.captureTiming(for: token)
+    }
+
+    /// Accepts one matching provisional capture without restarting its engine
+    /// or losing buffers collected before private WAV preparation completed.
+    @discardableResult
+    public func adoptPrimedCapture(
+        _ token: WhisperAudioCaptureToken
+    ) throws -> URL {
+        try backend.adopt(token)
+    }
+
+    /// Enqueues cancellation for only the matching, still-provisional session.
+    /// An already-adopted or newer recording cannot be cancelled by a stale
+    /// hotkey rejection.
+    public nonisolated func cancelPrimedCapture(
+        _ token: WhisperAudioCaptureToken
+    ) {
+        backend.cancelPrimed(token)
     }
 
     @discardableResult
     public func start(pauseSegmentation: Bool = false) throws -> URL {
-        cancel()
-        let audioFile = try makePrivateAudioFile()
-        var segmentAudioFile: WhisperAudioFile?
+        let token = primeCapture(pauseSegmentation: pauseSegmentation)
+        return try adoptPrimedCapture(token)
+    }
 
-        do {
-            let inputNode = engineBox.engine.inputNode
-            let inputFormat = inputNode.outputFormat(forBus: 0)
-            guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-                throw WhisperASRError.microphoneUnavailable
+    public func stop() throws -> WhisperAudioFile {
+        try backend.stop()
+    }
+
+    /// Rotates only the inference segment while the uninterrupted private
+    /// session recording and microphone engine continue running.
+    public func rotatePauseSegment() throws -> WhisperAudioFile {
+        try backend.rotatePauseSegment()
+    }
+
+    /// Stops one continuous Pause Mode recording and returns both the complete
+    /// private session audio and its untranscribed final segment.
+    public func stopPauseSession() throws -> (
+        recording: WhisperAudioFile,
+        finalSegment: WhisperAudioFile
+    ) {
+        try backend.stopPauseSession()
+    }
+
+    public func cancel() {
+        backend.cancel()
+    }
+}
+
+private final class WhisperAudioRecorderBackend: @unchecked Sendable {
+    private enum Phase {
+        case provisional
+        case adopted
+    }
+
+    private let engineBox: WhisperAudioEngineBox
+    private let fileManager: FileManager
+    private let temporaryDirectory: URL
+    private let controlQueue = DispatchQueue(
+        label: "whisper_hotkey.audio.capture-control",
+        qos: .userInteractive
+    )
+    private let tokenLock = NSLock()
+    private let timingLock = NSLock()
+    private var nextToken: UInt64 = 0
+    private var timingTrackers: [
+        WhisperAudioCaptureToken: WhisperAudioCaptureTimingTracker
+    ] = [:]
+    private var timingTokenOrder: [WhisperAudioCaptureToken] = []
+    private var activeToken: WhisperAudioCaptureToken?
+    private var phase: Phase?
+    private var pauseSegmentation = false
+    private var startupError: WhisperASRError?
+    private var rejectedTokens: [WhisperAudioCaptureToken: WhisperASRError] = [:]
+    private var rejectedTokenOrder: [WhisperAudioCaptureToken] = []
+    private var writer: WhisperWAVWriter?
+    private var sink: WhisperBufferedAudioSink?
+    private var audioFile: WhisperAudioFile?
+    private var audioLease: WhisperAudioLease?
+    private var inputTapInstalled = false
+
+    init(
+        audioEngine: AVAudioEngine,
+        fileManager: FileManager,
+        temporaryDirectory: URL
+    ) {
+        engineBox = WhisperAudioEngineBox(audioEngine)
+        self.fileManager = fileManager
+        self.temporaryDirectory = temporaryDirectory
+    }
+
+    var isRecording: Bool {
+        controlQueue.sync {
+            audioFile != nil && engineBox.engine.isRunning
+        }
+    }
+
+    var normalizedInputLevel: Float {
+        controlQueue.sync { writer?.normalizedInputLevel ?? 0 }
+    }
+
+    var trailingSilenceDuration: TimeInterval {
+        controlQueue.sync { writer?.trailingSilenceDuration ?? 0 }
+    }
+
+    var currentSegmentDuration: TimeInterval {
+        controlQueue.sync { writer?.segmentDuration ?? 0 }
+    }
+
+    var currentSegmentSpeechPresence: WhisperSpeechPresence {
+        controlQueue.sync { writer?.segmentSpeechPresence ?? .unknown }
+    }
+
+    var pauseBoundarySilence: TimeInterval {
+        controlQueue.sync {
+            writer?.pauseBoundarySilence
+                ?? WhisperSpeechActivityDetector.defaultPauseBoundary
+        }
+    }
+
+    func prime(
+        pauseSegmentation: Bool,
+        requestedAtUptimeNanoseconds: UInt64
+    ) -> WhisperAudioCaptureToken {
+        let token = tokenLock.withLock {
+            nextToken &+= 1
+            return WhisperAudioCaptureToken(rawValue: nextToken)
+        }
+        controlQueue.async { [self] in
+            let timing = WhisperAudioCaptureTimingTracker(
+                requestedAtUptimeNanoseconds: requestedAtUptimeNanoseconds
+            )
+            rememberTiming(timing, for: token)
+            beginProvisionalCapture(
+                token: token,
+                pauseSegmentation: pauseSegmentation,
+                timing: timing
+            )
+        }
+        return token
+    }
+
+    private func rememberTiming(
+        _ timing: WhisperAudioCaptureTimingTracker,
+        for token: WhisperAudioCaptureToken
+    ) {
+        timingLock.withLock {
+            timingTrackers[token] = timing
+            timingTokenOrder.append(token)
+            if timingTokenOrder.count > 16 {
+                let expired = timingTokenOrder.removeFirst()
+                timingTrackers.removeValue(forKey: expired)
             }
-            guard let outputFormat = AVAudioFormat(
-                commonFormat: .pcmFormatInt16,
-                sampleRate: 16_000,
-                channels: 1,
-                interleaved: false
-            ) else {
+        }
+    }
+
+    func captureTiming(
+        for token: WhisperAudioCaptureToken
+    ) -> WhisperAudioCaptureTiming? {
+        timingLock.withLock { timingTrackers[token] }?.snapshot
+    }
+
+    func adopt(_ token: WhisperAudioCaptureToken) throws -> URL {
+        try controlQueue.sync {
+            if let error = rejectedTokens.removeValue(forKey: token) {
+                throw error
+            }
+            guard activeToken == token, phase == .provisional else {
+                throw WhisperASRError.noActiveRecording
+            }
+            if let startupError {
+                cleanupCapture()
+                throw startupError
+            }
+            guard let audioFile else {
+                cleanupCapture()
                 throw WhisperASRError.captureFailed(
-                    "Could not create the 16 kHz mono format."
+                    "Audio capture did not finish preparing."
                 )
             }
-            let outputFile = try AVAudioFile(
-                forWriting: audioFile.url,
-                settings: outputFormat.settings,
-                commonFormat: .pcmFormatFloat32,
-                interleaved: false
+            phase = .adopted
+            return audioFile.url
+        }
+    }
+
+    func cancelPrimed(_ token: WhisperAudioCaptureToken) {
+        controlQueue.async { [self] in
+            rejectedTokens.removeValue(forKey: token)
+            guard activeToken == token, phase == .provisional else {
+                return
+            }
+            cleanupCapture()
+        }
+    }
+
+    func stop() throws -> WhisperAudioFile {
+        try controlQueue.sync {
+            guard phase == .adopted, let audioFile, let writer else {
+                throw WhisperASRError.noActiveRecording
+            }
+            let lease = audioLease
+            stopEngineAndTap()
+            let queueError = sink?.finishAcceptingAndWait()
+            let speechPresence = writer.speechPresence
+            let writeError = writer.finish()
+            sink = nil
+            self.writer = nil
+            self.audioFile = nil
+            activeToken = nil
+            phase = nil
+            startupError = nil
+
+            if queueError != nil || writeError != nil {
+                audioFile.delete()
+                lease?.finish()
+                audioLease = nil
+                throw WhisperASRError.captureFailed(
+                    "Writing microphone audio failed."
+                )
+            }
+            audioFile.setSpeechPresence(speechPresence)
+            audioLease = nil
+            return audioFile
+        }
+    }
+
+    func rotatePauseSegment() throws -> WhisperAudioFile {
+        try controlQueue.sync {
+            guard phase == .adopted,
+                  pauseSegmentation,
+                  let writer,
+                  let sink,
+                  audioFile != nil,
+                  engineBox.engine.isRunning
+            else {
+                throw WhisperASRError.noActiveRecording
+            }
+            let nextAudio = try makePrivateAudioFile()
+            do {
+                let nextFile = try makeOutputFile(
+                    for: nextAudio,
+                    settings: writer.outputFileSettings
+                )
+                return try sink.performWriterAction { writer in
+                    try writer.rotateSegment(
+                        to: nextFile,
+                        audioFile: nextAudio
+                    )
+                }
+            } catch {
+                nextAudio.delete()
+                if let error = error as? WhisperASRError {
+                    throw error
+                }
+                throw WhisperASRError.captureFailed(
+                    "Could not rotate the pause transcription segment."
+                )
+            }
+        }
+    }
+
+    func stopPauseSession() throws -> (
+        recording: WhisperAudioFile,
+        finalSegment: WhisperAudioFile
+    ) {
+        try controlQueue.sync {
+            guard phase == .adopted,
+                  pauseSegmentation,
+                  let audioFile,
+                  let writer
+            else {
+                throw WhisperASRError.noActiveRecording
+            }
+            let lease = audioLease
+            stopEngineAndTap()
+            let queueError = sink?.finishAcceptingAndWait()
+            let speechPresence = writer.speechPresence
+            let result = writer.finishRetainingSegment()
+            sink = nil
+            self.writer = nil
+            self.audioFile = nil
+            activeToken = nil
+            phase = nil
+            startupError = nil
+
+            guard queueError == nil,
+                  result.error == nil,
+                  let finalSegment = result.segment
+            else {
+                audioFile.delete()
+                result.segment?.delete()
+                lease?.finish()
+                audioLease = nil
+                throw WhisperASRError.captureFailed(
+                    "Writing microphone audio failed."
+                )
+            }
+            audioFile.setSpeechPresence(speechPresence)
+            audioLease = nil
+            return (audioFile, finalSegment)
+        }
+    }
+
+    func cancel() {
+        controlQueue.sync {
+            cleanupCapture()
+            rejectedTokens.removeAll(keepingCapacity: false)
+            rejectedTokenOrder.removeAll(keepingCapacity: false)
+        }
+    }
+
+    func shutdown() {
+        cancel()
+    }
+
+    private func beginProvisionalCapture(
+        token: WhisperAudioCaptureToken,
+        pauseSegmentation: Bool,
+        timing: WhisperAudioCaptureTimingTracker
+    ) {
+        guard activeToken == nil else {
+            rememberRejectedToken(
+                token,
+                error: WhisperASRError.captureFailed(
+                    "Another audio capture is already active."
+                )
             )
-            try fileManager.setAttributes(
-                [.posixPermissions: 0o600],
-                ofItemAtPath: audioFile.url.path
+            return
+        }
+        activeToken = token
+        phase = .provisional
+        self.pauseSegmentation = pauseSegmentation
+        startupError = nil
+
+        do {
+            try prepareCapture(
+                pauseSegmentation: pauseSegmentation,
+                timing: timing
+            )
+        } catch {
+            stopEngineAndTap()
+            sink?.cancelAndWait()
+            sink = nil
+            writer?.finish()
+            writer = nil
+            audioFile?.delete()
+            audioFile = nil
+            audioLease?.finish()
+            audioLease = nil
+            startupError = (error as? WhisperASRError)
+                ?? WhisperASRError.captureFailed(
+                    "Audio engine setup failed."
+                )
+        }
+    }
+
+    private func prepareCapture(
+        pauseSegmentation: Bool,
+        timing: WhisperAudioCaptureTimingTracker
+    ) throws {
+        let inputNode = engineBox.engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw WhisperASRError.microphoneUnavailable
+        }
+        guard let outputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw WhisperASRError.captureFailed(
+                "Could not create the 16 kHz mono format."
+            )
+        }
+
+        let sink = WhisperBufferedAudioSink(
+            onFirstBuffer: timing.markFirstBuffer
+        )
+        self.sink = sink
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: inputFormat,
+            block: makeWhisperAudioTapHandler(sink: sink)
+        )
+        inputTapInstalled = true
+
+        let prepared = try activateWhisperCaptureFastPath(
+            activateCapture: {
+                engineBox.engine.prepare()
+                try engineBox.engine.start()
+            },
+            prepareWriter: {
+                try makePreparedWriter(
+                    inputFormat: inputFormat,
+                    outputFormat: outputFormat,
+                    pauseSegmentation: pauseSegmentation,
+                    timing: timing
+                )
+            },
+            adoptWriter: { prepared in
+                sink.attach(prepared.writer)
+            }
+        )
+        writer = prepared.writer
+        audioFile = prepared.audioFile
+    }
+
+    private func makePreparedWriter(
+        inputFormat: AVAudioFormat,
+        outputFormat: AVAudioFormat,
+        pauseSegmentation: Bool,
+        timing: WhisperAudioCaptureTimingTracker
+    ) throws -> WhisperPreparedAudioWriter {
+        let audioFile = try makePrivateAudioFile()
+        var segmentAudioFile: WhisperAudioFile?
+        do {
+            let outputFile = try makeOutputFile(
+                for: audioFile,
+                settings: outputFormat.settings
             )
             let segmentFile: AVAudioFile?
             if pauseSegmentation {
@@ -320,141 +754,24 @@ public final class WhisperAudioRecorder {
                     "Could not prepare microphone conversion."
                 )
             }
-
             let writer = WhisperWAVWriter(
                 file: outputFile,
                 segmentFile: segmentFile,
                 segmentAudioFile: segmentAudioFile,
                 converter: converter,
-                outputFormat: outputFile.processingFormat
+                outputFormat: outputFile.processingFormat,
+                onFirstSamplesCommitted: timing.markFirstCommittedSample
             )
-            let tapHandler = makeWhisperAudioTapHandler(writer: writer)
-            inputNode.installTap(
-                onBus: 0,
-                bufferSize: 1_024,
-                format: inputFormat,
-                block: tapHandler
-            )
-            inputTapInstalled = true
-            self.writer = writer
-            self.audioFile = audioFile
             segmentAudioFile = nil
-            engineBox.engine.prepare()
-            try engineBox.engine.start()
-            return audioFile.url
+            return WhisperPreparedAudioWriter(
+                writer: writer,
+                audioFile: audioFile
+            )
         } catch {
-            let lease = audioLease
-            engineBox.engine.stop()
-            removeInputTap()
-            writer?.finish()
-            writer = nil
-            self.audioFile = nil
             audioFile.delete()
             segmentAudioFile?.delete()
-            lease?.finish()
-            audioLease = nil
-            if let error = error as? WhisperASRError {
-                throw error
-            }
-            throw WhisperASRError.captureFailed(
-                "Audio engine setup failed."
-            )
+            throw error
         }
-    }
-
-    public func stop() throws -> WhisperAudioFile {
-        guard let audioFile else {
-            throw WhisperASRError.noActiveRecording
-        }
-        let lease = audioLease
-        engineBox.engine.stop()
-        removeInputTap()
-        let speechPresence = writer?.speechPresence ?? .unknown
-        let writeError = writer?.finish()
-        writer = nil
-        self.audioFile = nil
-
-        if writeError != nil {
-            audioFile.delete()
-            lease?.finish()
-            audioLease = nil
-            throw WhisperASRError.captureFailed(
-                "Writing microphone audio failed."
-            )
-        }
-        audioFile.setSpeechPresence(speechPresence)
-        audioLease = nil
-        return audioFile
-    }
-
-    /// Rotates only the inference segment while the uninterrupted private
-    /// session recording and microphone engine continue running.
-    public func rotatePauseSegment() throws -> WhisperAudioFile {
-        guard let writer, audioFile != nil, engineBox.engine.isRunning else {
-            throw WhisperASRError.noActiveRecording
-        }
-        let nextAudio = try makePrivateAudioFile()
-        do {
-            let nextFile = try makeOutputFile(
-                for: nextAudio,
-                settings: writer.outputFileSettings
-            )
-            return try writer.rotateSegment(
-                to: nextFile,
-                audioFile: nextAudio
-            )
-        } catch {
-            nextAudio.delete()
-            if let error = error as? WhisperASRError {
-                throw error
-            }
-            throw WhisperASRError.captureFailed(
-                "Could not rotate the pause transcription segment."
-            )
-        }
-    }
-
-    /// Stops one continuous Pause Mode recording and returns both the complete
-    /// private session audio and its untranscribed final segment.
-    public func stopPauseSession() throws -> (
-        recording: WhisperAudioFile,
-        finalSegment: WhisperAudioFile
-    ) {
-        guard let audioFile, let writer else {
-            throw WhisperASRError.noActiveRecording
-        }
-        let lease = audioLease
-        engineBox.engine.stop()
-        removeInputTap()
-        let speechPresence = writer.speechPresence
-        let result = writer.finishRetainingSegment()
-        self.writer = nil
-        self.audioFile = nil
-
-        guard result.error == nil, let finalSegment = result.segment else {
-            audioFile.delete()
-            result.segment?.delete()
-            lease?.finish()
-            audioLease = nil
-            throw WhisperASRError.captureFailed(
-                "Writing microphone audio failed."
-            )
-        }
-        audioFile.setSpeechPresence(speechPresence)
-        audioLease = nil
-        return (audioFile, finalSegment)
-    }
-
-    public func cancel() {
-        let lease = audioLease
-        engineBox.engine.stop()
-        removeInputTap()
-        writer?.finish()
-        writer = nil
-        audioFile?.delete()
-        audioFile = nil
-        lease?.finish()
-        audioLease = nil
     }
 
     private func makePrivateAudioFile() throws -> WhisperAudioFile {
@@ -504,18 +821,436 @@ public final class WhisperAudioRecorder {
         engineBox.engine.inputNode.removeTap(onBus: 0)
         inputTapInstalled = false
     }
+
+    private func stopEngineAndTap() {
+        engineBox.engine.stop()
+        removeInputTap()
+    }
+
+    private func cleanupCapture() {
+        let lease = audioLease
+        stopEngineAndTap()
+        sink?.cancelAndWait()
+        sink = nil
+        writer?.finish()
+        writer = nil
+        audioFile?.delete()
+        audioFile = nil
+        lease?.finish()
+        audioLease = nil
+        activeToken = nil
+        phase = nil
+        pauseSegmentation = false
+        startupError = nil
+    }
+
+    private func rememberRejectedToken(
+        _ token: WhisperAudioCaptureToken,
+        error: WhisperASRError
+    ) {
+        rejectedTokens[token] = error
+        rejectedTokenOrder.append(token)
+        if rejectedTokenOrder.count > 16 {
+            let expired = rejectedTokenOrder.removeFirst()
+            rejectedTokens.removeValue(forKey: expired)
+        }
+    }
+}
+
+private struct WhisperPreparedAudioWriter {
+    let writer: WhisperWAVWriter
+    let audioFile: WhisperAudioFile
+}
+
+@discardableResult
+func activateWhisperCaptureFastPath<Prepared>(
+    activateCapture: () throws -> Void,
+    prepareWriter: () throws -> Prepared,
+    adoptWriter: (Prepared) -> Void
+) throws -> Prepared {
+    try activateCapture()
+    let prepared = try prepareWriter()
+    adoptWriter(prepared)
+    return prepared
+}
+
+private final class WhisperAudioCaptureTimingTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private let requestedAtUptimeNanoseconds: UInt64
+    private var firstBufferAtUptimeNanoseconds: UInt64?
+    private var firstCommittedSampleAtUptimeNanoseconds: UInt64?
+
+    init(requestedAtUptimeNanoseconds: UInt64) {
+        self.requestedAtUptimeNanoseconds = requestedAtUptimeNanoseconds
+    }
+
+    var snapshot: WhisperAudioCaptureTiming {
+        lock.withLock {
+            WhisperAudioCaptureTiming(
+                requestedAtUptimeNanoseconds:
+                    requestedAtUptimeNanoseconds,
+                firstBufferAtUptimeNanoseconds:
+                    firstBufferAtUptimeNanoseconds,
+                firstCommittedSampleAtUptimeNanoseconds:
+                    firstCommittedSampleAtUptimeNanoseconds
+            )
+        }
+    }
+
+    func markFirstBuffer(_ uptimeNanoseconds: UInt64) {
+        lock.withLock {
+            if firstBufferAtUptimeNanoseconds == nil {
+                firstBufferAtUptimeNanoseconds = uptimeNanoseconds
+            }
+        }
+    }
+
+    func markFirstCommittedSample(_ uptimeNanoseconds: UInt64) {
+        lock.withLock {
+            if firstCommittedSampleAtUptimeNanoseconds == nil {
+                firstCommittedSampleAtUptimeNanoseconds = uptimeNanoseconds
+            }
+        }
+    }
+}
+
+/// Owns the real-time boundary between Core Audio and conversion/file I/O.
+/// The tap only snapshots and enqueues PCM. One serial writer queue performs
+/// conversion, VAD, metering, and WAV writes in strict arrival order.
+final class WhisperBufferedAudioSink: @unchecked Sendable {
+    static let maximumQueuedBytes = 32 * 1_024 * 1_024
+
+    private enum Work {
+        case audio(WhisperQueuedPCMBuffer)
+        case action(WhisperAudioWriterAction)
+
+        var byteCount: Int {
+            switch self {
+            case let .audio(buffer):
+                buffer.byteCount
+            case .action:
+                0
+            }
+        }
+    }
+
+    private let condition = NSCondition()
+    private let writerQueue = DispatchQueue(
+        label: "whisper_hotkey.audio.wav-writer",
+        qos: .userInitiated,
+        autoreleaseFrequency: .workItem
+    )
+    private let onFirstBuffer: @Sendable (UInt64) -> Void
+    private let maximumQueuedBytes: Int
+    private var writer: WhisperWAVWriter?
+    private var work: [Work] = []
+    private var nextWorkIndex = 0
+    private var queuedBytes = 0
+    private var callbackCount = 0
+    private var accepting = true
+    private var drainScheduled = false
+    private var markedFirstBuffer = false
+    private var firstError: Error?
+
+    init(
+        maximumQueuedBytes: Int = WhisperBufferedAudioSink.maximumQueuedBytes,
+        onFirstBuffer: @escaping @Sendable (UInt64) -> Void = { _ in }
+    ) {
+        self.maximumQueuedBytes = max(0, maximumQueuedBytes)
+        self.onFirstBuffer = onFirstBuffer
+    }
+
+    func consume(_ input: AVAudioPCMBuffer) {
+        condition.lock()
+        guard accepting else {
+            condition.unlock()
+            return
+        }
+        callbackCount += 1
+        let shouldMarkFirstBuffer = !markedFirstBuffer
+        markedFirstBuffer = true
+        condition.unlock()
+
+        if shouldMarkFirstBuffer {
+            onFirstBuffer(DispatchTime.now().uptimeNanoseconds)
+        }
+        let copied = WhisperQueuedPCMBuffer(copying: input)
+
+        condition.lock()
+        defer {
+            callbackCount -= 1
+            if callbackCount == 0 {
+                condition.broadcast()
+            }
+            condition.unlock()
+        }
+        guard firstError == nil else {
+            return
+        }
+        guard let copied else {
+            failQueueLocked(
+                "Could not retain a microphone input buffer."
+            )
+            return
+        }
+        guard copied.byteCount <= maximumQueuedBytes - queuedBytes else {
+            failQueueLocked(
+                "The microphone writer queue could not keep up."
+            )
+            return
+        }
+        work.append(.audio(copied))
+        queuedBytes += copied.byteCount
+        if scheduleDrainIfNeededLocked() {
+            scheduleDrain()
+        }
+    }
+
+    func attach(_ writer: WhisperWAVWriter) {
+        condition.lock()
+        self.writer = writer
+        let shouldSchedule = scheduleDrainIfNeededLocked()
+        condition.unlock()
+        if shouldSchedule {
+            scheduleDrain()
+        }
+    }
+
+    func performWriterAction<T>(
+        _ body: @escaping (WhisperWAVWriter) throws -> T
+    ) throws -> T {
+        let completion = WhisperAudioWriterActionCompletion<T>()
+        let action = WhisperAudioWriterAction { writer in
+            do {
+                completion.complete(.success(try body(writer)))
+            } catch {
+                completion.complete(.failure(error))
+            }
+        }
+
+        condition.lock()
+        guard firstError == nil, accepting, writer != nil else {
+            let error = firstError ?? WhisperASRError.captureFailed(
+                "The microphone writer is unavailable."
+            )
+            condition.unlock()
+            throw error
+        }
+        work.append(.action(action))
+        let shouldSchedule = scheduleDrainIfNeededLocked()
+        condition.unlock()
+        if shouldSchedule {
+            scheduleDrain()
+        }
+        return try completion.wait()
+    }
+
+    /// Stops accepting tap callbacks and waits for every callback that already
+    /// crossed the boundary plus every earlier FIFO item to reach the WAV.
+    func finishAcceptingAndWait() -> Error? {
+        let completion = WhisperAudioWriterActionCompletion<Void>()
+        let action = WhisperAudioWriterAction { _ in
+            completion.complete(.success(()))
+        }
+
+        condition.lock()
+        accepting = false
+        while callbackCount > 0 {
+            condition.wait()
+        }
+        if writer != nil {
+            work.append(.action(action))
+        } else {
+            completion.complete(.success(()))
+        }
+        let shouldSchedule = scheduleDrainIfNeededLocked()
+        condition.unlock()
+        if shouldSchedule {
+            scheduleDrain()
+        }
+        _ = try? completion.wait()
+
+        condition.lock()
+        let error = firstError
+        condition.unlock()
+        return error
+    }
+
+    func cancelAndWait() {
+        condition.lock()
+        accepting = false
+        while callbackCount > 0 {
+            condition.wait()
+        }
+        let shouldSchedule = scheduleDrainIfNeededLocked()
+        condition.unlock()
+        if shouldSchedule {
+            scheduleDrain()
+        }
+
+        writerQueue.sync {}
+
+        condition.lock()
+        work.removeAll(keepingCapacity: false)
+        nextWorkIndex = 0
+        queuedBytes = 0
+        writer = nil
+        drainScheduled = false
+        condition.unlock()
+    }
+
+    private func failQueueLocked(_ message: String) {
+        if firstError == nil {
+            firstError = WhisperASRError.captureFailed(message)
+        }
+        // Once the FIFO loses continuity, further input cannot repair the WAV.
+        // Stop accepting instead of silently producing a truncated recording.
+        accepting = false
+    }
+
+    private func scheduleDrainIfNeededLocked() -> Bool {
+        guard writer != nil,
+              !drainScheduled,
+              nextWorkIndex < work.count
+        else {
+            return false
+        }
+        drainScheduled = true
+        return true
+    }
+
+    private func scheduleDrain() {
+        writerQueue.async { [self] in
+            drain()
+        }
+    }
+
+    private func drain() {
+        while true {
+            condition.lock()
+            guard let writer, nextWorkIndex < work.count else {
+                if nextWorkIndex >= work.count {
+                    work.removeAll(keepingCapacity: true)
+                    nextWorkIndex = 0
+                }
+                drainScheduled = false
+                condition.unlock()
+                return
+            }
+            let item = work[nextWorkIndex]
+            nextWorkIndex += 1
+            condition.unlock()
+
+            switch item {
+            case let .audio(buffer):
+                writer.consume(buffer.buffer)
+            case let .action(action):
+                action.execute(with: writer)
+            }
+
+            condition.lock()
+            queuedBytes -= item.byteCount
+            if nextWorkIndex == work.count {
+                work.removeAll(keepingCapacity: true)
+                nextWorkIndex = 0
+            } else if nextWorkIndex >= 256,
+                      nextWorkIndex * 2 >= work.count
+            {
+                work.removeFirst(nextWorkIndex)
+                nextWorkIndex = 0
+            }
+            condition.unlock()
+        }
+    }
+}
+
+private final class WhisperQueuedPCMBuffer: @unchecked Sendable {
+    let buffer: AVAudioPCMBuffer
+    let byteCount: Int
+
+    init?(copying source: AVAudioPCMBuffer) {
+        guard let copy = AVAudioPCMBuffer(
+            pcmFormat: source.format,
+            frameCapacity: source.frameLength
+        ) else {
+            return nil
+        }
+        copy.frameLength = source.frameLength
+        let sourceBuffers = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: source.audioBufferList)
+        )
+        let destinationBuffers = UnsafeMutableAudioBufferListPointer(
+            copy.mutableAudioBufferList
+        )
+        guard sourceBuffers.count == destinationBuffers.count else {
+            return nil
+        }
+
+        var byteCount = 0
+        for index in 0..<sourceBuffers.count {
+            let sourceBuffer = sourceBuffers[index]
+            var destinationBuffer = destinationBuffers[index]
+            let bytes = Int(sourceBuffer.mDataByteSize)
+            guard bytes <= Int(destinationBuffer.mDataByteSize),
+                  let sourceData = sourceBuffer.mData,
+                  let destinationData = destinationBuffer.mData
+            else {
+                return nil
+            }
+            destinationData.copyMemory(from: sourceData, byteCount: bytes)
+            destinationBuffer.mDataByteSize = UInt32(bytes)
+            destinationBuffers[index] = destinationBuffer
+            byteCount += bytes
+        }
+        self.buffer = copy
+        self.byteCount = byteCount
+    }
+}
+
+private final class WhisperAudioWriterAction: @unchecked Sendable {
+    private let body: (WhisperWAVWriter) -> Void
+
+    init(_ body: @escaping (WhisperWAVWriter) -> Void) {
+        self.body = body
+    }
+
+    func execute(with writer: WhisperWAVWriter) {
+        body(writer)
+    }
+}
+
+private final class WhisperAudioWriterActionCompletion<Value>:
+    @unchecked Sendable
+{
+    private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var result: Result<Value, Error>?
+
+    func complete(_ result: Result<Value, Error>) {
+        lock.withLock {
+            self.result = result
+        }
+        semaphore.signal()
+    }
+
+    func wait() throws -> Value {
+        semaphore.wait()
+        return try lock.withLock {
+            try result!.get()
+        }
+    }
 }
 
 /// AVAudioEngine invokes tap blocks on a real-time audio queue. Constructing
 /// this block inside the recorder's MainActor-isolated `start()` method causes
 /// Swift 6 to retain MainActor isolation and trap when Core Audio calls it.
-/// The writer is lock-protected, so the callback is intentionally constructed
-/// at this nonisolated boundary.
+/// The sink is lock-protected, so the callback is intentionally constructed at
+/// this nonisolated boundary. Conversion and file I/O never run on this queue.
 nonisolated func makeWhisperAudioTapHandler(
-    writer: WhisperWAVWriter
+    sink: WhisperBufferedAudioSink
 ) -> AVAudioNodeTapBlock {
     { buffer, _ in
-        writer.consume(buffer)
+        sink.consume(buffer)
     }
 }
 
@@ -532,19 +1267,25 @@ final class WhisperWAVWriter: @unchecked Sendable {
     private var segmentFrameCount: Int64 = 0
     private var sessionSpeechDetector = WhisperSpeechActivityDetector()
     private var segmentSpeechDetector = WhisperSpeechActivityDetector()
+    private let onFirstSamplesCommitted: @Sendable (UInt64) -> Void
+    private var committedSamples = false
 
     init(
         file: AVAudioFile,
         segmentFile: AVAudioFile?,
         segmentAudioFile: WhisperAudioFile?,
         converter: AVAudioConverter,
-        outputFormat: AVAudioFormat
+        outputFormat: AVAudioFormat,
+        onFirstSamplesCommitted: @escaping @Sendable (UInt64) -> Void = {
+            _ in
+        }
     ) {
         self.file = file
         self.segmentFile = segmentFile
         self.segmentAudioFile = segmentAudioFile
         self.converter = converter
         self.outputFormat = outputFormat
+        self.onFirstSamplesCommitted = onFirstSamplesCommitted
         fileSettings = file.fileFormat.settings
     }
 
@@ -633,6 +1374,12 @@ final class WhisperWAVWriter: @unchecked Sendable {
                         sampleRate: output.format.sampleRate
                     )
                     try file.write(from: output)
+                    if !committedSamples {
+                        committedSamples = true
+                        onFirstSamplesCommitted(
+                            DispatchTime.now().uptimeNanoseconds
+                        )
+                    }
                     try segmentFile?.write(from: output)
                     if segmentFile != nil {
                         segmentFrameCount += Int64(output.frameLength)
