@@ -109,5 +109,14 @@ let package = Package(
             name: "WhisperHotkeyShellTests",
             dependencies: ["WhisperHotkeyShell", "WhisperHotkeyCore"]
         ),
+        .testTarget(
+            name: "WhisperHotkeyAppTests",
+            dependencies: [
+                "WhisperHotkeyApp",
+                "WhisperHotkeyASR",
+                "WhisperHotkeyCore",
+                "WhisperHotkeySystem",
+            ]
+        ),
     ]
 )

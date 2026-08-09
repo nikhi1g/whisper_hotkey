@@ -82,6 +82,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let modelConfiguration: Task<Void, Never>?
         let preload: Task<Void, Never>?
         let recognition: Task<Void, Never>?
+        let pipeline: Task<Void, Never>?
     }
 
     private let logger = Logger(
@@ -152,6 +153,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var softwareUpdateProgressPanel: ModelDownloadProgressPanel?
 
     private lazy var delivery = TextDeliveryService(clipboard: clipboard)
+    private lazy var pipelineCoordinator = RecognitionPipelineCoordinator(
+        providers: .whisper(recognizer: recognizer),
+        delivery: { [weak self] event in
+            await MainActor.run {
+                self?.handlePipelineDelivery(event)
+            }
+        }
+    )
     private lazy var hotkeyMonitor = GlobalHotkeyMonitor(
         contextProvider: contextProvider,
         shouldIgnorePointerDown: { [weak self] in
@@ -233,6 +242,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var errorPresentationTask: Task<Void, Never>?
     private var submitAfterPasteTask: Task<Void, Never>?
     private var completionCaptureGraceTask: Task<Void, Never>?
+    private var pipelineBeginTask: Task<Void, Never>?
     private var recognizerCleanupTask: Task<Void, Never>?
     private var modelConfigurationTask: Task<Void, Never>?
     private var scheduledTerminationTask: Task<Void, Never>?
@@ -248,6 +258,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var pauseSessionDidInsert = false
     private var pauseBoundaryInProgress = false
     private var pauseSessionPrompt: String?
+    private var pauseDeliveryContext: DictationInsertionContext?
     private var predecodeAccumulator = PredecodedTranscriptAccumulator()
     private var predecodeBoundaryInProgress = false
     private var predecodeFailed = false
@@ -312,6 +323,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         Task.detached(priority: .userInitiated) {
             if let precedingCleanup = pendingWork.precedingCleanup {
                 await precedingCleanup.value
+            }
+            if let pipeline = pendingWork.pipeline {
+                await pipeline.value
             }
             await recognizer.shutdown()
             if let modelConfiguration = pendingWork.modelConfiguration {
@@ -638,11 +652,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask = nil
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
+        pipelineBeginTask?.cancel()
+        pipelineBeginTask = nil
         completionBehavior = .insert
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionTranscript = nil
         pauseSessionPrompt = nil
+        pauseDeliveryContext = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false
@@ -660,6 +677,16 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         } catch {
             fail(error)
             return false
+        }
+
+        let pipelineCoordinator = pipelineCoordinator
+        pipelineBeginTask?.cancel()
+        pipelineBeginTask = Task { [pipelineCoordinator] in
+            await pipelineCoordinator.beginSession(
+                generation: generation,
+                activationMode: hotkeyActivationMode,
+                processingMode: processingMode
+            )
         }
 
         let precedingCleanup = recognizerCleanupTask
@@ -706,220 +733,164 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
 
-        if isPauseMode {
-            return finalizePauseSession()
-        }
-        if processingMode.decodesWhileSpeaking {
-            return finalizePredecodedSession()
+        if isPauseMode || processingMode.decodesWhileSpeaking {
+            do {
+                let result = try recorder.stopPauseSession()
+                return scheduleCoordinatorFinalization(
+                    audio: result.recording,
+                    finalTailAudio: result.finalSegment
+                )
+            } catch {
+                fail(error)
+                return false
+            }
         }
 
-        let audio: WhisperAudioFile
         do {
-            audio = try recorder.stop()
+            return scheduleCoordinatorFinalization(audio: try recorder.stop())
         } catch {
             fail(error)
             return false
         }
+    }
 
+    private func finalizePredecodedSession() -> Bool {
+        do {
+            let result = try recorder.stopPauseSession()
+            return scheduleCoordinatorFinalization(
+                audio: result.recording,
+                finalTailAudio: result.finalSegment
+            )
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    private func finalizePauseSession() -> Bool {
+        return finalizePredecodedSession()
+    }
+
+    private func scheduleCoordinatorFinalization(
+        audio: WhisperAudioFile,
+        finalTailAudio: WhisperAudioFile? = nil
+    ) -> Bool {
         let generation = sessionGeneration
-        let precedingCleanup = recognizerCleanupTask
+        let precedingRecognition = recognitionTask
         let sessionPreload = preloadTask
-        let recognitionPrompt = internalDictionary.prompt
+        let pipelineBegin = pipelineBeginTask
+        let coordinator = pipelineCoordinator
+        let recognitionPrompt = RecognitionPrompt.combined(
+            dictionaryPrompt: internalDictionary.prompt,
+            contextPrompt: pauseSessionPrompt
+        )
+        let shouldSubmit = completionBehavior == .insertAndSubmit
+            && !deliversToInternalDictionaryDraft
+        if isPauseMode {
+            pauseDeliveryContext = insertionContext
+        }
         recognitionTask = Task { @MainActor [weak self] in
+            var handedOffToCoordinator = false
             defer {
-                audio.delete()
+                if !handedOffToCoordinator {
+                    Self.deleteFinalizationAudio(
+                        audio,
+                        finalTailAudio: finalTailAudio
+                    )
+                }
+                if let self,
+                   generation == self.sessionGeneration
+                {
+                    // A coordinator delivery can transition a non-pause
+                    // session to idle before finish() returns. Cleanup must
+                    // not depend on the old transcribing-phase guard.
+                    self.preloadTask = nil
+                    self.recognitionTask = nil
+                    self.pipelineBeginTask = nil
+                }
             }
             do {
-                if let precedingCleanup {
-                    await precedingCleanup.value
+                if let precedingRecognition {
+                    await precedingRecognition.value
                 }
                 if let sessionPreload {
                     await sessionPreload.value
                 }
-                try Task.checkCancellation()
-                guard let self else {
+                if let pipelineBegin {
+                    await pipelineBegin.value
+                }
+                guard let self,
+                      !Task.isCancelled,
+                      self.runtimeReadyForHotkey,
+                      !self.isTerminating,
+                      generation == self.sessionGeneration,
+                      self.machine.phase == .transcribing
+                else {
                     return
                 }
-                let transcript = try await self.recognizer.transcribe(
-                    audio,
+                handedOffToCoordinator = true
+                let outcome = try await coordinator.finish(
+                    audio: audio,
+                    finalTailAudio: finalTailAudio,
                     prompt: recognitionPrompt
                 )
-                guard runtimeReadyForHotkey,
-                      !isTerminating,
-                      generation == sessionGeneration,
-                      machine.phase == .transcribing
+                guard generation == self.sessionGeneration,
+                      self.machine.phase == .transcribing
                 else {
                     return
                 }
-                preloadTask = nil
-                recognitionTask = nil
-                process(.transcriptReady, transcript: transcript)
+                if self.isPauseMode {
+                    self.completionBehavior = .insert
+                    if !self.pauseSessionDidInsert,
+                       outcome.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    {
+                        self.fail(
+                            "No speech detected.",
+                            presentationDuration: BadgePresentationDuration.noSpeech
+                        )
+                        return
+                    }
+                    if shouldSubmit {
+                        do {
+                            try await Task.sleep(for: Self.postPasteSubmitDelay)
+                        } catch {
+                            return
+                        }
+                        guard generation == self.sessionGeneration,
+                              self.machine.phase == .transcribing
+                        else {
+                            return
+                        }
+                        guard self.delivery.pressReturn() else {
+                            self.fail("Could not press Return in the destination app.")
+                            return
+                        }
+                    }
+                    self.deliversToInternalDictionaryDraft = false
+                    self.process(.chunkedSessionFinished)
+                }
             } catch is CancellationError {
-                guard !Task.isCancelled,
-                      let self,
-                      runtimeReadyForHotkey,
-                      !isTerminating,
-                      generation == sessionGeneration,
-                      machine.phase == .transcribing
-                else {
-                    return
+                return
+            } catch let error as RecognitionPipelineError {
+                guard let self,
+                      generation == self.sessionGeneration,
+                      self.machine.phase == .transcribing
+                else { return }
+                if error == .noSpeechDetected {
+                    self.fail(
+                        "No speech detected.",
+                        presentationDuration: BadgePresentationDuration.noSpeech
+                    )
+                } else if error != .staleGeneration {
+                    self.fail("Transcription was interrupted: try again.")
                 }
-                preloadTask = nil
-                recognitionTask = nil
-                fail("Transcription was interrupted: try again.")
             } catch {
                 guard let self,
-                      runtimeReadyForHotkey,
-                      !isTerminating,
-                      generation == sessionGeneration,
-                      machine.phase == .transcribing
-                else {
-                    return
-                }
-                preloadTask = nil
-                recognitionTask = nil
-                fail(error)
+                      generation == self.sessionGeneration,
+                      self.machine.phase == .transcribing
+                else { return }
+                self.fail(error)
             }
-        }
-        return true
-    }
-
-    private func finalizePredecodedSession() -> Bool {
-        let recording: WhisperAudioFile
-        let finalSegment: WhisperAudioFile
-        do {
-            let result = try recorder.stopPauseSession()
-            recording = result.recording
-            finalSegment = result.finalSegment
-        } catch {
-            fail(error)
-            return false
-        }
-        enqueuePredecodeChunkIfNeeded(finalSegment)
-
-        let generation = sessionGeneration
-        let precedingRecognition = recognitionTask
-        let sessionPreload = preloadTask
-        recognitionTask = Task { @MainActor [weak self, recognizer] in
-            defer { recording.delete() }
-            if let precedingRecognition {
-                await precedingRecognition.value
-            }
-            if let sessionPreload {
-                await sessionPreload.value
-            }
-            await recognizer.finishContinuousSession()
-
-            guard let self,
-                  !Task.isCancelled,
-                  runtimeReadyForHotkey,
-                  !isTerminating,
-                  generation == sessionGeneration,
-                  machine.phase == .transcribing
-            else {
-                return
-            }
-
-            do {
-                let transcript: String
-                if predecodeFailed {
-                    transcript = try await self.recognizer.transcribe(
-                        recording,
-                        prompt: internalDictionary.prompt
-                    )
-                } else {
-                    transcript = predecodeAccumulator.transcript
-                }
-                guard generation == sessionGeneration,
-                      machine.phase == .transcribing
-                else {
-                    return
-                }
-                preloadTask = nil
-                recognitionTask = nil
-                process(.transcriptReady, transcript: transcript)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard generation == sessionGeneration,
-                      machine.phase == .transcribing
-                else {
-                    return
-                }
-                preloadTask = nil
-                recognitionTask = nil
-                fail(error)
-            }
-        }
-        return true
-    }
-
-    private func finalizePauseSession() -> Bool {
-        let recording: WhisperAudioFile
-        let finalSegment: WhisperAudioFile
-        do {
-            let result = try recorder.stopPauseSession()
-            recording = result.recording
-            finalSegment = result.finalSegment
-        } catch {
-            fail(error)
-            return false
-        }
-        enqueuePauseChunkIfNeeded(finalSegment)
-
-        let generation = sessionGeneration
-        let precedingRecognition = recognitionTask
-        let sessionPreload = preloadTask
-        let shouldSubmit = completionBehavior == .insertAndSubmit
-            && !deliversToInternalDictionaryDraft
-        recognitionTask = Task { @MainActor [weak self, recognizer] in
-            defer { recording.delete() }
-            if let precedingRecognition {
-                await precedingRecognition.value
-            }
-            if let sessionPreload {
-                await sessionPreload.value
-            }
-            await recognizer.finishContinuousSession()
-
-            guard let self,
-                  !Task.isCancelled,
-                  runtimeReadyForHotkey,
-                  !isTerminating,
-                  generation == sessionGeneration,
-                  machine.phase == .transcribing
-            else {
-                return
-            }
-            preloadTask = nil
-            recognitionTask = nil
-            completionBehavior = .insert
-
-            guard pauseSessionDidInsert else {
-                fail(
-                    "No speech detected.",
-                    presentationDuration: BadgePresentationDuration.noSpeech
-                )
-                return
-            }
-            if shouldSubmit {
-                do {
-                    try await Task.sleep(for: Self.postPasteSubmitDelay)
-                } catch {
-                    return
-                }
-                guard generation == sessionGeneration,
-                      machine.phase == .transcribing
-                else {
-                    return
-                }
-                guard delivery.pressReturn() else {
-                    fail("Could not press Return in the destination app.")
-                    return
-                }
-            }
-            deliversToInternalDictionaryDraft = false
-            process(.chunkedSessionFinished)
         }
         return true
     }
@@ -947,60 +918,40 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func enqueuePredecodeChunkIfNeeded(_ audio: WhisperAudioFile) {
-        guard audio.speechPresence != .absent else {
+        guard audio.speechPresence != .absent,
+              !predecodeFailed,
+              machine.phase == .listening
+        else {
             audio.delete()
             return
         }
-
         let generation = sessionGeneration
-        let precedingRecognition = recognitionTask
-        let sessionPreload = preloadTask
-        recognitionTask = Task { @MainActor [weak self, recognizer] in
-            defer { audio.delete() }
-            if let precedingRecognition {
-                await precedingRecognition.value
-            }
-            if let sessionPreload {
-                await sessionPreload.value
+        let coordinator = pipelineCoordinator
+        let prompt = internalDictionary.prompt
+        let pipelineBegin = pipelineBeginTask
+        Task { @MainActor [weak self] in
+            if let pipelineBegin {
+                await pipelineBegin.value
             }
             guard let self,
                   !Task.isCancelled,
-                  !predecodeFailed,
-                  runtimeReadyForHotkey,
-                  !isTerminating,
-                  generation == sessionGeneration,
-                  machine.phase == .listening
-                    || machine.phase == .transcribing
+                  self.runtimeReadyForHotkey,
+                  !self.isTerminating,
+                  self.sessionGeneration == generation,
+                  self.machine.phase == .listening,
+                  !self.predecodeFailed,
+                  audio.speechPresence != .absent
             else {
+                audio.delete()
                 return
             }
-
-            do {
-                let transcript = try await recognizer.transcribeChunk(
-                    audio,
-                    prompt: internalDictionary.prompt
-                )
-                guard !Task.isCancelled,
-                      generation == sessionGeneration,
-                      machine.phase == .listening
-                        || machine.phase == .transcribing
-                else {
-                    return
-                }
-                predecodeAccumulator.append(transcript)
-            } catch is CancellationError {
-                return
-            } catch let error as WhisperASRError where error == .noSpeech {
-                return
-            } catch {
-                guard generation == sessionGeneration,
-                      machine.phase == .listening
-                        || machine.phase == .transcribing
-                else {
-                    return
-                }
-                predecodeFailed = true
-            }
+            await coordinator.submitStreamingAudio(
+                audio,
+                prompt: prompt,
+                pass: .provisional,
+                completeness: .provisional,
+                expectedGeneration: generation
+            )
         }
     }
 
@@ -1025,62 +976,55 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func enqueuePauseChunkIfNeeded(_ audio: WhisperAudioFile) {
-        guard audio.speechPresence != .absent else {
+        guard audio.speechPresence != .absent,
+              machine.phase == .listening,
+              isPauseMode
+        else {
             audio.delete()
             return
         }
-
         let generation = sessionGeneration
-        let precedingRecognition = recognitionTask
-        let sessionPreload = preloadTask
-        let recognitionPrompt = RecognitionPrompt.combined(
-            dictionaryPrompt: internalDictionary.prompt,
-            contextPrompt: pauseSessionPrompt
-        )
-        recognitionTask = Task { @MainActor [weak self, recognizer] in
-            defer { audio.delete() }
-            if let precedingRecognition {
-                await precedingRecognition.value
-            }
-            if let sessionPreload {
-                await sessionPreload.value
+        let coordinator = pipelineCoordinator
+        let pipelineBegin = pipelineBeginTask
+        Task { @MainActor [weak self] in
+            if let pipelineBegin {
+                await pipelineBegin.value
             }
             guard let self,
                   !Task.isCancelled,
-                  runtimeReadyForHotkey,
-                  !isTerminating,
-                  generation == sessionGeneration,
-                  machine.phase == .listening
-                    || machine.phase == .transcribing
+                  self.runtimeReadyForHotkey,
+                  !self.isTerminating,
+                  self.sessionGeneration == generation,
+                  self.machine.phase == .listening,
+                  self.isPauseMode,
+                  audio.speechPresence != .absent
             else {
+                audio.delete()
                 return
             }
-            do {
-                let transcript = try await recognizer.transcribeChunk(
-                    audio,
-                    prompt: recognitionPrompt
-                )
-                guard !Task.isCancelled,
-                      generation == sessionGeneration,
-                      machine.phase == .listening
-                        || machine.phase == .transcribing
-                else {
-                    return
-                }
-                deliverPauseChunk(transcript)
-            } catch is CancellationError {
-                return
-            } catch let error as WhisperASRError where error == .noSpeech {
-                return
-            } catch {
-                guard generation == sessionGeneration,
-                      machine.phase == .listening
-                        || machine.phase == .transcribing
-                else {
-                    return
-                }
-                fail(error)
-            }
+            // Read the bounded context only after the prior sentence's
+            // immediate delivery has updated pauseSessionPrompt.
+            let recognitionPrompt = RecognitionPrompt.combined(
+                dictionaryPrompt: self.internalDictionary.prompt,
+                contextPrompt: self.pauseSessionPrompt
+            )
+            await coordinator.submitStreamingAudio(
+                audio,
+                prompt: recognitionPrompt,
+                pass: .provisional,
+                completeness: .completeSentence,
+                expectedGeneration: generation
+            )
+        }
+    }
+
+    private static func deleteFinalizationAudio(
+        _ audio: WhisperAudioFile,
+        finalTailAudio: WhisperAudioFile?
+    ) {
+        audio.delete()
+        if let finalTailAudio, finalTailAudio !== audio {
+            finalTailAudio.delete()
         }
     }
 
@@ -1099,7 +1043,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
-        let context = contextProvider.captureInsertionContext()
+        let context = pauseDeliveryContext
+            ?? contextProvider.captureInsertionContext()
         switch delivery.deliver(transcript: transcript, context: context) {
         case .inserted:
             let trimmed = transcript.trimmingCharacters(
@@ -1128,6 +1073,25 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         case .clipboardUnavailable:
             fail("Clipboard unavailable: try again.")
+        }
+    }
+
+    /// RecognitionPipelineCoordinator is the only caller that crosses into
+    /// text delivery. Providers and accumulator tasks never paste directly.
+    private func handlePipelineDelivery(
+        _ event: RecognitionPipelineDelivery
+    ) {
+        guard !isTerminating,
+              event.generation == sessionGeneration,
+              machine.phase == .transcribing
+                || machine.phase == .listening
+        else {
+            return
+        }
+        if isPauseMode {
+            deliverPauseChunk(event.text)
+        } else {
+            _ = deliver(event.text)
         }
     }
 
@@ -1192,12 +1156,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask = nil
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
+        pipelineBeginTask?.cancel()
+        pipelineBeginTask = nil
         completionBehavior = .insert
         deliversToInternalDictionaryDraft = false
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionTranscript = nil
         pauseSessionPrompt = nil
+        pauseDeliveryContext = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false
@@ -1212,10 +1179,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         let precedingCleanup = recognizerCleanupTask
         let recognizer = recognizer
+        let pipelineCoordinator = pipelineCoordinator
         recognizerCleanupTask = Task.detached(priority: .userInitiated) {
             if let precedingCleanup {
                 await precedingCleanup.value
             }
+            await pipelineCoordinator.cancel()
             await recognizer.cancel()
             if let cancelledPreload {
                 await cancelledPreload.value
@@ -2377,7 +2346,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             precedingCleanup: recognizerCleanupTask,
             modelConfiguration: modelConfigurationTask,
             preload: preloadTask,
-            recognition: recognitionTask
+            recognition: recognitionTask,
+            pipeline: Task.detached { [pipelineCoordinator] in
+                await pipelineCoordinator.cancel()
+            }
         )
         scheduledTerminationTask?.cancel()
         scheduledTerminationTask = nil
@@ -2392,12 +2364,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask = nil
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
+        pipelineBeginTask?.cancel()
+        pipelineBeginTask = nil
         completionBehavior = .insert
         deliversToInternalDictionaryDraft = false
         pauseSessionDidInsert = false
         pauseBoundaryInProgress = false
         pauseSessionTranscript = nil
         pauseSessionPrompt = nil
+        pauseDeliveryContext = nil
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false

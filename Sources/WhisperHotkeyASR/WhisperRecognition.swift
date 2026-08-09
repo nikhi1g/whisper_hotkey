@@ -1001,12 +1001,78 @@ private enum WhisperRecognitionPayload: Sendable {
         }
     }
 
-    var resultValue: RecognitionResult {
+    func resultValue(
+        sessionID: UUID?,
+        generation: UInt64,
+        completeness: DecodeCompleteness
+    ) -> RecognitionResult {
         switch self {
         case .hypothesis(let hypothesis):
-            return hypothesis.asRecognitionResult()
+            return hypothesis.asRecognitionResult(
+                sessionID: sessionID ?? UUID(),
+                generation: generation,
+                completeness: completeness
+            )
         case .result(let result):
-            return result
+            let resolvedSessionID = sessionID ?? result.sessionID
+            let resolvedGeneration = sessionID == nil
+                ? result.generation
+                : generation
+            guard result.sessionID != resolvedSessionID
+                    || result.generation != resolvedGeneration
+                    || result.completeness != completeness
+            else {
+                return result
+            }
+            let words = result.words.enumerated().map { index, word in
+                RecognizedWord(
+                    id: StableWordID(
+                        sessionID: resolvedSessionID,
+                        providerDecodeID: word.id.providerDecodeID,
+                        wordIndex: index
+                    ),
+                    text: word.text,
+                    startSeconds: word.startSeconds,
+                    endSeconds: word.endSeconds,
+                    tokenRange: word.tokenRange,
+                    rawEvidence: word.rawEvidence,
+                    calibratedErrorProbability: word.calibratedErrorProbability,
+                    lockState: word.lockState,
+                    provenance: word.provenance
+                )
+            }
+            let wordIDs = Dictionary(
+                uniqueKeysWithValues: zip(result.words, words).map {
+                    ($0.0.id, $0.1.id)
+                }
+            )
+            let segments = result.segments.map { segment in
+                RecognizedSegment(
+                    id: segment.id,
+                    text: segment.text,
+                    startSeconds: segment.startSeconds,
+                    endSeconds: segment.endSeconds,
+                    wordIDs: segment.wordIDs.map { wordIDs[$0] ?? $0 },
+                    tokenRange: segment.tokenRange,
+                    evidence: segment.evidence,
+                    provenance: segment.provenance
+                )
+            }
+            return RecognitionResult(
+                sessionID: resolvedSessionID,
+                generation: resolvedGeneration,
+                engine: result.engine,
+                model: result.model,
+                pass: result.pass,
+                text: result.text,
+                words: words,
+                segments: segments,
+                alternatives: result.alternatives,
+                utteranceEvidence: result.utteranceEvidence,
+                timing: result.timing,
+                completeness: completeness,
+                passMetadata: result.passMetadata
+            )
         }
     }
 }
@@ -1150,7 +1216,10 @@ public actor WhisperRecognizer {
         sampleStart: Int64? = nil,
         sampleEnd: Int64? = nil,
         emitMetadata: Bool = true,
-        preserveAudio: Bool = false
+        preserveAudio: Bool = false,
+        sessionID: UUID? = nil,
+        generation: UInt64 = 0,
+        completeness: DecodeCompleteness = .finalSession
     ) async throws -> RecognitionResult {
         try await transcribePayload(
             audio,
@@ -1164,8 +1233,15 @@ public actor WhisperRecognizer {
             requestID: requestID,
             sampleStart: sampleStart,
             sampleEnd: sampleEnd,
-            emitMetadata: emitMetadata
-        ).resultValue
+            emitMetadata: emitMetadata,
+            sessionID: sessionID,
+            generation: generation,
+            completeness: completeness
+        ).resultValue(
+            sessionID: sessionID,
+            generation: generation,
+            completeness: completeness
+        )
     }
 
     /// Transcribes one ordered chunk while retaining the model process for the
@@ -1212,6 +1288,48 @@ public actor WhisperRecognizer {
         ).hypothesisValue
     }
 
+    /// Rich-result counterpart to `transcribeChunk`.  The canonical session
+    /// owns the audio, so chunk recognition always preserves it for the
+    /// coordinator and any later final-tail/fallback work.
+    public func transcribeChunkResult(
+        _ audio: WhisperAudioFile,
+        prompt: String? = nil,
+        pass: RecognitionPassKind = .provisional,
+        strategy: WhisperDecodingStrategy = .beam,
+        beamSize: Int = 5,
+        protocolVersion: Int = 2,
+        requestID: String = UUID().uuidString,
+        sampleStart: Int64? = nil,
+        sampleEnd: Int64? = nil,
+        emitMetadata: Bool = true,
+        preserveAudio: Bool = false,
+        sessionID: UUID? = nil,
+        generation: UInt64 = 0,
+        completeness: DecodeCompleteness = .provisional
+    ) async throws -> RecognitionResult {
+        try await transcribePayload(
+            audio,
+            keepHelperLoaded: true,
+            preserveAudio: preserveAudio,
+            prompt: prompt,
+            pass: pass,
+            strategy: strategy,
+            beamSize: beamSize,
+            protocolVersion: protocolVersion,
+            requestID: requestID,
+            sampleStart: sampleStart,
+            sampleEnd: sampleEnd,
+            emitMetadata: emitMetadata,
+            sessionID: sessionID,
+            generation: generation,
+            completeness: completeness
+        ).resultValue(
+            sessionID: sessionID,
+            generation: generation,
+            completeness: completeness
+        )
+    }
+
     public func finishContinuousSession() async {
         if let parakeetRuntime {
             if !keepsModelReady {
@@ -1239,28 +1357,25 @@ public actor WhisperRecognizer {
         requestID: String = UUID().uuidString,
         sampleStart: Int64? = nil,
         sampleEnd: Int64? = nil,
-        emitMetadata: Bool = false
+        emitMetadata: Bool = false,
+        sessionID: UUID? = nil,
+        generation: UInt64 = 0,
+        completeness: DecodeCompleteness = .finalSession
     ) async throws -> WhisperRecognitionPayload {
         let transcribeOperation: () async throws -> WhisperRecognitionPayload = { [self] in
             let configuration = try resolvedConfiguration()
             if configuration.engine == .parakeetCoreML {
-                let transcript = try await transcribeWithParakeet(
+                let result = try await transcribeWithParakeet(
                     audio,
                     configuration: configuration,
-                    keepLoaded: keepHelperLoaded || keepsModelReady
-                )
-                return .hypothesis(RecognitionHypothesis(
-                    engine: configuration.parakeetVariant.candidateEngineID,
+                    keepLoaded: keepHelperLoaded || keepsModelReady,
+                    sessionID: sessionID ?? UUID(),
+                    generation: generation,
                     pass: pass,
-                    window: recognitionWindow(
-                        startSample: sampleStart,
-                        endSample: sampleEnd,
-                        audio: audio
-                    ),
-                    text: transcript,
-                    modelID: configuration.parakeetVariant.rawValue,
-                    engineVersion: "FluidAudio"
-                ))
+                    requestID: requestID,
+                    completeness: completeness
+                )
+                return .result(result)
             }
             let lease = try ensureLease()
             defer {
@@ -1513,8 +1628,13 @@ public actor WhisperRecognizer {
     private func transcribeWithParakeet(
         _ audio: WhisperAudioFile,
         configuration: WhisperRuntimeConfiguration,
-        keepLoaded: Bool
-    ) async throws -> String {
+        keepLoaded: Bool,
+        sessionID: UUID,
+        generation: UInt64,
+        pass: RecognitionPassKind,
+        requestID: String,
+        completeness: DecodeCompleteness
+    ) async throws -> RecognitionResult {
         guard audio.speechPresence != .absent else {
             throw WhisperASRError.noSpeech
         }
@@ -1522,15 +1642,35 @@ public actor WhisperRecognizer {
         do {
             // Parakeet takes no prompt, so the internal dictionary and the
             // Pause Mode context tail are deliberately not passed here.
-            let transcript = try await runtime.transcribe(
-                audioURL: audio.url
+            let result = try await runtime.transcribeResult(
+                audioURL: audio.url,
+                sessionID: sessionID,
+                generation: generation,
+                pass: pass,
+                providerDecodeID: requestID,
+                completeness: completeness
             )
             try Task.checkCancellation()
-            let cleaned = try cleanedTranscript(transcript)
+            let cleaned = try cleanedTranscript(result.text)
             if !keepLoaded {
                 await releaseParakeet(runtime)
             }
-            return cleaned
+            guard cleaned != result.text else { return result }
+            return RecognitionResult(
+                sessionID: result.sessionID,
+                generation: result.generation,
+                engine: result.engine,
+                model: result.model,
+                pass: result.pass,
+                text: cleaned,
+                words: result.words,
+                segments: result.segments,
+                alternatives: result.alternatives,
+                utteranceEvidence: result.utteranceEvidence,
+                timing: result.timing,
+                completeness: result.completeness,
+                passMetadata: result.passMetadata
+            )
         } catch is CancellationError {
             if !keepLoaded {
                 await releaseParakeet(runtime)
