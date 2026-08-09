@@ -961,6 +961,11 @@ final class WhisperBufferedAudioSink: @unchecked Sendable {
     }
 
     func consume(_ input: AVAudioPCMBuffer) {
+        // Core Audio may legally issue an empty callback while reconfiguring.
+        // Startup latency is defined by the first usable microphone frames,
+        // not merely by entry into the tap block.
+        guard input.frameLength > 0 else { return }
+
         condition.lock()
         guard accepting else {
             condition.unlock()

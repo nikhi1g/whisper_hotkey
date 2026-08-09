@@ -131,6 +131,30 @@ final class AudioCaptureTests: XCTestCase {
         XCTAssertNotNil(sink.finishAcceptingAndWait())
     }
 
+    func testEmptyCallbackDoesNotCountAsFirstMicrophoneBuffer() throws {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let empty = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1)
+        )
+        empty.frameLength = 0
+        let timing = LockedAudioTiming()
+        let sink = WhisperBufferedAudioSink(
+            onFirstBuffer: timing.recordBuffer
+        )
+
+        sink.consume(empty)
+
+        XCTAssertNil(timing.snapshot.buffer)
+        XCTAssertNil(sink.finishAcceptingAndWait())
+    }
+
     func testCaptureTimingUsesIntegerUptimeDeltas() {
         let timing = WhisperAudioCaptureTiming(
             requestedAtUptimeNanoseconds: 100,

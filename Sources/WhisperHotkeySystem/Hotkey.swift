@@ -316,8 +316,9 @@ public struct GlobalInputReducer: Sendable {
         )
     }
 
-    /// Called by the monitor's one-shot dwell timer. No model or microphone is
-    /// started until this confirms the key is still a bare hold.
+    /// Called by the monitor's one-shot dwell timer. Provisional capture may
+    /// already be buffering, but the gesture is not accepted and no model is
+    /// prepared until this confirms the key is still a bare hold.
     public mutating func holdActivationFired() -> HotkeyAction? {
         guard activationMode == .hold,
               hotkeyIsDown,
@@ -480,9 +481,16 @@ public struct GlobalInputReducer: Sendable {
         guard event.kind == .flagsChanged else {
             return GlobalInputRouting(consume: false)
         }
-        let action: HotkeyAction = toggleSessionIsActive ? .released : .pressed
+        let wasActive = toggleSessionIsActive
+        let action: HotkeyAction = wasActive ? .released : .pressed
         toggleSessionIsActive.toggle()
-        return GlobalInputRouting(consume: false, actions: [.hotkey(action)])
+        let actions: [GlobalInputAction]
+        if wasActive {
+            actions = [.hotkey(action)]
+        } else {
+            actions = [.hotkey(.primeCapture), .hotkey(action)]
+        }
+        return GlobalInputRouting(consume: false, actions: actions)
     }
 
     private mutating func routeCompletionKey(
@@ -570,6 +578,14 @@ public final class GlobalHotkeyMonitor {
         _ eventTimestampNanoseconds: UInt64
     ) -> Void
 
+    /// Runs synchronously at the physical input edge. Implementations must
+    /// only enqueue a capture-runtime command and return; AVFoundation,
+    /// Accessibility, model, file, and UI work are forbidden here.
+    public typealias ImmediateCaptureHandler = @MainActor (
+        _ action: HotkeyAction,
+        _ eventTimestampNanoseconds: UInt64
+    ) -> Void
+
     private struct PendingInputEvent {
         let actions: [GlobalInputAction]
         let timestampNanoseconds: UInt64
@@ -577,6 +593,7 @@ public final class GlobalHotkeyMonitor {
 
     private let captureInsertionContext: @MainActor () -> DictationInsertionContext?
     private let shouldIgnorePointerDown: @MainActor () -> Bool
+    private let immediateCaptureHandler: ImmediateCaptureHandler
     private let holdActivationDelay: Duration
     private let handler: Handler
     private var reducer = GlobalInputReducer()
@@ -589,6 +606,7 @@ public final class GlobalHotkeyMonitor {
     public init(
         contextProvider: AccessibilityContextProvider,
         shouldIgnorePointerDown: @escaping @MainActor () -> Bool = { false },
+        immediateCaptureHandler: @escaping ImmediateCaptureHandler = { _, _ in },
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
@@ -596,6 +614,7 @@ public final class GlobalHotkeyMonitor {
             contextProvider.captureInsertionContext()
         }
         self.shouldIgnorePointerDown = shouldIgnorePointerDown
+        self.immediateCaptureHandler = immediateCaptureHandler
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
@@ -603,11 +622,13 @@ public final class GlobalHotkeyMonitor {
     init(
         captureInsertionContext: @escaping @MainActor () -> DictationInsertionContext?,
         shouldIgnorePointerDown: @escaping @MainActor () -> Bool = { false },
+        immediateCaptureHandler: @escaping ImmediateCaptureHandler = { _, _ in },
         holdActivationDelay: Duration = .milliseconds(150),
         handler: @escaping Handler
     ) {
         self.captureInsertionContext = captureInsertionContext
         self.shouldIgnorePointerDown = shouldIgnorePointerDown
+        self.immediateCaptureHandler = immediateCaptureHandler
         self.holdActivationDelay = holdActivationDelay
         self.handler = handler
     }
@@ -665,6 +686,10 @@ public final class GlobalHotkeyMonitor {
     public func stop() {
         cancelHoldActivation()
         if let action = reducer.reset() {
+            deliverImmediateCaptureEdge(
+                action,
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
             enqueue(
                 actions: [.hotkey(action)],
                 timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
@@ -684,6 +709,10 @@ public final class GlobalHotkeyMonitor {
     public func setActivationMode(_ mode: HotkeyActivationMode) {
         cancelHoldActivation()
         if let action = reducer.setActivationMode(mode) {
+            deliverImmediateCaptureEdge(
+                action,
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
             enqueue(
                 actions: [.hotkey(action)],
                 timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
@@ -694,6 +723,10 @@ public final class GlobalHotkeyMonitor {
     public func setHotkey(_ hotkey: HotkeyKey) {
         cancelHoldActivation()
         if let action = reducer.setHotkey(hotkey) {
+            deliverImmediateCaptureEdge(
+                action,
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            )
             enqueue(
                 actions: [.hotkey(action)],
                 timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
@@ -715,6 +748,10 @@ public final class GlobalHotkeyMonitor {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             if let action = reducer.reset() {
+                deliverImmediateCaptureEdge(
+                    action,
+                    timestampNanoseconds: event.timestamp
+                )
                 enqueue(
                     actions: [.hotkey(action)],
                     timestampNanoseconds: event.timestamp
@@ -734,6 +771,10 @@ public final class GlobalHotkeyMonitor {
                 return false
             }
             let routing = reducer.routePointerDown()
+            deliverImmediateCaptureEdges(
+                routing.actions,
+                timestampNanoseconds: event.timestamp
+            )
             enqueue(
                 actions: routing.actions,
                 timestampNanoseconds: event.timestamp
@@ -753,11 +794,38 @@ public final class GlobalHotkeyMonitor {
             isAutoRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         )
         let routing = reducer.route(rawEvent)
+        deliverImmediateCaptureEdges(
+            routing.actions,
+            timestampNanoseconds: event.timestamp
+        )
         enqueue(
             actions: routing.actions,
             timestampNanoseconds: event.timestamp
         )
         return routing.consume
+    }
+
+    private func deliverImmediateCaptureEdges(
+        _ actions: [GlobalInputAction],
+        timestampNanoseconds: UInt64
+    ) {
+        for action in actions {
+            guard case let .hotkey(hotkeyAction) = action else { continue }
+            deliverImmediateCaptureEdge(
+                hotkeyAction,
+                timestampNanoseconds: timestampNanoseconds
+            )
+        }
+    }
+
+    private func deliverImmediateCaptureEdge(
+        _ action: HotkeyAction,
+        timestampNanoseconds: UInt64
+    ) {
+        guard action == .primeCapture || action == .cancelPrimedCapture else {
+            return
+        }
+        immediateCaptureHandler(action, timestampNanoseconds)
     }
 
     /// Event-tap callbacks must finish promptly. Delivery is deferred to an
@@ -823,12 +891,19 @@ public final class GlobalHotkeyMonitor {
         pressedAtNanoseconds: UInt64
     ) {
         cancelHoldActivation()
-        let activationDelay = holdActivationDelay
+        let now = DispatchTime.now().uptimeNanoseconds
+        let remainingDelay = Self.remainingHoldActivationDelay(
+            holdActivationDelay,
+            pressedAtNanoseconds: pressedAtNanoseconds,
+            nowNanoseconds: now
+        )
         holdActivationTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: activationDelay)
-            } catch {
-                return
+            if remainingDelay > .zero {
+                do {
+                    try await Task.sleep(for: remainingDelay)
+                } catch {
+                    return
+                }
             }
             guard let self else {
                 return
@@ -839,6 +914,20 @@ public final class GlobalHotkeyMonitor {
             }
             handler(action, nil, pressedAtNanoseconds)
         }
+    }
+
+    static func remainingHoldActivationDelay(
+        _ activationDelay: Duration,
+        pressedAtNanoseconds: UInt64,
+        nowNanoseconds: UInt64
+    ) -> Duration {
+        let elapsedNanoseconds = nowNanoseconds >= pressedAtNanoseconds
+            ? nowNanoseconds - pressedAtNanoseconds
+            : 0
+        let elapsed = Duration.nanoseconds(
+            Int64(clamping: elapsedNanoseconds)
+        )
+        return max(.zero, activationDelay - elapsed)
     }
 
     private func cancelHoldActivation() {

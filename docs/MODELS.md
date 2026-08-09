@@ -61,6 +61,13 @@ Decode While Speaking uses one helper, not parallel model copies. Audio capture
 and recognition form a pipeline while whisper.cpp performs its existing
 CPU-thread and Metal parallel work. The microphone remains off at idle and no
 choice adds idle polling.
+All four selectable models share the same key-edge capture runtime. Recording
+starts independently of model preparation; the tap copies native PCM into a
+bounded ordered queue, while conversion, speech detection, and private WAV
+writes run separately. Background decoding receives only closed immutable
+segments, so it cannot contend with or read ahead of the active recording.
+This changes startup and capture integrity, not decoder output or the WER
+figures below.
 The windowed mode can lose a small amount of context across chunk boundaries.
 The full-context modes remain available when accuracy matters more than finish
 latency.

@@ -49,10 +49,18 @@ Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Option is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Private provisional microphone capture starts on
-the physical key-down edge so the beginning of speech is never lost. A
-shortcut, modifier-click, or rejected quick tap discards that audio without
-recognition, insertion, or runtime UI. Hold-to-talk is the default: a one-shot
-150 ms dwell accepts the provisional capture without polling. Releasing
+the physical key-down edge so the beginning of speech is never lost. That edge
+only enqueues a tokenized command to a dedicated capture runtime: the audio
+engine starts before private WAV/converter preparation, early native buffers
+wait in a bounded ordered queue, and conversion, speech detection, metering,
+and file writes run on a separate writer queue. Queue overflow fails visibly
+instead of silently truncating speech. A shortcut, modifier-click, or rejected
+quick tap cancels only its matching provisional token and discards that audio
+without recognition or insertion. A provisional listening badge may appear at
+the pointer fallback and is removed immediately when that gesture is rejected.
+Hold-to-talk is the default: a one-shot 150 ms dwell, measured from physical
+key-down rather than deferred app delivery, accepts the provisional capture
+without polling. Releasing
 after at least 250 milliseconds transcribes once and pastes at the current
 focus. The selected Processing policy controls when the model loads and whether
 hidden background decoding occurs. A faster tap does nothing.
@@ -66,9 +74,10 @@ latency independent of the selected model. Pause Mode
 uses that same gesture and learns a bounded pause threshold from resumed,
 sub-boundary pauses in the user's current cadence. It starts at 450 milliseconds
 and remains between 300 and 750 milliseconds. An accepted start prioritizes
-microphone capture before querying Accessibility geometry or constructing the
-listening badge. The badge appears once at the exact resolved location while
-the already-active audio callback continues capture. One uninterrupted
+microphone capture before any model, Accessibility, or badge work. The reusable
+badge is constructed while hidden at launch, appears immediately at the pointer
+fallback, and moves to exact Accessibility geometry when that asynchronous
+lookup succeeds, while the dedicated recorder continues capture. One uninterrupted
 private WAV retains the complete session while the same converted samples feed
 a small current inference segment. A phrase boundary rotates only that segment: the
 microphone and full recording remain uninterrupted while phrases are transcribed
@@ -162,7 +171,9 @@ and model loaded between dictations. **Decode While Speaking** also keeps one
 model loaded, then privately decodes bounded inference segments concurrently
 with ongoing capture. It prefers a detected pause after five seconds and rotates
 at an eight-second hard bound so release leaves only a small final segment. Segment
-recognition is serialized through one helper while whisper.cpp uses its normal
+boundaries are ordered with audio writes, and only closed immutable segments
+reach recognition. Segment recognition is serialized through one helper while
+whisper.cpp uses its normal
 thread and Metal parallelism; multiple competing model processes are never
 created. Partial transcripts remain hidden in memory and are inserted once
 after the final segment. One uninterrupted private recording is retained as a
@@ -230,8 +241,10 @@ containers are ignored and the badge sits directly above the exact caret
 instead. It flips below only at the top display edge. No role validation or
 geometry polling is performed. If no Accessibility
 geometry is available, the badge snapshots the current
-pointer position once when recording begins and centers the Send/Enter button
-under that pointer, enabling key, speak, click without pointer travel. The badge
+pointer position at the physical capture edge and centers the Send/Enter button
+under that pointer, enabling key, speak, click without pointer travel. If exact
+Accessibility geometry becomes available after presentation, the undragged
+badge relocates once without affecting recording. The badge
 uses a tight true-capsule silhouette with equal circular Stop and Send controls,
 compact waveform and timer cells, and one immutable width and height through
 listening and all following status states. While it remains undragged, a
@@ -246,16 +259,17 @@ for short status text or resizes during the session. Screen-edge clamping keeps
 the complete badge visible. This behavior affects presentation only and never
 validates or changes the paste destination. While listening, the compact
 badge shows a sensitive scrolling 23-sample waveform read from the existing
-audio callback at 20 Hz, elapsed time, a Stop and Insert button, and a Send
+capture-writer snapshot at 20 Hz, elapsed time, a Stop and Insert button, and a Send
 button. The recording limit stays hidden until its final minute; then elapsed
 time becomes a remaining-time countdown, its text shifts continuously from
 orange to red, and the thin limit track appears. Limits shorter than one minute
 use their complete duration for that warning shift. Stop and Insert has the same
 result as hotkey release. Send inserts successfully before posting an unmodified
-Return. The same unsmoothed audio callback feeds a zero-idle-cost energy gate:
+Return. The same captured samples feed a zero-idle-cost energy gate on the
+writer queue:
 Whisper runs only after at least 100 milliseconds of contiguous speech-like
-energy above -48 dBFS. The same detector supplies Pause Mode's trailing-silence
-duration from the existing callback, without a second audio pass. Flat silence
+energy above -48 dBFS. The same writer-queue detector supplies Pause Mode's
+trailing-silence duration without a second audio pass. Flat silence
 and short mechanical transients are treated as no speech, so Whisper cannot
 invent a phrase from an empty recording. The panel remains
 non-activating, and controller clicks are excluded from modifier-chord

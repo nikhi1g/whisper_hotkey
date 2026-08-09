@@ -104,67 +104,89 @@ final class ModeMatrixTests: XCTestCase {
         )
     }
 
-    func testAllNineActivationAndProcessingCombinationsDeliverOnce() async throws {
+    func testAllFourModelsAcrossEveryActivationAndProcessingModeDeliverOnce()
+        async throws
+    {
         let activations: [HotkeyActivationMode] = [.hold, .toggle, .pause]
         let processing: [ModelProcessingMode] = [
             .afterRecording,
             .modelReady,
             .decodeWhileSpeaking,
         ]
+        XCTAssertEqual(RecognitionChoice.allCases.count, 4)
 
-        for activation in activations {
-            for mode in processing {
-                let events = MatrixEvents()
-                let providers = RecognitionPipelineProviders(
-                    primary: { _, request in
-                        let words = ["matrix", request.pass.rawValue].enumerated().map {
-                            index, text in
-                            RecognizedWord(
-                                id: StableWordID(
-                                    sessionID: request.sessionID,
-                                    providerDecodeID: request.requestID,
-                                    wordIndex: index
+        for (choiceIndex, choice) in RecognitionChoice.allCases.enumerated() {
+            for activation in activations {
+                for mode in processing {
+                    let events = MatrixEvents()
+                    let providers = RecognitionPipelineProviders(
+                        primary: { _, request in
+                            let words = [
+                                "matrix", request.pass.rawValue,
+                            ].enumerated().map { index, text in
+                                RecognizedWord(
+                                    id: StableWordID(
+                                        sessionID: request.sessionID,
+                                        providerDecodeID: request.requestID,
+                                        wordIndex: index
+                                    ),
+                                    text: text,
+                                    startSeconds: Double(index),
+                                    endSeconds: Double(index) + 0.5
+                                )
+                            }
+                            return RecognitionResult(
+                                sessionID: request.sessionID,
+                                generation: request.generation,
+                                engine: Self.engineID(for: choice),
+                                model: ModelIdentity(
+                                    identifier: choice.rawValue
                                 ),
-                                text: text,
-                                startSeconds: Double(index),
-                                endSeconds: Double(index) + 0.5
+                                text: words.map(\.text).joined(separator: " "),
+                                words: words,
+                                timing: RecognitionTiming(
+                                    audioDurationSeconds: 2
+                                ),
+                                passMetadata: RecognitionPassMetadata(
+                                    strategy: "beam"
+                                )
                             )
                         }
-                        return RecognitionResult(
-                            sessionID: request.sessionID,
-                            generation: request.generation,
-                            engine: .whisperTurbo,
-                            model: ModelIdentity(identifier: "matrix"),
-                            text: words.map(\.text).joined(separator: " "),
-                            words: words,
-                            timing: RecognitionTiming(audioDurationSeconds: 2),
-                            passMetadata: RecognitionPassMetadata(strategy: "beam")
-                        )
-                    }
-                )
-                let coordinator = RecognitionPipelineCoordinator(
-                    providers: providers,
-                    configuration: RecognitionPipelineConfiguration(
+                    )
+                    let coordinator = RecognitionPipelineCoordinator(
+                        providers: providers,
+                        configuration: RecognitionPipelineConfiguration(
+                            activationMode: activation,
+                            processingMode: mode
+                        ),
+                        delivery: { event in await events.append(event) }
+                    )
+                    await coordinator.beginSession(
+                        sessionID: UUID(),
+                        generation: UInt64(
+                            choiceIndex
+                                * activations.count
+                                * processing.count
+                                + activations.firstIndex(of: activation)! * 3
+                                + processing.firstIndex(of: mode)! + 1
+                        ),
                         activationMode: activation,
                         processingMode: mode
-                    ),
-                    delivery: { event in await events.append(event) }
-                )
-                await coordinator.beginSession(
-                    sessionID: UUID(),
-                    generation: UInt64(activations.firstIndex(of: activation)! * 3
-                        + processing.firstIndex(of: mode)! + 1),
-                    activationMode: activation,
-                    processingMode: mode
-                )
-                let audio = try makeAudioFile()
-                let outcome = try await coordinator.finish(audio: audio)
-                let received = await events.values()
+                    )
+                    let audio = try makeAudioFile()
+                    let outcome = try await coordinator.finish(audio: audio)
+                    let received = await events.values()
 
-                XCTAssertFalse(outcome.text.isEmpty, "(activation)/(mode)")
-                XCTAssertEqual(received.count, 1, "(activation)/(mode)")
-                XCTAssertEqual(received[0].kind, .finalTranscript, "(activation)/(mode)")
-                XCTAssertEqual(outcome.deliveryCount, 1, "(activation)/(mode)")
+                    let combination = "\(choice)/\(activation)/\(mode)"
+                    XCTAssertFalse(outcome.text.isEmpty, combination)
+                    XCTAssertEqual(received.count, 1, combination)
+                    XCTAssertEqual(
+                        received[0].kind,
+                        .finalTranscript,
+                        combination
+                    )
+                    XCTAssertEqual(outcome.deliveryCount, 1, combination)
+                }
             }
         }
     }
@@ -291,6 +313,19 @@ final class ModeMatrixTests: XCTestCase {
         let url = directory.appendingPathComponent(name)
         try Data([0]).write(to: url)
         return WhisperAudioFile(url: url, directoryURL: directory)
+    }
+
+    private static func engineID(
+        for choice: RecognitionChoice
+    ) -> RecognitionEngineID {
+        switch choice {
+        case .parakeetUnified:
+            .parakeetUnifiedCoreML
+        case .parakeetAccurate, .parakeetFast:
+            .parakeetTDTCoreML
+        case .whisperTurboMetal:
+            .whisperTurbo
+        }
     }
 }
 

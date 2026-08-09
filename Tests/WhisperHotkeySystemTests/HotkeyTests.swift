@@ -500,7 +500,10 @@ final class HotkeyTests: XCTestCase {
         XCTAssertNil(reducer.setActivationMode(.hold))
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.capsLock, command: true)),
-            GlobalInputRouting(consume: false, actions: [.hotkey(.pressed)])
+            GlobalInputRouting(
+                consume: false,
+                actions: [.hotkey(.primeCapture), .hotkey(.pressed)]
+            )
         )
         XCTAssertEqual(
             reducer.route(key(.flagsChanged, MacVirtualKey.capsLock, command: false)),
@@ -554,6 +557,75 @@ final class HotkeyTests: XCTestCase {
 
 @MainActor
 final class GlobalHotkeyMonitorDeliveryTests: XCTestCase {
+    func testHoldDeadlineIsMeasuredFromPhysicalPressTimestamp() {
+        XCTAssertEqual(
+            GlobalHotkeyMonitor.remainingHoldActivationDelay(
+                .milliseconds(150),
+                pressedAtNanoseconds: 1_000_000_000,
+                nowNanoseconds: 1_120_000_000
+            ),
+            .milliseconds(30)
+        )
+        XCTAssertEqual(
+            GlobalHotkeyMonitor.remainingHoldActivationDelay(
+                .milliseconds(150),
+                pressedAtNanoseconds: 1_000_000_000,
+                nowNanoseconds: 1_200_000_000
+            ),
+            .zero
+        )
+    }
+
+    func testCaptureEdgesReachImmediateSinkBeforeDeferredAppDelivery() async {
+        var immediate: [(HotkeyAction, UInt64)] = []
+        var deferred: [HotkeyAction] = []
+        let deferredPrime = expectation(description: "deferred prime")
+        let deferredCancel = expectation(description: "deferred cancel")
+        let monitor = GlobalHotkeyMonitor(
+            captureInsertionContext: { nil },
+            immediateCaptureHandler: { action, timestamp in
+                immediate.append((action, timestamp))
+            }
+        ) { action, _, _ in
+            deferred.append(action)
+            if action == .primeCapture {
+                deferredPrime.fulfill()
+            } else if action == .cancelPrimedCapture {
+                deferredCancel.fulfill()
+            }
+        }
+        monitor.setActivationMode(.toggle)
+        let press = event(
+            keyCode: MacVirtualKey.rightCommand,
+            commandIsDown: true,
+            timestampNanoseconds: 101
+        )
+        let shortcut = event(
+            keyCode: MacVirtualKey.c,
+            commandIsDown: true,
+            timestampNanoseconds: 102
+        )
+
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .flagsChanged, event: press)
+        )
+        XCTAssertEqual(immediate.map(\.0), [.primeCapture])
+        XCTAssertEqual(immediate.map(\.1), [101])
+        XCTAssertTrue(deferred.isEmpty)
+        await fulfillment(of: [deferredPrime], timeout: 1)
+
+        XCTAssertFalse(
+            monitor.shouldConsumeTapEvent(type: .keyDown, event: shortcut)
+        )
+        XCTAssertEqual(
+            immediate.map(\.0),
+            [.primeCapture, .cancelPrimedCapture]
+        )
+        XCTAssertEqual(immediate.map(\.1), [101, 102])
+        XCTAssertEqual(deferred, [.primeCapture])
+        await fulfillment(of: [deferredCancel], timeout: 1)
+    }
+
     func testRecordingControllerClickDoesNotCancelModifierSession() async {
         var deliveries: [HotkeyAction] = []
         let started = expectation(description: "hold started")

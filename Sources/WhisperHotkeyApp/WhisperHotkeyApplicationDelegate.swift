@@ -174,6 +174,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
             return badge.containsInteractivePoint(NSEvent.mouseLocation)
+        },
+        immediateCaptureHandler: { [weak self] action, timestampNanoseconds in
+            self?.handleImmediateCaptureEdge(
+                action,
+                timestampNanoseconds: timestampNanoseconds
+            )
         }
     ) { [weak self] action, insertionContext, timestampNanoseconds in
         self?.handleHotkey(
@@ -241,12 +247,16 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var machine = DictationStateMachine()
     private var controlServer: ControlServer?
     private var preloadTask: Task<Void, Never>?
-    private var hasPrimedAudioCapture = false
+    private var primedAudioCaptureToken: WhisperAudioCaptureToken?
+    private var primedBadgeVisible = false
+    private var captureTimingTask: Task<Void, Never>?
     private var recognitionTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
     private var recordingPresentationTask: Task<Void, Never>?
+    private var recordingSegmentationTask: Task<Void, Never>?
     private var cancellationPresentationTask: Task<Void, Never>?
     private var errorPresentationTask: Task<Void, Never>?
+    private var badgeAnchorResolutionTask: Task<Void, Never>?
     private var submitAfterPasteTask: Task<Void, Never>?
     private var completionCaptureGraceTask: Task<Void, Never>?
     private var pipelineBeginTask: Task<Void, Never>?
@@ -294,6 +304,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         guard startControlServer() else {
             return
         }
+        // Construct the reusable hidden panel before the first gesture so its
+        // AppKit setup is never paid on the capture-critical path.
+        _ = badge
         menuBarController.update(
             .starting,
             toggleDictationEnabled: effectiveToggleDictationEnabled,
@@ -566,10 +579,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         switch action {
         case .primeCapture:
-            primeAudioCapture(pressedAt: eventTime)
+            presentPrimedCaptureIfCurrent()
 
         case .cancelPrimedCapture:
-            cancelPrimedAudioCapture()
+            dismissPrimedCapturePresentation()
 
         case .pressed:
             if !machine.phase.isBusy, machine.phase != .failed {
@@ -677,16 +690,32 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeBoundaryInProgress = false
         predecodeFailed = false
 
+        // Model preparation belongs to its own actor and starts independently
+        // of recorder adoption and badge/Accessibility work.
+        let pipelineCoordinator = pipelineCoordinator
+        let activationMode = hotkeyActivationMode
+        let sessionProcessingMode = processingMode
+        pipelineBeginTask?.cancel()
+        pipelineBeginTask = Task.detached(priority: .userInitiated) {
+            await pipelineCoordinator.beginSession(
+                generation: generation,
+                activationMode: activationMode,
+                processingMode: sessionProcessingMode
+            )
+        }
+
         do {
-            let adoptedPrimedCapture =
-                hasPrimedAudioCapture && recorder.isRecording
-            hasPrimedAudioCapture = false
-            if !adoptedPrimedCapture {
+            if let token = primedAudioCaptureToken {
+                primedAudioCaptureToken = nil
+                try recorder.adoptPrimedCapture(token)
+                scheduleCaptureTimingReport(for: token)
+            } else {
                 try recorder.start(
                     pauseSegmentation:
                         isPauseMode || processingMode.decodesWhileSpeaking
                 )
             }
+            primedBadgeVisible = false
             process(.captureStarted)
             startRecordingPresentation(
                 generation: generation,
@@ -695,16 +724,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         } catch {
             fail(error)
             return false
-        }
-
-        let pipelineCoordinator = pipelineCoordinator
-        pipelineBeginTask?.cancel()
-        pipelineBeginTask = Task { [pipelineCoordinator] in
-            await pipelineCoordinator.beginSession(
-                generation: generation,
-                activationMode: hotkeyActivationMode,
-                processingMode: processingMode
-            )
         }
 
         let precedingCleanup = recognizerCleanupTask
@@ -746,45 +765,85 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// Starts the microphone on the physical key-down edge so speech during a
-    /// Toggle/Pause tap or Hold dwell is retained. Dictation state, UI,
-    /// Accessibility work, recognition, and insertion wait for confirmation.
-    private func primeAudioCapture(pressedAt: TimeInterval) {
-        guard !machine.phase.isBusy,
-              machine.phase != .failed,
-              runtimeReadyForHotkey,
-              !isTerminating,
-              !hasPrimedAudioCapture
-        else {
-            return
-        }
-        do {
-            try recorder.start(
+    /// Called synchronously by the event monitor. This method only creates a
+    /// token and enqueues work on the recorder-owned capture runtime.
+    private func handleImmediateCaptureEdge(
+        _ action: HotkeyAction,
+        timestampNanoseconds: UInt64
+    ) {
+        switch action {
+        case .primeCapture:
+            guard !machine.phase.isBusy,
+                  machine.phase != .failed,
+                  runtimeReadyForHotkey,
+                  !isTerminating,
+                  primedAudioCaptureToken == nil
+            else {
+                return
+            }
+            primedAudioCaptureToken = recorder.primeCapture(
                 pauseSegmentation:
-                    isPauseMode || processingMode.decodesWhileSpeaking
+                    isPauseMode || processingMode.decodesWhileSpeaking,
+                requestedAtUptimeNanoseconds: timestampNanoseconds
             )
-            hasPrimedAudioCapture = true
-            let latencyMilliseconds = max(
-                0,
-                (ProcessInfo.processInfo.systemUptime - pressedAt) * 1_000
-            )
-            logger.debug(
-                "Provisional audio capture ready in \(latencyMilliseconds, privacy: .public) ms"
-            )
-        } catch {
-            // Confirmation retries through beginSession(), whose existing
-            // user-facing failure path remains authoritative.
-            recorder.cancel()
-            hasPrimedAudioCapture = false
+
+        case .cancelPrimedCapture:
+            guard let token = primedAudioCaptureToken else { return }
+            primedAudioCaptureToken = nil
+            recorder.cancelPrimedCapture(token)
+
+        default:
+            return
         }
     }
 
-    private func cancelPrimedAudioCapture() {
-        guard hasPrimedAudioCapture, !machine.phase.isBusy else {
+    private func presentPrimedCaptureIfCurrent() {
+        guard primedAudioCaptureToken != nil,
+              !machine.phase.isBusy,
+              machine.phase != .failed,
+              !primedBadgeVisible
+        else {
             return
         }
-        hasPrimedAudioCapture = false
-        recorder.cancel()
+        primedBadgeVisible = true
+        badge.present(.listening)
+        badge.updateListening(
+            elapsed: 0,
+            limit: TimeInterval(recordingLimit.seconds),
+            level: 0
+        )
+    }
+
+    private func dismissPrimedCapturePresentation() {
+        guard primedBadgeVisible, !machine.phase.isBusy else { return }
+        primedBadgeVisible = false
+        badge.hide()
+    }
+
+    private func scheduleCaptureTimingReport(
+        for token: WhisperAudioCaptureToken
+    ) {
+        captureTimingTask?.cancel()
+        let recorder = recorder
+        let logger = logger
+        captureTimingTask = Task { @MainActor [weak self] in
+            for _ in 0..<20 {
+                if Task.isCancelled { return }
+                if let timing = recorder.captureTiming(for: token),
+                   let firstBuffer = timing.requestToFirstBufferNanoseconds,
+                   let firstCommit = timing
+                    .requestToFirstCommittedSampleNanoseconds
+                {
+                    logger.info(
+                        "Capture timing first-buffer=\(firstBuffer / 1_000_000, privacy: .public)ms first-commit=\(firstCommit / 1_000_000, privacy: .public)ms"
+                    )
+                    self?.captureTimingTask = nil
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+            self?.captureTimingTask = nil
+        }
     }
 
     private func finalizeRecording() -> Bool {
@@ -1271,7 +1330,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         cancelledRecognition?.cancel()
         recognitionTask = nil
         recorder.cancel()
-        hasPrimedAudioCapture = false
+        primedAudioCaptureToken = nil
+        primedBadgeVisible = false
         insertionContext = nil
 
         let precedingCleanup = recognizerCleanupTask
@@ -1343,27 +1403,63 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func presentBadge(_ presentation: BadgePresentation) {
         if presentation == .hidden {
+            badgeAnchorResolutionTask?.cancel()
+            badgeAnchorResolutionTask = nil
             badge.hide()
             badgeCaretRect = nil
             badgeFieldRect = nil
             return
         }
         if presentation == .listening {
-            let anchor = contextProvider.currentBadgeAnchor()
-            badgeCaretRect = anchor.caretRect
-            badgeFieldRect = anchor.fieldRect
+            // Order the panel immediately at the pointer fallback. Exact AX
+            // geometry is advisory and may block for hundreds of
+            // milliseconds, so resolve it on the next MainActor turn after
+            // capture/model work has already started.
+            badgeCaretRect = nil
+            badgeFieldRect = nil
+            badge.present(.listening)
+            badge.updateListening(
+                elapsed: 0,
+                limit: TimeInterval(recordingLimit.seconds),
+                level: 0
+            )
+            scheduleInitialBadgeAnchorResolution()
+            return
         }
         badge.present(
             presentation,
             caretFrame: badgeCaretRect,
             fieldFrame: badgeFieldRect
         )
-        if presentation == .listening {
-            badge.updateListening(
-                elapsed: 0,
-                limit: TimeInterval(recordingLimit.seconds),
-                level: 0
-            )
+    }
+
+    private func scheduleInitialBadgeAnchorResolution() {
+        badgeAnchorResolutionTask?.cancel()
+        let generation = sessionGeneration
+        badgeAnchorResolutionTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self,
+                  !Task.isCancelled,
+                  generation == sessionGeneration,
+                  machine.phase == .listening,
+                  badge.acceptsAutomaticAnchorUpdates
+            else {
+                return
+            }
+            let anchor = contextProvider.currentBadgeAnchor()
+            guard !Task.isCancelled,
+                  generation == sessionGeneration,
+                  machine.phase == .listening,
+                  badge.updateAutomaticAnchor(
+                    caretFrame: anchor.caretRect,
+                    fieldFrame: anchor.fieldRect
+                  )
+            else {
+                return
+            }
+            badgeCaretRect = anchor.caretRect
+            badgeFieldRect = anchor.fieldRect
+            badgeAnchorResolutionTask = nil
         }
     }
 
@@ -1372,6 +1468,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         limit: Int
     ) {
         recordingPresentationTask?.cancel()
+        recordingSegmentationTask?.cancel()
         badgeFocusMonitor.start()
         let startedAt = ProcessInfo.processInfo.systemUptime
         recordingPresentationTask = Task { @MainActor [weak self] in
@@ -1390,6 +1487,26 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     limit: TimeInterval(limit),
                     level: displayedLevel
                 )
+                do {
+                    try await Task.sleep(for: .milliseconds(50))
+                } catch {
+                    return
+                }
+            }
+        }
+
+        // Segment rotation and decode submission have their own cadence. A
+        // slow badge/Accessibility update must never delay a closed segment
+        // from reaching the recognition actor, while the recorder runtime
+        // continues accepting microphone buffers independently of both.
+        recordingSegmentationTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self,
+                      generation == sessionGeneration,
+                      machine.phase == .listening
+                else {
+                    return
+                }
                 if isPauseMode,
                    recorder.trailingSilenceDuration
                     >= recorder.pauseBoundarySilence
@@ -1407,7 +1524,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     flushPredecodeChunkAndContinue()
                 }
                 do {
-                    try await Task.sleep(for: .milliseconds(50))
+                    try await Task.sleep(for: .milliseconds(25))
                 } catch {
                     return
                 }
@@ -1419,6 +1536,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         badgeFocusMonitor.stop()
         recordingPresentationTask?.cancel()
         recordingPresentationTask = nil
+        recordingSegmentationTask?.cancel()
+        recordingSegmentationTask = nil
     }
 
     private func refreshBadgeAnchorAfterFocusChange() {
@@ -2457,10 +2576,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         cancellationPresentationTask = nil
         errorPresentationTask?.cancel()
         errorPresentationTask = nil
+        badgeAnchorResolutionTask?.cancel()
+        badgeAnchorResolutionTask = nil
         submitAfterPasteTask?.cancel()
         submitAfterPasteTask = nil
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
+        captureTimingTask?.cancel()
+        captureTimingTask = nil
         pipelineBeginTask?.cancel()
         pipelineBeginTask = nil
         completionBehavior = .insert
@@ -2482,7 +2605,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         modelConfigurationTask = nil
         hotkeyMonitor.stop()
         recorder.cancel()
-        hasPrimedAudioCapture = false
+        primedAudioCaptureToken = nil
+        primedBadgeVisible = false
         badge.hide()
         clipboard.completePendingRestoration()
         controlServer?.stop()

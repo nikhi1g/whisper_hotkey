@@ -149,8 +149,11 @@ it. A fresh install on a Mac with at least 8 GB selects **Model Ready** by
 default to keep the selected model hot between dictations. Lower-memory Macs
 select **Decode After Speaking** to preserve idle memory; after a gesture is
 accepted, it prepares the selected model while recording and decodes only when
-you stop. Very quick taps are ignored, and ordinary Option shortcuts continue
-to work.
+you stop. Recording itself begins at physical key-down on a dedicated runtime,
+before model preparation, badge placement, audio conversion, or WAV creation.
+Early microphone buffers are retained in order, so speaking immediately does
+not sacrifice the first words. Very quick taps are ignored, and ordinary Option
+shortcuts continue to work.
 
 For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as
 `whisper_hotkey`. Its commands are:
