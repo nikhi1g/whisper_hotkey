@@ -1,0 +1,116 @@
+{
+  "schema": "whisper_hotkey_baseline_audit_diff_v1",
+  "audit_source": "MD/02_CURRENT_REPOSITORY_AUDIT.md",
+  "baseline_commit": "210009e607e70e2b7c506144a230a82e1447b37f",
+  "release_reference": {
+    "tag": "v3.6.2",
+    "commit": "317fced"
+  },
+  "facts": [
+    {
+      "id": "recognition_contract_string_only",
+      "status": "changed",
+      "prior_finding": "Public and helper-facing recognition paths exposed only String results.",
+      "current_finding": "Whisper has resultRich and transcribeHypothesis paths, while compatibility transcribe and transcribeChunk still return String.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperHelperEvent",
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperRecognizer.transcribeHypothesis",
+        "Sources/WhisperHotkeyCore/RecognitionHypothesis.swift:RecognitionHypothesis"
+      ],
+      "follow_up": "Adopt the rich contract at every provider-facing call site before selective repair."
+    },
+    {
+      "id": "whisper_fallback_timestamps_disabled",
+      "status": "confirmed_with_scope",
+      "prior_finding": "The command-line fallback passes -nt, so it has no timestamps.",
+      "current_finding": "The fallback still passes -nt. The owned helper can emit segment/token timing only through protocol v2 flags.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperCommandLineInvocation.arguments",
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperHelperProtocol.transcribeCommand",
+        "Sources/WhisperModelHelper/main.cpp:emit_result"
+      ],
+      "follow_up": "Keep command-line fallback conservative; use the rich helper path for timed repair experiments."
+    },
+    {
+      "id": "recognizer_owns_audio_lifetime",
+      "status": "partially_changed",
+      "prior_finding": "The recognizer deleted WhisperAudioFile in a defer, preventing a verifier from sharing it.",
+      "current_finding": "preserveAudio can defer deletion across a caller-owned operation, but the default path still deletes after each recognition and no session-level audio lease exists.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperRecognizer.transcribe(preserveAudio:)",
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:transcribeOperation"
+      ],
+      "follow_up": "Move canonical audio ownership to the session coordinator before verifier work."
+    },
+    {
+      "id": "parakeet_rich_output_discarded",
+      "status": "confirmed",
+      "prior_finding": "Parakeet collapsed FluidAudio output to text.",
+      "current_finding": "ParakeetRuntime.transcribe returns String and the wrapper creates a text-only RecognitionHypothesis; word timing/evidence is not retained.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/ParakeetRuntime.swift:ParakeetRuntime.transcribe",
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:transcribeWithParakeet"
+      ],
+      "follow_up": "Preserve provider-neutral Parakeet words, timing, and confidence before cross-engine fusion."
+    },
+    {
+      "id": "smart_decode_whole_utterance",
+      "status": "confirmed_with_rich_metadata",
+      "prior_finding": "Smart Decode retries the whole utterance with beam search when aggregate evidence is uncertain.",
+      "current_finding": "Adaptive decoding still retries the complete requested sample range; sample windows and timed metadata are available, but no uncertain-span planner exists.",
+      "evidence": [
+        "Sources/WhisperModelHelper/main.cpp:is_confident",
+        "Sources/WhisperModelHelper/main.cpp:adaptive fallback in main",
+        "Sources/WhisperModelHelper/main.cpp:sampleStart/sampleEnd handling"
+      ],
+      "follow_up": "Benchmark selective original-audio spans before introducing a larger verifier."
+    },
+    {
+      "id": "helper_evidence_discarded_by_swift",
+      "status": "partially_changed",
+      "prior_finding": "Swift discarded aggregate helper evidence and retained only cleaned text.",
+      "current_finding": "Protocol v2 decodes timed words and aggregate fields into RecognitionHypothesis, but provider fallback paths and some fields still remain text-only or are not propagated end to end.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperHelperProtocol.EventEnvelope",
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:resultRich mapping",
+        "Sources/WhisperHotkeyCore/RecognitionHypothesis.swift:RecognitionHypothesis"
+      ],
+      "follow_up": "Verify every rich field survives the recognizer-to-coordinator path with focused fixtures."
+    },
+    {
+      "id": "background_predecode_string_accumulation",
+      "status": "confirmed",
+      "prior_finding": "Decode While Speaking accumulated [String] chunks and joined them with spaces.",
+      "current_finding": "PredecodedTranscriptAccumulator still stores [String] and joins chunks with a space; it has no stable word identity or overlap reconciliation.",
+      "evidence": [
+        "Sources/WhisperHotkeyCore/BackgroundPredecode.swift:PredecodedTranscriptAccumulator"
+      ],
+      "follow_up": "Replace chunk strings with bounded ordered rich state behind one coordinator."
+    },
+    {
+      "id": "serial_recognition_chain",
+      "status": "confirmed",
+      "prior_finding": "The architecture serializes recognition to preserve ordered delivery.",
+      "current_finding": "The actor-owned recognizer/helper session and existing predecode accumulator still provide one serial recognition/delivery chain; no coordinator-owned internal parallelism is present.",
+      "evidence": [
+        "Sources/WhisperHotkeyASR/WhisperRecognition.swift:WhisperRecognizer",
+        "Sources/WhisperHotkeyCore/BackgroundPredecode.swift:PredecodedTranscriptAccumulator",
+        "docs/ARCHITECTURE.md:serial recognition"
+      ],
+      "follow_up": "Keep one ordered delivery path while allowing bounded internal enhancement tasks."
+    },
+    {
+      "id": "benchmark_insufficient_for_product_claim",
+      "status": "confirmed",
+      "prior_finding": "The 100-utterance LibriSpeech benchmark is insufficient for a universal sub-1% claim.",
+      "current_finding": "The repository still has the 100-utterance LibriSpeech smoke track and no consented application dictation corpus or full mode lifecycle harness.",
+      "evidence": [
+        "Benchmarks/BenchmarkSuite/datasets/merged/librispeech-100/case_ids.txt",
+        "Benchmarks/Scripts/benchmark_librispeech.py",
+        "Benchmarks/Scripts/benchmark_predecode.py",
+        "docs/MODELS.md:100-utterance benchmark"
+      ],
+      "follow_up": "Add the frozen application corpus and paired metrics before making any release accuracy claim."
+    }
+  ]
+}
