@@ -2,8 +2,235 @@ import Foundation
 import XCTest
 @testable import WhisperHotkeyASR
 import WhisperHotkeyCore
+import FluidAudio
 
 final class ParakeetRecognitionTests: XCTestCase {
+    func testPinnedFluidAudioTDTResultPreservesWordsTimingEvidenceAndProvenance() {
+        let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let decodeID = "tdt-decode-1"
+        let fluidResult = ASRResult(
+            text: "Hello world!",
+            confidence: 0.87,
+            duration: 1.2,
+            processingTime: 0.04,
+            tokenTimings: [
+                TokenTiming(
+                    token: "▁Hello",
+                    tokenId: 11,
+                    startTime: 0.10,
+                    endTime: 0.34,
+                    confidence: 0.91
+                ),
+                TokenTiming(
+                    token: "▁world",
+                    tokenId: 12,
+                    startTime: 0.40,
+                    endTime: 0.72,
+                    confidence: 0.83
+                ),
+                TokenTiming(
+                    token: "!",
+                    tokenId: 13,
+                    startTime: 0.72,
+                    endTime: 0.78,
+                    confidence: 0.79
+                ),
+            ]
+        )
+
+        for variant in [ParakeetVariant.fast, .accurate] {
+            let result = ParakeetRecognitionAdapter.result(
+                from: fluidResult,
+                variant: variant,
+                sessionID: sessionID,
+                generation: 9,
+                pass: .primaryFullSession,
+                providerDecodeID: decodeID
+            )
+
+            XCTAssertEqual(result.renderedText, fluidResult.text)
+            XCTAssertEqual(result.generation, 9)
+            XCTAssertEqual(result.words.map(\.text), ["Hello", "world!"])
+            XCTAssertEqual(result.words.map(\.id.providerDecodeID), [decodeID, decodeID])
+            XCTAssertEqual(result.words.map(\.id.wordIndex), [0, 1])
+            XCTAssertEqual(result.words[0].startSeconds, 0.10)
+            XCTAssertEqual(result.words[1].endSeconds, 0.78)
+            XCTAssertEqual(result.words[0].rawEvidence.tokenIDs, [11])
+            XCTAssertEqual(result.words[1].rawEvidence.tokenIDs, [12, 13])
+            XCTAssertEqual(
+                result.words[1].rawEvidence.tokenLogProbabilities.count,
+                2
+            )
+            XCTAssertEqual(
+                result.words[1].rawEvidence.tokenLogProbabilities[0],
+                log(0.83),
+                accuracy: 0.000_001
+            )
+            XCTAssertEqual(
+                result.words[1].rawEvidence.tokenLogProbabilities[1],
+                log(0.79),
+                accuracy: 0.000_001
+            )
+            XCTAssertTrue(
+                result.words[1].rawEvidence.availability.contains(
+                    .tokenLogProbabilities
+                )
+            )
+            XCTAssertEqual(
+                result.words[1].rawEvidence.posterior ?? -1,
+                (0.83 + 0.79) / 2,
+                accuracy: 0.000_001
+            )
+            XCTAssertTrue(
+                result.words[1].rawEvidence.availability.contains(.posterior)
+            )
+            XCTAssertTrue(
+                result.words[1].rawEvidence.availability.contains(.timing)
+            )
+            XCTAssertEqual(
+                result.utteranceEvidence.sequenceScore ?? -1,
+                0.87,
+                accuracy: 0.000_001
+            )
+            XCTAssertEqual(result.timing.audioDurationSeconds, 1.2)
+            XCTAssertEqual(result.timing.decodeDurationSeconds, 0.04)
+            XCTAssertEqual(result.segments.count, 1)
+            XCTAssertEqual(result.segments[0].wordIDs, result.words.map(\.id))
+            XCTAssertEqual(
+                result.words[0].provenance,
+                .primary(providerDecodeID: decodeID, wordIndex: 0)
+            )
+            XCTAssertTrue(
+                result.segments[0].provenance.reason?.contains("FluidAudio 0.15.5") == true
+            )
+            XCTAssertEqual(result.model.identifier, variant.cacheFolderName)
+            XCTAssertEqual(result.model.version, "0.15.5")
+            XCTAssertEqual(result.model.computeUnits, "cpuAndNeuralEngine")
+            XCTAssertEqual(result.passMetadata.requestID, decodeID)
+        }
+    }
+
+    func testMissingFluidAudioTokenConfidenceRemainsUnavailable() {
+        let fluidResult = ASRResult(
+            text: "unknown",
+            confidence: 0.6,
+            duration: 0.5,
+            processingTime: 0.02,
+            tokenTimings: [
+                TokenTiming(
+                    token: "▁unknown",
+                    tokenId: 21,
+                    startTime: 0.05,
+                    endTime: 0.31,
+                    confidence: .nan
+                ),
+            ]
+        )
+
+        let result = ParakeetRecognitionAdapter.result(
+            from: fluidResult,
+            variant: .accurate,
+            sessionID: UUID(),
+            generation: 0,
+            pass: .primaryFullSession,
+            providerDecodeID: "missing-confidence"
+        )
+
+        XCTAssertEqual(result.words.count, 1)
+        XCTAssertNil(result.words[0].rawEvidence.posterior)
+        XCTAssertFalse(
+            result.words[0].rawEvidence.availability.contains(.posterior)
+        )
+        XCTAssertTrue(
+            result.words[0].rawEvidence.tokenLogProbabilities.isEmpty
+        )
+        XCTAssertFalse(
+            result.words[0].rawEvidence.availability.contains(
+                .tokenLogProbabilities
+            )
+        )
+        XCTAssertEqual(result.words[0].rawEvidence.tokenIDs, [21])
+        XCTAssertNil(result.words[0].calibratedErrorProbability)
+    }
+
+    func testUnifiedStringOnlyAPIDoesNotInventWordSegmentsOrConfidence() {
+        let result = ParakeetRecognitionAdapter.textOnlyResult(
+            text: "Unified transcript",
+            variant: .unified,
+            sessionID: UUID(),
+            generation: 4,
+            pass: .primaryFullSession,
+            providerDecodeID: "unified-decode-1",
+            completeness: .finalSession,
+            audioDurationSeconds: 1.75,
+            decodeDurationSeconds: 0.03
+        )
+
+        XCTAssertEqual(result.engine, .parakeetUnifiedCoreML)
+        XCTAssertEqual(result.model.identifier, "parakeet-unified-en-0.6b")
+        XCTAssertEqual(result.model.revision, "offline-15s")
+        XCTAssertEqual(result.text, "Unified transcript")
+        XCTAssertTrue(result.words.isEmpty)
+        XCTAssertTrue(result.segments.isEmpty)
+        XCTAssertEqual(result.utteranceEvidence, .unavailable)
+        XCTAssertEqual(result.timing.audioDurationSeconds, 1.75)
+        XCTAssertEqual(result.passMetadata.strategy, "offline-unified-15s")
+    }
+
+    func testTokenBoundaryAndBlankHandlingKeepsWordsAndRangesOrdered() {
+        let fluidResult = ASRResult(
+            text: "Hello, world",
+            confidence: 0.8,
+            duration: 1,
+            processingTime: 0.01,
+            tokenTimings: [
+                TokenTiming(
+                    token: " Hello",
+                    tokenId: 1,
+                    startTime: 0.1,
+                    endTime: 0.2,
+                    confidence: 0.9
+                ),
+                TokenTiming(
+                    token: ",",
+                    tokenId: 2,
+                    startTime: 0.2,
+                    endTime: 0.23,
+                    confidence: 0.8
+                ),
+                TokenTiming(
+                    token: "<blank>",
+                    tokenId: 3,
+                    startTime: 0.23,
+                    endTime: 0.24,
+                    confidence: 0
+                ),
+                TokenTiming(
+                    token: "▁world",
+                    tokenId: 4,
+                    startTime: 0.4,
+                    endTime: 0.6,
+                    confidence: 0.7
+                ),
+            ]
+        )
+
+        let result = ParakeetRecognitionAdapter.result(
+            from: fluidResult,
+            variant: .fast,
+            sessionID: UUID(),
+            generation: 0,
+            pass: .primaryFullSession,
+            providerDecodeID: "boundary-decode"
+        )
+
+        XCTAssertEqual(result.words.map(\.text), ["Hello,", "world"])
+        XCTAssertEqual(result.words.map(\.tokenRange), [0..<2, 3..<4])
+        XCTAssertEqual(result.segments.first?.tokenRange, 0..<4)
+        XCTAssertEqual(result.words.map(\.startSeconds), [0.1, 0.4])
+        XCTAssertEqual(result.words.map(\.endSeconds), [0.23, 0.6])
+    }
+
     func testDiscoveryNeedsNoLocalFilesAndCarriesTheVariant() throws {
         // Parakeet checkpoints are fetched by FluidAudio on first use, so
         // discovery must succeed against an empty home directory. Every other
