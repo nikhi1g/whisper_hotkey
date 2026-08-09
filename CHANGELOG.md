@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.2.5: 2026-08-09
+
+- Started provisional microphone capture from the physical hotkey edge on a
+  token-scoped recorder runtime. Model preparation, badge placement,
+  Accessibility lookup, temporary-file creation, and audio conversion can no
+  longer delay the capture command or discard audio already delivered by Core
+  Audio
+- Buffered early native PCM in strict arrival order while the private writer
+  is prepared. Conversion, speech detection, metering, canonical/segment WAV
+  writes, and segment rotation now run off the real-time tap callback. A queue
+  continuity failure is explicit instead of silently producing truncated audio
+- Decoupled selected-model preparation, capture, recording presentation, and
+  decode-while-speaking segmentation. All four selectable models use the same
+  capture path, and the 4-model x 3-input-mode x 3-processing-mode matrix is
+  covered by integration tests
+- Made the listening badge reusable and immediately visible at its pointer
+  fallback while Accessibility geometry resolves asynchronously. Hold dwell is
+  measured from physical key-down, and Caps Lock uses the same priming path
+- Fixed Toggle Mode remaining open after a successful pipeline delivery. The
+  canonical final transcript now completes insertion and returns the app to
+  idle exactly once
+- Added provider-neutral rich recognition evidence, cancellable canonical-audio
+  leases, bounded streaming reconciliation, lexical-invariant formatting,
+  confidence/fusion guardrails, and privacy-safe benchmark tooling. No verifier
+  model was promoted and decoder output/WER are unchanged in this release
+
 ## 4.2.4: 2026-08-07
 
 - Removed the accuracy coordinator, which never ran. It returned to the plain

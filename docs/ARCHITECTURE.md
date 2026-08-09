@@ -8,9 +8,11 @@ ownership of every subprocess and temporary file.
 
 ```mermaid
 flowchart LR
-    H["Global hotkey event tap"] --> A["App orchestrator"]
-    A --> R["AVAudioEngine recorder"]
-    R --> W["Private 16 kHz mono WAV"]
+    H["Global hotkey event tap"] -->|"tokenized prime/cancel"| R["Dedicated capture runtime"]
+    H -->|"semantic gesture"| A["App orchestrator"]
+    R --> I["AVAudioEngine input tap"]
+    I --> Q["Bounded ordered PCM queue"]
+    Q --> W["Writer queue: convert, VAD, private WAVs"]
     A --> C["Recognition pipeline coordinator"]
     W --> C
     C --> M["Selected local Whisper or Parakeet runtime"]
@@ -28,25 +30,37 @@ remain active. Whether a runtime stays resident depends on processing mode:
 Decode After Speaking keeps no loaded model or helper, while Model Ready and
 Decode While Speaking may keep the selected recognition runtime resident (helper
 for whisper.cpp, in-process runtime for Parakeet) with audio capture stopped and
-no polling task added. Decode After Speaking loads the model only when capture
-finishes. Release, Stop, or Send finalizes a normal dictation, inserts it, and
-clears the private audio directory; runtime teardown is skipped only when the
-processing mode deliberately keeps it warm.
+no polling task added. Once a gesture is accepted, every processing mode may
+prepare the selected model concurrently with ongoing capture; Decode After
+Speaking still performs no decode and retains no model at idle. Release, Stop,
+or Send finalizes a normal dictation, inserts it, and clears the private audio
+directory; runtime teardown is skipped only when the processing mode
+deliberately keeps it warm.
+
+The physical hotkey edge only enqueues a token-scoped command. A dedicated
+user-interactive serial runtime owns AVAudioEngine start, stop, tap mutation,
+adoption, cancellation, and finalization. The engine starts before private
+WAV/converter preparation; early native buffers are retained in a bounded FIFO.
+The tap performs one bounded PCM copy and enqueue. A separate writer queue owns
+conversion, speech detection, metering, canonical/segment file writes, and
+ordered rotation barriers. Overflow or continuity loss invalidates capture
+explicitly instead of returning a silently truncated recording.
 
 Pause Mode retains one uninterrupted full-session WAV and writes a parallel
-current inference segment from the already-converted callback buffer. Its pause
+current inference segment from the same writer-queue samples. Its pause
 threshold begins at 450 milliseconds and adapts within 300–750 milliseconds
 from resumed pauses. A boundary rotates only the inference segment, serially
 transcribes and pastes the phrase, and reuses the loaded helper until the active
 session ends. The next decode is conditioned on at most 240 trailing characters
 from the current session, sent through the helper's private JSON-line stdin
 channel. Decode While Speaking reuses the same dual-file recorder without Pause
-Mode's incremental paste. Its 20 Hz recording task rotates speech-bearing
-inference segments at a detected pause after five seconds or at an eight-second
-bound. Capture continues while a strict serial recognition chain consumes
-completed segments through one helper. Partial text stays in a bounded in-memory
-accumulator and is inserted once after the final segment. The complete session WAV
-remains available for one ordinary fallback decode if a background chunk fails.
+Mode's incremental paste. Its segmentation task is independent of the 20 Hz
+badge presentation task and rotates speech-bearing inference segments at a
+detected pause after five seconds or at an eight-second bound. Capture continues
+while a strict serial recognition chain consumes only closed immutable segments
+through one helper. Partial text stays in a bounded in-memory accumulator and is
+inserted once after the final segment. The complete session WAV remains
+available for one ordinary fallback decode if a background chunk fails.
 
 The status menu contains only immediate actions. A lazy native Settings
 window owns the key, input behavior, model, recording-limit, and Open at Login

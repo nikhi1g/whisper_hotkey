@@ -4,14 +4,8 @@ The public product route is
 [`https://nikhi1g.github.io/whisper_hotkey/`](https://nikhi1g.github.io/whisper_hotkey/).
 GitHub Pages deploys the static files in `site/` through `pages.yml`. The page
 queries the latest GitHub release and sends its primary button to the
-`whisper_hotkey.dmg` asset, falling back to `whisper_hotkey.zip` for older
-releases and then to the releases page.
-
-The ZIP was dropped from new releases in 3.6.0. It existed because an
-unnotarized disk image was believed not to mount; a quarantined DMG was
-tested and mounts normally, and the app copied out of it carries only
-`com.apple.provenance` rather than the `com.apple.quarantine` flag the ZIP
-path propagated. Shipping one asset also halves the upload.
+`whisper_hotkey.zip` asset, falling back to `whisper_hotkey.dmg` and then to
+the releases page.
 
 ## Signing status
 
