@@ -1,0 +1,187 @@
+{
+  "artifactVersion": "w05-synthetic-v1",
+  "groups": [
+    {
+      "calibrationExampleCount": 6,
+      "engine": "parakeetTDTCoreML",
+      "heldOutExampleCount": 4,
+      "methods": {
+        "isotonic": {
+          "heldOutMetrics": {
+            "auprc": 0.5833333333333333,
+            "brier": 0.3125,
+            "ece": 0.375,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.0,
+            "falseUnlockRate": null,
+            "mce": 0.5,
+            "nce": 6.063374238377484,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "points": [
+              {
+                "calibrated_error_probability": 0.0,
+                "maximum_raw_error_probability": 0.03
+              },
+              {
+                "calibrated_error_probability": 0.0,
+                "maximum_raw_error_probability": 0.14
+              },
+              {
+                "calibrated_error_probability": 0.5,
+                "maximum_raw_error_probability": 0.44
+              },
+              {
+                "calibrated_error_probability": 1.0,
+                "maximum_raw_error_probability": 0.63
+              },
+              {
+                "calibrated_error_probability": 1.0,
+                "maximum_raw_error_probability": 0.87
+              }
+            ]
+          }
+        },
+        "platt": {
+          "heldOutMetrics": {
+            "auprc": 0.8333333333333333,
+            "brier": 0.26428685776806254,
+            "ece": 0.3646006562690386,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.5,
+            "falseUnlockRate": null,
+            "mce": 0.48910020915923025,
+            "nce": 1.1087094110935303,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "intercept": 0.9009430262283534,
+            "slope": 1.3849477429368577
+          }
+        },
+        "temperature": {
+          "heldOutMetrics": {
+            "auprc": 0.8333333333333333,
+            "brier": 0.24822999111037342,
+            "ece": 0.37815765798430817,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.5,
+            "falseUnlockRate": null,
+            "mce": 0.7387682335762699,
+            "nce": 0.9183339592367191,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "temperature": 0.9085063412700686
+          }
+        }
+      },
+      "model": "parakeet-v2",
+      "operatingPoint": {
+        "errorThreshold": null,
+        "reason": "No verifier-budget fixture justifies a shipping threshold.",
+        "status": "uncalibrated"
+      },
+      "profile": "precision"
+    },
+    {
+      "calibrationExampleCount": 8,
+      "engine": "whisperTurbo",
+      "heldOutExampleCount": 4,
+      "methods": {
+        "isotonic": {
+          "heldOutMetrics": {
+            "auprc": 0.5833333333333333,
+            "brier": 0.3125,
+            "ece": 0.375,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.0,
+            "falseUnlockRate": null,
+            "mce": 0.5,
+            "nce": 6.063374238377484,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "points": [
+              {
+                "calibrated_error_probability": 0.0,
+                "maximum_raw_error_probability": 0.02
+              },
+              {
+                "calibrated_error_probability": 0.0,
+                "maximum_raw_error_probability": 0.08
+              },
+              {
+                "calibrated_error_probability": 0.0,
+                "maximum_raw_error_probability": 0.18
+              },
+              {
+                "calibrated_error_probability": 0.5,
+                "maximum_raw_error_probability": 0.48
+              },
+              {
+                "calibrated_error_probability": 1.0,
+                "maximum_raw_error_probability": 0.66
+              },
+              {
+                "calibrated_error_probability": 1.0,
+                "maximum_raw_error_probability": 0.82
+              },
+              {
+                "calibrated_error_probability": 1.0,
+                "maximum_raw_error_probability": 0.96
+              }
+            ]
+          }
+        },
+        "platt": {
+          "heldOutMetrics": {
+            "auprc": 0.8333333333333333,
+            "brier": 0.23967826153195015,
+            "ece": 0.3529118460285979,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.5,
+            "falseUnlockRate": null,
+            "mce": 0.7704514654227601,
+            "nce": 0.8782393058229444,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "intercept": 0.7217035123453334,
+            "slope": 1.5154863268147272
+          }
+        },
+        "temperature": {
+          "heldOutMetrics": {
+            "auprc": 0.8333333333333333,
+            "brier": 0.2268718036537278,
+            "ece": 0.35040146399489747,
+            "errorCount": 2,
+            "errorRecallAtVerifierBudget25Pct": 0.5,
+            "falseUnlockRate": null,
+            "mce": 0.7330921759027577,
+            "nce": 0.8355678699387408,
+            "sampleCount": 4
+          },
+          "parameters": {
+            "temperature": 0.7460368366074975
+          }
+        }
+      },
+      "model": "turbo-q5",
+      "operatingPoint": {
+        "errorThreshold": null,
+        "reason": "No verifier-budget fixture justifies a shipping threshold.",
+        "status": "uncalibrated"
+      },
+      "profile": "precision"
+    }
+  ],
+  "privacy": {
+    "containsAudio": false,
+    "containsPersistentCorpus": false,
+    "containsTranscript": false
+  },
+  "schema": "whisper_hotkey_confidence_calibration_v1"
+}
