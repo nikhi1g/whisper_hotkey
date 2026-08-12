@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.6: 2026-08-11
+
+- Fixed a native AVAudioEngine abort when an interrupted capture left an input
+  tap installed on the next dictation attempt. Every new session now clears the
+  input bus before installing its tap.
+- Verified repeated capture sessions, the complete Swift suite, the signed
+  application bundle, and the installed app/controller pair.
+
 ## 4.2.5: 2026-08-09
 
 - Started provisional microphone capture from the physical hotkey edge on a
