@@ -693,6 +693,11 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             onFirstBuffer: timing.markFirstBuffer
         )
         self.sink = sink
+        // AVAudioEngine can retain a tap across an interrupted engine even
+        // when local bookkeeping says the bus is clear. Removing a missing tap
+        // is a no-op, so reset the bus before every new capture session.
+        inputNode.removeTap(onBus: 0)
+        inputTapInstalled = false
         inputNode.installTap(
             onBus: 0,
             bufferSize: 1_024,
