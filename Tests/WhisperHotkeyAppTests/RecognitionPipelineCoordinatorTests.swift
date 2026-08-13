@@ -60,6 +60,31 @@ final class RecognitionPipelineCoordinatorTests: XCTestCase {
         XCTAssertEqual(deliveredCount, 1)
     }
 
+    func testProviderNoSpeechMapsToNoSpeechDetected() async throws {
+        let providers = RecognitionPipelineProviders(
+            primary: { _, _ in
+                throw WhisperASRError.noSpeech
+            }
+        )
+        let coordinator = RecognitionPipelineCoordinator(providers: providers)
+        await coordinator.beginSession(
+            sessionID: sessionID,
+            generation: 8,
+            activationMode: .toggle,
+            processingMode: .afterRecording
+        )
+        let audio = try makeAudioFile()
+
+        do {
+            _ = try await coordinator.finish(audio: audio)
+            XCTFail("Expected no-speech failure.")
+        } catch let error as RecognitionPipelineError {
+            XCTAssertEqual(error, .noSpeechDetected)
+        } catch {
+            XCTFail("Expected RecognitionPipelineError, got \(error).")
+        }
+    }
+
     func testCancellationInvalidatesStaleGenerationAndCleansAudioAfterUnwind() async throws {
         let events = EventBox()
         let providers = RecognitionPipelineProviders(

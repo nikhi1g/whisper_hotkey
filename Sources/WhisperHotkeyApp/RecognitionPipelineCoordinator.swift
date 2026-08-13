@@ -778,6 +778,8 @@ public actor RecognitionPipelineCoordinator {
                     )
                     source = .accumulated
                     fallbackUsed = true
+                } catch let error as WhisperASRError where error == .noSpeech {
+                    throw RecognitionPipelineError.noSpeechDetected
                 } catch {
                     // A complete accumulated result is still a safe fallback
                     // only when a final tail was not available; it is never

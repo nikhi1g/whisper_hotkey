@@ -391,6 +391,83 @@ final class AudioCaptureTests: XCTestCase {
         )
     }
 
+    func testWriterReplacesAStaleConverterWithTheActualBufferFormat()
+        throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "whisper_hotkey-format-change-test-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("dictation.wav")
+        let staleFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let actualFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 24_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let fileFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        var outputFile: AVAudioFile? = try AVAudioFile(
+            forWriting: url,
+            settings: fileFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let processingFormat = try XCTUnwrap(outputFile?.processingFormat)
+        let staleConverter = try XCTUnwrap(
+            AVAudioConverter(from: staleFormat, to: processingFormat)
+        )
+        let writer = WhisperWAVWriter(
+            file: try XCTUnwrap(outputFile),
+            segmentFile: nil,
+            segmentAudioFile: nil,
+            converter: staleConverter,
+            outputFormat: processingFormat
+        )
+        let input = try XCTUnwrap(
+            AVAudioPCMBuffer(
+                pcmFormat: actualFormat,
+                frameCapacity: 2_400
+            )
+        )
+        input.frameLength = 2_400
+        let samples = try XCTUnwrap(input.floatChannelData?[0])
+        for index in 0..<Int(input.frameLength) {
+            samples[index] = 0.2
+        }
+
+        writer.consume(input)
+
+        XCTAssertNil(writer.finish())
+        outputFile = nil
+        let written = try AVAudioFile(forReading: url)
+        XCTAssertGreaterThan(written.length, 1_500)
+        XCTAssertLessThan(written.length, 1_700)
+    }
+
     func testAudioFileDeletesItsWholePrivateDirectoryIdempotently()
         throws {
         let directory = FileManager.default.temporaryDirectory

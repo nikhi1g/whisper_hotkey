@@ -674,8 +674,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         timing: WhisperAudioCaptureTimingTracker
     ) throws {
         let inputNode = engineBox.engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+        let reportedInputFormat = inputNode.outputFormat(forBus: 0)
+        guard reportedInputFormat.sampleRate > 0,
+              reportedInputFormat.channelCount > 0
+        else {
             throw WhisperASRError.microphoneUnavailable
         }
         guard let outputFormat = AVAudioFormat(
@@ -693,15 +695,18 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             onFirstBuffer: timing.markFirstBuffer
         )
         self.sink = sink
-        // AVAudioEngine can retain a tap across an interrupted engine even
-        // when local bookkeeping says the bus is clear. Removing a missing tap
-        // is a no-op, so reset the bus before every new capture session.
+        // The device format can change while the app is idle (for example,
+        // after wake or when a Bluetooth route changes). Passing the earlier
+        // reported format makes AVAudioEngine raise an uncaught Objective-C
+        // exception if the hardware changed before tap installation. A nil
+        // format asks the input node to supply its current native format; the
+        // writer creates its converter from the first actual buffer.
         inputNode.removeTap(onBus: 0)
         inputTapInstalled = false
         inputNode.installTap(
             onBus: 0,
             bufferSize: 1_024,
-            format: inputFormat,
+            format: nil,
             block: makeWhisperAudioTapHandler(sink: sink)
         )
         inputTapInstalled = true
@@ -713,7 +718,6 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             },
             prepareWriter: {
                 try makePreparedWriter(
-                    inputFormat: inputFormat,
                     outputFormat: outputFormat,
                     pauseSegmentation: pauseSegmentation,
                     timing: timing
@@ -728,7 +732,6 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     }
 
     private func makePreparedWriter(
-        inputFormat: AVAudioFormat,
         outputFormat: AVAudioFormat,
         pauseSegmentation: Bool,
         timing: WhisperAudioCaptureTimingTracker
@@ -751,19 +754,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             } else {
                 segmentFile = nil
             }
-            guard let converter = AVAudioConverter(
-                from: inputFormat,
-                to: outputFile.processingFormat
-            ) else {
-                throw WhisperASRError.captureFailed(
-                    "Could not prepare microphone conversion."
-                )
-            }
             let writer = WhisperWAVWriter(
                 file: outputFile,
                 segmentFile: segmentFile,
                 segmentAudioFile: segmentAudioFile,
-                converter: converter,
                 outputFormat: outputFile.processingFormat,
                 onFirstSamplesCommitted: timing.markFirstCommittedSample
             )
@@ -1284,7 +1278,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
         file: AVAudioFile,
         segmentFile: AVAudioFile?,
         segmentAudioFile: WhisperAudioFile?,
-        converter: AVAudioConverter,
+        converter: AVAudioConverter? = nil,
         outputFormat: AVAudioFormat,
         onFirstSamplesCommitted: @escaping @Sendable (UInt64) -> Void = {
             _ in
@@ -1331,7 +1325,13 @@ final class WhisperWAVWriter: @unchecked Sendable {
 
     func consume(_ input: AVAudioPCMBuffer) {
         lock.withLock {
-            guard firstError == nil, let file, let converter else {
+            guard firstError == nil, let file else {
+                return
+            }
+            guard let converter = converter(for: input.format) else {
+                firstError = WhisperASRError.captureFailed(
+                    "Could not prepare microphone conversion."
+                )
                 return
             }
             let ratio = outputFormat.sampleRate / input.format.sampleRate
@@ -1399,6 +1399,32 @@ final class WhisperWAVWriter: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    private func converter(
+        for inputFormat: AVAudioFormat
+    ) -> AVAudioConverter? {
+        if let converter,
+           Self.sameStreamFormat(converter.inputFormat, inputFormat)
+        {
+            return converter
+        }
+        let replacement = AVAudioConverter(
+            from: inputFormat,
+            to: outputFormat
+        )
+        converter = replacement
+        return replacement
+    }
+
+    static func sameStreamFormat(
+        _ lhs: AVAudioFormat,
+        _ rhs: AVAudioFormat
+    ) -> Bool {
+        lhs.commonFormat == rhs.commonFormat
+            && lhs.sampleRate == rhs.sampleRate
+            && lhs.channelCount == rhs.channelCount
+            && lhs.isInterleaved == rhs.isInterleaved
     }
 
     @discardableResult
