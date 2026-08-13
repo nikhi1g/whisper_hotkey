@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.2.7: 2026-08-12
+
+- Fixed repeatable native crashes after wake or an audio-route change. Capture
+  now asks AVAudioEngine for the input node's current native format instead of
+  installing a tap with a stale sample rate, and conversion follows the actual
+  first buffer even when the microphone changes between 48 kHz and 24 kHz.
+- Mapped recognizer no-speech results to the short No Speech Detected state
+  instead of the misleading Transcription Interrupted error.
+- Added route-change and no-speech regression coverage. The full suite now
+  passes 377 tests with three intentional opt-in skips.
+
 ## 4.2.6: 2026-08-11
 
 - Fixed a native AVAudioEngine abort when an interrupted capture left an input

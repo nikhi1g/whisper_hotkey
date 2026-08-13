@@ -1,25 +1,36 @@
-Version 4.2.6 hardens capture recovery after an interrupted audio engine.
+Version 4.2.7 fixes capture failures caused by microphone format changes and
+corrects the misleading interruption shown for silent dictations.
 
-## Capture lifecycle
+## Microphone route changes no longer terminate the app
 
-AVAudioEngine permits only one input tap on a bus. If an interrupted capture
-left that tap attached, the next dictation could terminate the app inside the
-native `InstallTapOnNode` path before Swift could report a normal capture
-failure. Every new session now clears the input bus before installing its
-tap, while the existing private audio cleanup and failure paths remain intact.
+macOS can change an input device's native sample rate while the app is idle,
+especially after wake or when an audio route changes. The prior capture path
+could read 48 kHz, then attempt to install that stale format after the hardware
+had moved to 24 kHz. AVAudioEngine raises an uncaught native exception for that
+mismatch.
 
-This is a capture-integrity patch only. Recognition output, model selection,
-preferences, permissions, and the local-only processing boundary are
-unchanged.
+Capture now installs its tap using the input node's current native format. The
+private writer creates or replaces its converter from the actual incoming
+buffer, so a route change remains compatible with the fixed private 16 kHz mono
+WAV used for local recognition.
+
+## Correct silent-dictation result
+
+The recognition coordinator now preserves the recognizer's explicit no-speech
+result. Silence shows the bounded No Speech Detected state instead of being
+collapsed into Transcription Interrupted. Genuine provider failures retain the
+interruption path.
 
 ## Verification
 
-- The complete Swift suite passes: 375 tests, with three intentional opt-in
+- The complete Swift suite passes: 377 tests, with three intentional opt-in
   integration tests skipped.
-- The repaired signed bundle was installed at `/Applications/whisper_hotkey.app`
-  and passed deep strict code-signature verification.
-- Two consecutive synthetic Right Option dictation sessions completed without
-  a process exit, and the installed controller returned the app to idle.
+- A format-change regression feeds a 24 kHz microphone buffer after a stale
+  48 kHz converter and verifies valid 16 kHz output.
+- The installed signed bundle survived ten consecutive capture/cancel cycles
+  and a completed silent session without a crash or format-mismatch log.
+- The installed app and controller match their built SHA-256 hashes and the
+  bundle passes deep strict code-signature verification.
 
 ## Compatibility
 
