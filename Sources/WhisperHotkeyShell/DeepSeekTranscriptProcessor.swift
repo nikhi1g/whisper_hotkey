@@ -92,7 +92,7 @@ public struct DeepSeekConfiguration: Sendable {
         case .high, .xhigh:
             return 60.0
         case .max:
-            return 120.0
+            return 60.0
         }
     }
 }

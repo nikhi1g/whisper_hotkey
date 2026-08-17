@@ -16,7 +16,10 @@ final class DictationStateMachineReviewTests: XCTestCase {
 
     func testProcessingRequestedMovesTranscribingToReviewing() {
         var machine = machineInTranscribing()
-        XCTAssertEqual(machine.handle(.processingRequested), [.requestProcessing])
+        XCTAssertEqual(
+            machine.handle(.processingRequested),
+            [.requestProcessing, .showBadge(.enhancing)]
+        )
         XCTAssertEqual(machine.phase, .reviewing)
     }
 

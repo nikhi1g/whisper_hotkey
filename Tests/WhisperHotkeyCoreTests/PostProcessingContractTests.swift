@@ -283,3 +283,87 @@ final class CustomSemanticProfileTests: XCTestCase {
         )
     }
 }
+
+/// The owner may keep as many system prompts as they like and switch between
+/// them; the selected one is what the custom profile sends.
+final class CustomPromptLibraryTests: XCTestCase {
+    private func makeDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "prompt-library-\(UUID().uuidString)")!
+    }
+
+    func testLibrarySeedsOnePromptAndSelectsIt() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(CustomPromptLibrary.prompts(defaults: defaults).count, 1)
+        XCTAssertEqual(CustomPromptLibrary.selectedIndex(defaults: defaults), 0)
+        XCTAssertEqual(
+            CustomPromptLibrary.selectedPrompt(defaults: defaults).prompt,
+            SemanticProfileCatalog.defaultCustomObjective
+        )
+    }
+
+    func testAddingSelectsTheNewPromptAndDrivesTheProfile() {
+        let defaults = makeDefaults()
+        CustomPromptLibrary.add(
+            CustomPrompt(name: "Shouty", prompt: "ALL CAPS please."),
+            defaults: defaults
+        )
+        XCTAssertEqual(CustomPromptLibrary.selectedIndex(defaults: defaults), 1)
+        XCTAssertEqual(
+            PostProcessingPreference.customPrompt(defaults: defaults),
+            "ALL CAPS please."
+        )
+        XCTAssertEqual(
+            SemanticProfileCatalog.profile(
+                .custom,
+                customObjective: PostProcessingPreference.customPrompt(
+                    defaults: defaults
+                )
+            ).objective,
+            "ALL CAPS please."
+        )
+    }
+
+    func testEditingChangesOnlyTheSelectedPrompt() {
+        let defaults = makeDefaults()
+        CustomPromptLibrary.add(
+            CustomPrompt(name: "Second", prompt: "Second prompt."),
+            defaults: defaults
+        )
+        PostProcessingPreference.setCustomPrompt("Edited.", defaults: defaults)
+        let library = CustomPromptLibrary.prompts(defaults: defaults)
+        XCTAssertEqual(library.count, 2)
+        XCTAssertEqual(library[0].prompt, PostProcessingPreference.defaultCustomPrompt)
+        XCTAssertEqual(library[1].prompt, "Edited.")
+        XCTAssertEqual(library[1].name, "Second")
+    }
+
+    func testRemovingKeepsTheSelectionInRangeAndNeverEmpties() {
+        let defaults = makeDefaults()
+        CustomPromptLibrary.add(
+            CustomPrompt(name: "Second", prompt: "Second prompt."),
+            defaults: defaults
+        )
+        CustomPromptLibrary.removeSelected(defaults: defaults)
+        XCTAssertEqual(CustomPromptLibrary.prompts(defaults: defaults).count, 1)
+        XCTAssertEqual(CustomPromptLibrary.selectedIndex(defaults: defaults), 0)
+
+        CustomPromptLibrary.removeSelected(defaults: defaults)
+        XCTAssertEqual(
+            CustomPromptLibrary.prompts(defaults: defaults),
+            [CustomPromptLibrary.defaultPrompt]
+        )
+    }
+
+    func testLastRunSummaryIsRecordedForSettings() {
+        let defaults = makeDefaults()
+        XCTAssertNil(PostProcessingPreference.lastRun(defaults: defaults))
+        PostProcessingPreference.recordLastRun(
+            "enhanced in 2.1 s",
+            defaults: defaults
+        )
+        XCTAssertTrue(
+            PostProcessingPreference.lastRun(defaults: defaults)?
+                .contains("enhanced in 2.1 s") ?? false
+        )
+    }
+}

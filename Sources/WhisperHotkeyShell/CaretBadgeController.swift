@@ -860,7 +860,7 @@ private final class BadgeView: NSView {
             limitTrackLayer.isHidden = true
         }
         activityOriginLayer.isHidden = presentation != .listening
-        if presentation == .transcribing {
+        if presentation == .transcribing || presentation == .enhancing {
             transcribingIndicatorLayer.startAnimating()
         } else {
             transcribingIndicatorLayer.stopAnimating()
@@ -877,6 +877,9 @@ private final class BadgeView: NSView {
         case .transcribing:
             statusLabel.stringValue = ""
             setAccessibilityLabel("Transcribing")
+        case .enhancing:
+            statusLabel.stringValue = "Enhancing"
+            setAccessibilityLabel("Enhancing")
         case .busy:
             statusLabel.stringValue = "Busy"
         case let .error(message):

@@ -37,6 +37,10 @@ public enum HotkeyAction: Equatable, Sendable {
 public enum BadgePresentation: Equatable, Sendable {
     case listening
     case transcribing
+    /// The transcript is with the post-processing model. Distinct from
+    /// `transcribing` so a rewrite that takes seconds does not read as a
+    /// stuck local transcription.
+    case enhancing
     case busy
     case error(String)
     case hidden

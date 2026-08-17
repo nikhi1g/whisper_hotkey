@@ -150,7 +150,10 @@ final class PostProcessingEndToEndTests: XCTestCase {
         machine.handle(.captureStarted)
         machine.handle(.hotkeyReleased(at: 2))
         XCTAssertEqual(machine.phase, .transcribing)
-        XCTAssertEqual(machine.handle(.processingRequested), [.requestProcessing])
+        XCTAssertEqual(
+            machine.handle(.processingRequested),
+            [.requestProcessing, .showBadge(.enhancing)]
+        )
         let delivered = PostProcessingReviewFlow.acceptedText(for: preview)
         XCTAssertEqual(machine.handle(.reviewAccepted), [.deliverTranscript])
         XCTAssertEqual(machine.phase, .inserting)

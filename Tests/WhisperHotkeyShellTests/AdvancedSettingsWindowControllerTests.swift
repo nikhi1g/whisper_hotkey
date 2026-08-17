@@ -1037,6 +1037,46 @@ final class PostProcessingCustomPromptUITests: XCTestCase {
         controller.close()
     }
 
+    func testPromptLibraryAndLastRunAreVisibleInSettings() {
+        var selected: [Int] = []
+        var added = 0
+        var removed = 0
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: {
+                makeAdvancedSettingsState(
+                    postProcessingProfile: .custom,
+                    postProcessingCustomPromptNames: ["My prompt", "Shouty"],
+                    postProcessingSelectedCustomPrompt: 1,
+                    postProcessingLastRun: "12:00:00 — enhanced in 2.1 s"
+                )
+            },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                selectPostProcessingCustomPrompt: { selected.append($0) },
+                addPostProcessingCustomPrompt: { added += 1 },
+                removePostProcessingCustomPrompt: { removed += 1 }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+        controller.showWindow(nil)
+        XCTAssertEqual(
+            controller.postProcessingCustomPromptNamesForTesting,
+            ["My prompt", "Shouty"]
+        )
+        XCTAssertEqual(
+            controller.postProcessingLastRunForTesting,
+            "12:00:00 — enhanced in 2.1 s"
+        )
+        controller.addPostProcessingCustomPromptForTesting()
+        controller.removePostProcessingCustomPromptForTesting()
+        XCTAssertEqual(added, 1)
+        XCTAssertEqual(removed, 1)
+        controller.close()
+    }
+
     func testCustomPromptRowIsHiddenForBuiltInProfiles() {
         let controller = AdvancedSettingsWindowController(
             stateProvider: {
@@ -1077,7 +1117,10 @@ private func makeAdvancedSettingsState(
     softwareUpdateStatus: SoftwareUpdateStatus = .idle,
     postProcessingProfile: SemanticProfileID = .clarity,
     postProcessingCustomPrompt: String =
-        PostProcessingPreference.defaultCustomPrompt
+        PostProcessingPreference.defaultCustomPrompt,
+    postProcessingCustomPromptNames: [String] = ["My prompt"],
+    postProcessingSelectedCustomPrompt: Int = 0,
+    postProcessingLastRun: String? = nil
 ) -> AdvancedSettingsState {
     AdvancedSettingsState(
         selectedHotkey: hotkey,
@@ -1098,7 +1141,10 @@ private func makeAdvancedSettingsState(
         automaticallyChecksForUpdates: automaticallyChecksForUpdates,
         softwareUpdateStatus: softwareUpdateStatus,
         postProcessingProfile: postProcessingProfile,
-        postProcessingCustomPrompt: postProcessingCustomPrompt
+        postProcessingCustomPrompt: postProcessingCustomPrompt,
+        postProcessingCustomPromptNames: postProcessingCustomPromptNames,
+        postProcessingSelectedCustomPrompt: postProcessingSelectedCustomPrompt,
+        postProcessingLastRun: postProcessingLastRun
     )
 }
 

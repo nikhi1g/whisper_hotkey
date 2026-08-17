@@ -30,6 +30,11 @@ public enum WhisperHotkeyPreferenceKeys {
         "postProcessingReasoningEffort"
     public static let postProcessingCustomPrompt =
         "postProcessingCustomPrompt"
+    public static let postProcessingCustomPrompts =
+        "postProcessingCustomPrompts"
+    public static let postProcessingSelectedCustomPrompt =
+        "postProcessingSelectedCustomPrompt"
+    public static let postProcessingLastRun = "postProcessingLastRun"
 }
 
 public struct FirstRunPerformanceProfile: Equatable, Sendable {
@@ -1363,32 +1368,50 @@ public enum PostProcessingPreference {
     /// the cap keeps one pathological paste from crowding out the transcript.
     public static let maximumCustomPromptLength = 2_000
 
-    /// The owner's custom-profile instructions. Blank storage falls back to
-    /// the built-in default so the custom profile is never prompt-less.
+    /// The instructions the custom profile sends: the text of whichever
+    /// prompt in the owner's library is selected.
     public static func customPrompt(
         defaults: UserDefaults = .standard
     ) -> String {
-        let stored = defaults.string(
-            forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let stored, !stored.isEmpty else { return defaultCustomPrompt }
-        return stored
+        CustomPromptLibrary.selectedPrompt(defaults: defaults).prompt
     }
 
+    /// Edits the selected library entry's text in place.
     public static func setCustomPrompt(
         _ prompt: String,
         defaults: UserDefaults = .standard
     ) {
+        let selected = CustomPromptLibrary.selectedPrompt(defaults: defaults)
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            defaults.removeObject(
-                forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
-            )
-            return
-        }
+        CustomPromptLibrary.updateSelected(
+            CustomPrompt(
+                name: selected.name,
+                prompt: trimmed.isEmpty ? defaultCustomPrompt : trimmed
+            ),
+            defaults: defaults
+        )
+    }
+
+    /// The outcome of the most recent enhancement, surfaced in Settings so a
+    /// failure is visible instead of looking like the feature did nothing.
+    /// Never contains transcript text — only the outcome and its timing.
+    public static func lastRun(
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingLastRun
+        )
+    }
+
+    public static func recordLastRun(
+        _ summary: String,
+        defaults: UserDefaults = .standard
+    ) {
+        let stamp = DateFormatter()
+        stamp.dateFormat = "HH:mm:ss"
         defaults.set(
-            String(trimmed.prefix(maximumCustomPromptLength)),
-            forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
+            "\(stamp.string(from: Date())) — \(summary)",
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingLastRun
         )
     }
 

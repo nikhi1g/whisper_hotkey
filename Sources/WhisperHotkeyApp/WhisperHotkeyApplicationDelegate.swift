@@ -285,6 +285,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var presentedReviewPreview: PostProcessPreview?
     private var reviewController: PostProcessReviewController?
     private var reviewSession: PostProcessingReviewSession?
+    /// Bounds the reviewing phase. Without it, a processing task that never
+    /// reports back (cancelled, superseded, or hung inside URLSession) leaves
+    /// the badge showing forever and the hotkey refusing new dictations.
+    private var reviewWatchdogTask: Task<Void, Never>?
     /// Created on demand only: when post-processing is disabled the app
     /// never instantiates the processor, its session, or the key provider.
     /// A fresh instance per dictation keeps model/thinking/effort preference
@@ -725,9 +729,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             )
             reviewSession = session
             session.start(request, generation: sessionGeneration)
+            startReviewWatchdog(for: request)
             return true
 
         case .showReview(let preview):
+            reviewWatchdogTask?.cancel()
+            reviewWatchdogTask = nil
             // Enhancement replaces the dictated text outright: the processed
             // rewrite goes through the existing insertion path with no review
             // step. A failed rewrite still inserts the raw transcript, so the
@@ -1410,6 +1417,44 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Falls back to the raw transcript when enhancement has not reported a
+    /// result within its own request budget plus a margin. The deadline is
+    /// derived from the same configuration the processor uses, so a legitimate
+    /// slow thinking pass is never cut short — only a stuck one is.
+    private func startReviewWatchdog(for request: PostProcessRequest) {
+        reviewWatchdogTask?.cancel()
+        let effort = DeepSeekReasoningEffort(
+            rawValue: PostProcessingPreference.selectedReasoningEffort()
+        ) ?? .low
+        // Two attempts (the processor retries once) plus a margin.
+        let deadline = DeepSeekConfiguration.timeout(
+            thinkingEnabled: PostProcessingPreference.isThinkingEnabled(),
+            reasoningEffort: effort
+        ) * 2 + 5
+        let generation = sessionGeneration
+        let rawText = request.rawText
+        reviewWatchdogTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            guard self.sessionGeneration == generation,
+                  self.machine.phase == .reviewing
+            else {
+                return
+            }
+            self.logger.error(
+                "Post-processing did not report back within \(Int(deadline), privacy: .public)s; inserting the raw transcript"
+            )
+            PostProcessingPreference.recordLastRun(
+                "no response in \(Int(deadline)) s — raw text inserted"
+            )
+            self.reviewSession?.cancel()
+            self.reviewWatchdogTask = nil
+            self.presentedReviewPreview = nil
+            self.activeReviewRequest = nil
+            self.process(.reviewAccepted, transcript: rawText)
+        }
+    }
+
     /// Presents one review preview through the shared review controller.
     /// The controller owns the key handling (Enter / Escape / Cmd+Z / Tab);
     /// this closure only maps its choices onto state-machine events and the
@@ -1559,6 +1604,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         primedBadgeVisible = false
         insertionContext = nil
         reviewSession?.cancel()
+        reviewWatchdogTask?.cancel()
+        reviewWatchdogTask = nil
         reviewController?.dismiss()
         pendingReviewRequest = nil
         activeReviewRequest = nil
@@ -1634,7 +1681,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func presentBadge(_ presentation: BadgePresentation) {
         // While a review is pending, PostProcessReviewController owns the
         // badge panel; no other state may replace its presentation.
-        if machine.phase == .reviewing, presentation != .hidden {
+        if machine.phase == .reviewing,
+           presentation != .hidden,
+           presentation != .enhancing
+        {
             return
         }
         if presentation == .hidden {
@@ -1971,6 +2021,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 PostProcessingPreference.isThinkingEnabled(),
             postProcessingCustomPrompt:
                 PostProcessingPreference.customPrompt(),
+            postProcessingCustomPromptNames:
+                CustomPromptLibrary.prompts().map(\.name),
+            postProcessingSelectedCustomPrompt:
+                CustomPromptLibrary.selectedIndex(),
+            postProcessingLastRun: PostProcessingPreference.lastRun(),
             postProcessingReasoningEffort:
                 PostProcessingPreference.selectedReasoningEffort()
         )
@@ -2084,6 +2139,25 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     setPostProcessingCustomPrompt: { [weak self] prompt in
                         self?.setPostProcessingCustomPrompt(prompt)
+                    },
+                    selectPostProcessingCustomPrompt: { [weak self] index in
+                        guard self?.machine.phase.isBusy == false else { return }
+                        CustomPromptLibrary.setSelectedIndex(index)
+                    },
+                    addPostProcessingCustomPrompt: { [weak self] in
+                        guard self?.machine.phase.isBusy == false else { return }
+                        let count = CustomPromptLibrary.prompts().count + 1
+                        CustomPromptLibrary.add(
+                            CustomPrompt(
+                                name: "Prompt \(count)",
+                                prompt: PostProcessingPreference
+                                    .defaultCustomPrompt
+                            )
+                        )
+                    },
+                    removePostProcessingCustomPrompt: { [weak self] in
+                        guard self?.machine.phase.isBusy == false else { return }
+                        CustomPromptLibrary.removeSelected()
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -3214,6 +3288,26 @@ enum PostProcessingReviewFlow {
         preview.rawText
     }
 
+    /// A short, privacy-safe reason for the Settings status row: error codes
+    /// only, never transcript text.
+    static func describe(_ error: any Error) -> String {
+        guard let processorError = error as? ProcessorError else {
+            return "unexpected error"
+        }
+        switch processorError {
+        case .missingKey:
+            return "no API key"
+        case .transport(let code):
+            return code == .timedOut ? "timed out" : "network \(code.rawValue)"
+        case .httpStatus(let status):
+            return "HTTP \(status)"
+        case .emptyOutput:
+            return "empty model output"
+        case .invalidOutput:
+            return "unreadable model output"
+        }
+    }
+
     /// Runs the processor and builds the preview shown by the review panel.
     /// Any failure — transport, timeout, validation — yields the
     /// unavailable state, in which the raw transcript is shown and Enter
@@ -3222,10 +3316,17 @@ enum PostProcessingReviewFlow {
         request: PostProcessRequest,
         using processor: any TranscriptProcessor
     ) async -> PostProcessPreview {
+        let started = Date()
         do {
             let result = try await processor.process(request)
             try PostProcessLimits.validateResult(result)
             let report = PreservationChecker.report(request, result)
+            PostProcessingPreference.recordLastRun(
+                String(
+                    format: "enhanced in %.1f s",
+                    Date().timeIntervalSince(started)
+                )
+            )
             return PostProcessPreview(
                 rawText: request.rawText,
                 processed: result,
@@ -3234,6 +3335,9 @@ enum PostProcessingReviewFlow {
                 unavailable: false
             )
         } catch {
+            PostProcessingPreference.recordLastRun(
+                "failed (\(describe(error))) — raw text inserted"
+            )
             return PostProcessPreview(
                 rawText: request.rawText,
                 processed: nil,

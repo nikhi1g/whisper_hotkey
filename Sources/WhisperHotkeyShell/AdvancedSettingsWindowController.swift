@@ -37,6 +37,10 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let postProcessingThinkingEnabled: Bool
     public let postProcessingReasoningEffort: String
     public let postProcessingCustomPrompt: String
+    public let postProcessingCustomPromptNames: [String]
+    public let postProcessingSelectedCustomPrompt: Int
+    /// Outcome of the most recent enhancement, or nil when none has run.
+    public let postProcessingLastRun: String?
 
     public init(
         selectedHotkey: HotkeyKey,
@@ -62,6 +66,9 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         postProcessingThinkingEnabled: Bool = false,
         postProcessingCustomPrompt: String =
             PostProcessingPreference.defaultCustomPrompt,
+        postProcessingCustomPromptNames: [String] = ["My prompt"],
+        postProcessingSelectedCustomPrompt: Int = 0,
+        postProcessingLastRun: String? = nil,
         postProcessingReasoningEffort: String =
             PostProcessingPreference.defaultReasoningEffort
     ) {
@@ -88,6 +95,10 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.postProcessingThinkingEnabled = postProcessingThinkingEnabled
         self.postProcessingReasoningEffort = postProcessingReasoningEffort
         self.postProcessingCustomPrompt = postProcessingCustomPrompt
+        self.postProcessingCustomPromptNames = postProcessingCustomPromptNames
+        self.postProcessingSelectedCustomPrompt =
+            postProcessingSelectedCustomPrompt
+        self.postProcessingLastRun = postProcessingLastRun
     }
 }
 
@@ -120,6 +131,9 @@ public struct AdvancedSettingsActions {
     public var setPostProcessingThinkingEnabled: (Bool) -> Void
     public var selectPostProcessingReasoningEffort: (String) -> Void
     public var setPostProcessingCustomPrompt: (String) -> Void
+    public var selectPostProcessingCustomPrompt: (Int) -> Void
+    public var addPostProcessingCustomPrompt: () -> Void
+    public var removePostProcessingCustomPrompt: () -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -150,7 +164,10 @@ public struct AdvancedSettingsActions {
             @escaping (Bool) -> Void = { _ in },
         selectPostProcessingReasoningEffort:
             @escaping (String) -> Void = { _ in },
-        setPostProcessingCustomPrompt: @escaping (String) -> Void = { _ in }
+        setPostProcessingCustomPrompt: @escaping (String) -> Void = { _ in },
+        selectPostProcessingCustomPrompt: @escaping (Int) -> Void = { _ in },
+        addPostProcessingCustomPrompt: @escaping () -> Void = {},
+        removePostProcessingCustomPrompt: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -181,6 +198,11 @@ public struct AdvancedSettingsActions {
         self.selectPostProcessingReasoningEffort =
             selectPostProcessingReasoningEffort
         self.setPostProcessingCustomPrompt = setPostProcessingCustomPrompt
+        self.selectPostProcessingCustomPrompt =
+            selectPostProcessingCustomPrompt
+        self.addPostProcessingCustomPrompt = addPostProcessingCustomPrompt
+        self.removePostProcessingCustomPrompt =
+            removePostProcessingCustomPrompt
     }
 }
 
@@ -332,6 +354,18 @@ public final class AdvancedSettingsWindowController:
     private let postProcessingProfileControl = NSSegmentedControl()
     private let postProcessingModelPopup = NSPopUpButton()
     private let postProcessingCustomPromptField = NSTextField()
+    private let postProcessingCustomPromptPopup = NSPopUpButton()
+    private let postProcessingCustomPromptAddButton = NSButton(
+        title: "New",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingCustomPromptRemoveButton = NSButton(
+        title: "Delete",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingLastRunLabel = NSTextField(labelWithString: "")
     private var postProcessingCustomPromptRow: NSGridRow?
     private let postProcessingThinkingToggle = NSButton(
         checkboxWithTitle: "Think before rewriting",
@@ -686,6 +720,24 @@ public final class AdvancedSettingsWindowController:
                 state.postProcessingCustomPrompt
         }
         postProcessingCustomPromptField.isEnabled = state.configurationEnabled
+        postProcessingCustomPromptPopup.removeAllItems()
+        postProcessingCustomPromptPopup.addItems(
+            withTitles: state.postProcessingCustomPromptNames
+        )
+        if state.postProcessingCustomPromptNames.indices
+            .contains(state.postProcessingSelectedCustomPrompt)
+        {
+            postProcessingCustomPromptPopup.selectItem(
+                at: state.postProcessingSelectedCustomPrompt
+            )
+        }
+        postProcessingCustomPromptPopup.isEnabled = state.configurationEnabled
+        postProcessingCustomPromptAddButton.isEnabled =
+            state.configurationEnabled
+        postProcessingCustomPromptRemoveButton.isEnabled =
+            state.configurationEnabled
+        postProcessingLastRunLabel.stringValue =
+            state.postProcessingLastRun ?? "No enhancement has run yet"
         select(rawValue: state.postProcessingModel, in: postProcessingModelPopup)
         postProcessingModelPopup.isEnabled = state.configurationEnabled
         postProcessingThinkingToggle.state =
@@ -1123,6 +1175,29 @@ public final class AdvancedSettingsWindowController:
             return
         }
         actions.setPostProcessingCustomPrompt(sender.stringValue)
+        refresh()
+    }
+
+    @objc private func selectPostProcessingCustomPrompt(
+        _ sender: NSPopUpButton
+    ) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.selectPostProcessingCustomPrompt(sender.indexOfSelectedItem)
+        refresh()
+    }
+
+    @objc private func addPostProcessingCustomPrompt() {
+        guard stateProvider().configurationEnabled else { return }
+        actions.addPostProcessingCustomPrompt()
+        refresh()
+    }
+
+    @objc private func removePostProcessingCustomPrompt() {
+        guard stateProvider().configurationEnabled else { return }
+        actions.removePostProcessingCustomPrompt()
         refresh()
     }
 
@@ -1584,6 +1659,34 @@ public final class AdvancedSettingsWindowController:
         postProcessingCustomPromptField.setAccessibilityLabel(
             "Post-processing custom prompt"
         )
+        postProcessingCustomPromptPopup.target = self
+        postProcessingCustomPromptPopup.action =
+            #selector(selectPostProcessingCustomPrompt(_:))
+        postProcessingCustomPromptPopup.setAccessibilityLabel(
+            "Custom prompt selection"
+        )
+        for button in [
+            postProcessingCustomPromptAddButton,
+            postProcessingCustomPromptRemoveButton,
+        ] {
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+        }
+        postProcessingCustomPromptAddButton.target = self
+        postProcessingCustomPromptAddButton.action =
+            #selector(addPostProcessingCustomPrompt)
+        postProcessingCustomPromptRemoveButton.target = self
+        postProcessingCustomPromptRemoveButton.action =
+            #selector(removePostProcessingCustomPrompt)
+        postProcessingLastRunLabel.font = .systemFont(
+            ofSize: 11,
+            weight: .regular
+        )
+        postProcessingLastRunLabel.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        themedSecondaryLabels.append(postProcessingLastRunLabel)
         postProcessingThinkingToggle.target = self
         postProcessingThinkingToggle.action =
             #selector(togglePostProcessingThinking(_:))
@@ -2168,10 +2271,25 @@ public final class AdvancedSettingsWindowController:
             title: "Profile",
             control: postProcessingProfileControl
         )
+        let customPromptControls = NSStackView(
+            views: [
+                postProcessingCustomPromptPopup,
+                postProcessingCustomPromptField,
+                postProcessingCustomPromptAddButton,
+                postProcessingCustomPromptRemoveButton,
+            ]
+        )
+        customPromptControls.orientation = .horizontal
+        customPromptControls.alignment = .centerY
+        customPromptControls.spacing = 6
+        postProcessingCustomPromptField.setContentHuggingPriority(
+            .defaultLow,
+            for: .horizontal
+        )
         postProcessingCustomPromptRow = addRow(
             to: postProcessingGrid,
             title: "Custom prompt",
-            control: postProcessingCustomPromptField
+            control: customPromptControls
         )
         addRow(
             to: postProcessingGrid,
@@ -2213,6 +2331,11 @@ public final class AdvancedSettingsWindowController:
             to: postProcessingGrid,
             title: "API key",
             control: apiKeyControls
+        )
+        addRow(
+            to: postProcessingGrid,
+            title: "Last run",
+            control: postProcessingLastRunLabel
         )
         sizeColumns(in: postProcessingGrid)
         stack.addArrangedSubview(postProcessingGrid)
@@ -2346,6 +2469,22 @@ public final class AdvancedSettingsWindowController:
 
     var postProcessingCustomPromptVisibleForTesting: Bool {
         postProcessingCustomPromptRow.map { !$0.isHidden } ?? false
+    }
+
+    var postProcessingCustomPromptNamesForTesting: [String] {
+        postProcessingCustomPromptPopup.itemTitles
+    }
+
+    func addPostProcessingCustomPromptForTesting() {
+        addPostProcessingCustomPrompt()
+    }
+
+    func removePostProcessingCustomPromptForTesting() {
+        removePostProcessingCustomPrompt()
+    }
+
+    var postProcessingLastRunForTesting: String {
+        postProcessingLastRunLabel.stringValue
     }
 
     var postProcessingCustomPromptTextForTesting: String {

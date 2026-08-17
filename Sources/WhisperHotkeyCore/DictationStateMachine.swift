@@ -90,7 +90,7 @@ public struct DictationStateMachine: Equatable, Sendable {
         case .processingRequested:
             guard phase == .transcribing else { return [] }
             phase = .reviewing
-            return [.requestProcessing]
+            return [.requestProcessing, .showBadge(.enhancing)]
 
         case .reviewAccepted:
             guard phase == .reviewing else { return [] }
