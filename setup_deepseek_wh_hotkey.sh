@@ -88,14 +88,15 @@ if [ "$VERIFY_ONLY" -eq 0 ]; then
     unset STORED
 fi
 
-# --- 6. Optional live verification ------------------------------------------
+# --- 6. Live verification against both processor models -----------------------
 if [ "$VERIFY_ONLY" -eq 1 ] || [ "${1:-}" = "--verify" ]; then
     say "${BOLD}Verifying the key against the DeepSeek API…${RESET}"
     API_KEY="$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null || true)"
     if [ -z "$API_KEY" ]; then
         die "No key stored yet — run ./setup_deepseek_wh_hotkey.sh first."
     fi
-    PAYLOAD=$(python3 - "$MODEL" <<'PY'
+    for MODEL in deepseek-v4-flash deepseek-v4-pro; do
+        PAYLOAD=$(python3 - "$MODEL" <<'PY'
 import json, sys
 print(json.dumps({
     "model": sys.argv[1],
@@ -105,34 +106,36 @@ print(json.dumps({
 }))
 PY
 )
-    RESPONSE="$(curl -sS --max-time 20 -X POST https://api.deepseek.com/chat/completions \
-        -H "Authorization: Bearer $API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" || true)"
-    unset API_KEY
-    if printf '%s' "$RESPONSE" | python3 -c '
+        RESPONSE="$(curl -sS --max-time 20 -X POST https://api.deepseek.com/chat/completions \
+            -H "Authorization: Bearer $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || true)"
+        if printf '%s' "$RESPONSE" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 assert "choices" in data, data.get("error", {}).get("message", "unexpected response")
 sys.exit(0)
 ' 2>/dev/null; then
-        ok "API key accepted by DeepSeek (model $MODEL reachable)."
-    else
-        ERR="$(printf '%s' "$RESPONSE" | python3 -c '
+            ok "Model $MODEL reachable with this key."
+        else
+            ERR="$(printf '%s' "$RESPONSE" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin).get("error", {}).get("message", "unknown error"))
 except Exception:
     print("network error or invalid response")
 ' 2>/dev/null || true)"
-        die "DeepSeek rejected the verification call: $ERR"
-    fi
+            fail "Model $MODEL was not reachable: $ERR"
+        fi
+    done
+    unset API_KEY
 fi
-
 # --- 7. Next steps -----------------------------------------------------------
 say ""
 say "${BOLD}Next steps:${RESET}"
 say "  1. Launch the app from this branch (swift run WhisperHotkeyApp or the dev build)."
 say "  2. Open Settings → Post-processing, enable the toggle, pick a profile."
-say "  3. Dictate; review the processed text in the badge; Enter inserts, Esc cancels."
-say "  4. Optional: set DEEPSEEK_PROCESSOR_MODEL to override the processor model."
+say "  3. Choose the processor model (deepseek-v4-flash or deepseek-v4-pro) and"
+say "     the Thinking toggle plus reasoning effort (low/medium/high)."
+say "  4. Dictate; review the processed text in the badge; Enter inserts, Esc cancels."
+say "  5. Optional: set DEEPSEEK_PROCESSOR_MODEL to override the processor model."
