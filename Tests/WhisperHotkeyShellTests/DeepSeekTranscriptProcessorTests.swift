@@ -123,12 +123,16 @@ private func requestBody(_ request: URLRequest) -> Data? {
 final class DeepSeekTranscriptProcessorTests: XCTestCase {
     private func makeConfiguration(
         timeout: TimeInterval = 5.0,
-        model: String = "test-model"
+        model: String = "test-model",
+        thinkingEnabled: Bool = false,
+        reasoningEffort: DeepSeekReasoningEffort = .low
     ) -> DeepSeekConfiguration {
         DeepSeekConfiguration(
             baseURL: URL(string: "https://api.deepseek.com")!,
             model: model,
-            timeout: timeout
+            timeout: timeout,
+            thinkingEnabled: thinkingEnabled,
+            reasoningEffort: reasoningEffort
         )
     }
 
@@ -437,9 +441,89 @@ final class DeepSeekTranscriptProcessorTests: XCTestCase {
         XCTAssertEqual(DeepSeekConfiguration().model, "deepseek-v4-flash")
         XCTAssertEqual(DeepSeekConfiguration().timeout, 5.0)
         XCTAssertEqual(DeepSeekConfiguration().maxOutputTokens, 800)
+        XCTAssertEqual(DeepSeekConfiguration().thinkingEnabled, false)
+        XCTAssertEqual(DeepSeekConfiguration().reasoningEffort, .low)
         XCTAssertEqual(
             DeepSeekConfiguration().baseURL,
             URL(string: "https://api.deepseek.com")
+        )
+    }
+
+    // MARK: Thinking and reasoning effort
+
+    func testThinkingEnabledEmitsEnabledToggleAndEffort() async throws {
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (httpResponse(status: 200), envelopeJSON(validResultContent)) },
+            configuration: makeConfiguration(
+                thinkingEnabled: true,
+                reasoningEffort: .high
+            ),
+            journal: journal
+        )
+        _ = try await processor.process(makeRequest())
+
+        let body = try XCTUnwrap(
+            requestBody(try XCTUnwrap(journal.all.first))
+        )
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        XCTAssertEqual(
+            (json["thinking"] as? [String: Any])?["type"] as? String,
+            "enabled"
+        )
+        XCTAssertEqual(json["reasoning_effort"] as? String, "high")
+    }
+
+    func testThinkingDisabledOmitsReasoningEffortKey() async throws {
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (httpResponse(status: 200), envelopeJSON(validResultContent)) },
+            configuration: makeConfiguration(),
+            journal: journal
+        )
+        _ = try await processor.process(makeRequest())
+
+        let body = try XCTUnwrap(
+            requestBody(try XCTUnwrap(journal.all.first))
+        )
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        XCTAssertEqual(
+            (json["thinking"] as? [String: Any])?["type"] as? String,
+            "disabled"
+        )
+        XCTAssertNil(json["reasoning_effort"])
+    }
+
+    func testResponseCarryingReasoningContentStillParsesContent() async throws {
+        let envelope: [String: Any] = [
+            "choices": [
+                [
+                    "message": [
+                        "role": "assistant",
+                        "content": validResultContent,
+                        "reasoning_content": "private chain of thought",
+                    ],
+                ],
+            ],
+        ]
+        let envelopeData = try! JSONSerialization.data(withJSONObject: envelope)
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (httpResponse(status: 200), envelopeData) },
+            configuration: makeConfiguration(
+                thinkingEnabled: true,
+                reasoningEffort: .medium
+            ),
+            journal: journal
+        )
+        let result = try await processor.process(makeRequest())
+        XCTAssertEqual(
+            result.finalText,
+            "Open the terminal and run the build."
         )
     }
 

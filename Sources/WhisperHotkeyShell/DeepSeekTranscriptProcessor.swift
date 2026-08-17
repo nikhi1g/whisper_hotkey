@@ -19,24 +19,42 @@ public enum ProcessorError: Error, Equatable, Sendable {
     case invalidOutput(String)
 }
 
+/// Thinking effort accepted by the DeepSeek chat-completions endpoint.
+/// `medium` and `high` both map to the model's high tier (documented).
+public enum DeepSeekReasoningEffort: String, Codable, CaseIterable, Sendable {
+    case low
+    case medium
+    case high
+}
+
 /// Configuration for the DeepSeek chat-completions endpoint.
 public struct DeepSeekConfiguration: Sendable {
     public var baseURL: URL
     public var model: String
     public var timeout: TimeInterval
     public var maxOutputTokens: Int
+    /// DeepSeek thinking mode is enabled by default server-side; this client
+    /// always sends an explicit toggle. Off is the transcript-processing
+    /// default (routine rewriting needs no chain of thought).
+    public var thinkingEnabled: Bool
+    /// Only emitted when `thinkingEnabled` is true.
+    public var reasoningEffort: DeepSeekReasoningEffort
 
     public init(
         baseURL: URL = URL(string: "https://api.deepseek.com")!,
         model: String = ProcessInfo.processInfo.environment["DEEPSEEK_PROCESSOR_MODEL"]
             ?? "deepseek-v4-flash",
         timeout: TimeInterval = 5.0,
-        maxOutputTokens: Int = 800
+        maxOutputTokens: Int = 800,
+        thinkingEnabled: Bool = false,
+        reasoningEffort: DeepSeekReasoningEffort = .low
     ) {
         self.baseURL = baseURL
         self.model = model
         self.timeout = timeout
         self.maxOutputTokens = maxOutputTokens
+        self.thinkingEnabled = thinkingEnabled
+        self.reasoningEffort = reasoningEffort
     }
 }
 
@@ -68,6 +86,7 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
         let responseFormat: ResponseFormat
         let maxTokens: Int
         let thinking: Thinking
+        let reasoningEffort: String?
 
         enum CodingKeys: String, CodingKey {
             case model
@@ -75,6 +94,7 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
             case responseFormat = "response_format"
             case maxTokens = "max_tokens"
             case thinking
+            case reasoningEffort = "reasoning_effort"
         }
     }
 
@@ -331,7 +351,12 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
             ],
             responseFormat: ChatRequest.ResponseFormat(type: "json_object"),
             maxTokens: configuration.maxOutputTokens,
-            thinking: ChatRequest.Thinking(type: "disabled")
+            thinking: ChatRequest.Thinking(
+                type: configuration.thinkingEnabled ? "enabled" : "disabled"
+            ),
+            reasoningEffort: configuration.thinkingEnabled
+                ? configuration.reasoningEffort.rawValue
+                : nil
         )
         return try JSONEncoder().encode(chatRequest)
     }
