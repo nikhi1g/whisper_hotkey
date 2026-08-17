@@ -5,13 +5,14 @@ public enum DictationPhase: String, Codable, CaseIterable, Sendable {
     case preparing
     case listening
     case transcribing
+    case reviewing
     case inserting
     case cancelled
     case failed
 
     public var isBusy: Bool {
         switch self {
-        case .preparing, .listening, .transcribing, .inserting:
+        case .preparing, .listening, .transcribing, .reviewing, .inserting:
             true
         case .idle, .cancelled, .failed:
             false

@@ -16,17 +16,26 @@ public struct RecognitionPipelineDelivery: Equatable, Sendable {
     public let text: String
     public let sessionID: UUID
     public let generation: UInt64
+    /// Word-level evidence for post-processing: protected terms (locked or
+    /// protected words) and low-confidence spans. Empty when the provider
+    /// reported none; pause-sentence deliveries never carry evidence.
+    public let protectedTerms: [String]
+    public let uncertainSpans: [String]
 
     public init(
         kind: RecognitionPipelineDeliveryKind,
         text: String,
         sessionID: UUID,
-        generation: UInt64
+        generation: UInt64,
+        protectedTerms: [String] = [],
+        uncertainSpans: [String] = []
     ) {
         self.kind = kind
         self.text = text
         self.sessionID = sessionID
         self.generation = generation
+        self.protectedTerms = protectedTerms
+        self.uncertainSpans = uncertainSpans
     }
 }
 
@@ -1104,7 +1113,13 @@ public actor RecognitionPipelineCoordinator {
                     kind: .finalTranscript,
                     text: outcome.text,
                     sessionID: outcome.sessionID,
-                    generation: outcome.generation
+                    generation: outcome.generation,
+                    protectedTerms: Self.postProcessProtectedTerms(
+                        from: outcome.words
+                    ),
+                    uncertainSpans: Self.postProcessUncertainSpans(
+                        from: outcome.words
+                    )
                 )
             )
             return
@@ -1156,7 +1171,13 @@ public actor RecognitionPipelineCoordinator {
                 kind: .finalTranscript,
                 text: trimmed.isEmpty ? outcome.text : trimmed,
                 sessionID: outcome.sessionID,
-                generation: outcome.generation
+                generation: outcome.generation,
+                protectedTerms: Self.postProcessProtectedTerms(
+                    from: outcome.words
+                ),
+                uncertainSpans: Self.postProcessUncertainSpans(
+                    from: outcome.words
+                )
             )
         )
     }
@@ -1164,6 +1185,63 @@ public actor RecognitionPipelineCoordinator {
     private func deliver(_ event: RecognitionPipelineDelivery) async {
         deliveryCount += 1
         await delivery(event)
+    }
+
+    // MARK: - Post-processing evidence
+
+    /// A word the provider rates at or above coin-flip error probability is
+    /// low-confidence evidence for the post-processing request.
+    private static let postProcessUncertaintyThreshold = 0.5
+
+    /// Protected terms from word-level evidence: locked or protected words
+    /// (dictionary terms and explicitly protected tokens), deduplicated in
+    /// encounter order and bounded to the post-processing contract limits.
+    private static func postProcessProtectedTerms(
+        from words: [RecognizedWord]
+    ) -> [String] {
+        var seen: Set<String> = []
+        var terms: [String] = []
+        terms.reserveCapacity(min(words.count, PostProcessLimits.maxProtectedTerms))
+        for word in words
+            where word.lockState == .locked || word.lockState == .protected
+        {
+            guard seen.insert(word.text).inserted else { continue }
+            terms.append(word.text)
+            if terms.count == PostProcessLimits.maxProtectedTerms {
+                break
+            }
+        }
+        return terms
+    }
+
+    /// Low-confidence spans: maximal runs of consecutive words whose
+    /// calibrated error probability meets the threshold, joined as text and
+    /// bounded to the post-processing contract limits. Empty when the
+    /// provider reported no calibrated probabilities.
+    private static func postProcessUncertainSpans(
+        from words: [RecognizedWord]
+    ) -> [String] {
+        var spans: [String] = []
+        var current: [String] = []
+        current.reserveCapacity(8)
+        for word in words {
+            if let probability = word.calibratedErrorProbability,
+               probability.isFinite,
+               probability >= postProcessUncertaintyThreshold
+            {
+                current.append(word.text)
+            } else if !current.isEmpty {
+                spans.append(current.joined(separator: " "))
+                current.removeAll(keepingCapacity: true)
+                if spans.count == PostProcessLimits.maxUncertainSpans {
+                    return spans
+                }
+            }
+        }
+        if !current.isEmpty {
+            spans.append(current.joined(separator: " "))
+        }
+        return spans
     }
 
     /// Delivers one accumulator-approved sentence while the session is still

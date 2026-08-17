@@ -7,6 +7,9 @@ public enum DictationEvent: Equatable, Sendable {
     case maximumDurationReached
     case cancel
     case transcriptReady
+    case processingRequested
+    case reviewAccepted
+    case reviewCancelled
     case deliveryFinished
     case chunkedSessionFinished
     case failed(String)
@@ -19,6 +22,8 @@ public enum DictationEffect: Equatable, Sendable {
     case finalizeRecording
     case cancelSession
     case deliverTranscript
+    case requestProcessing
+    case showReview(PostProcessPreview)
     case showBadge(BadgePresentation)
 }
 
@@ -81,6 +86,21 @@ public struct DictationStateMachine: Equatable, Sendable {
             guard phase == .transcribing else { return [] }
             phase = .inserting
             return [.deliverTranscript]
+
+        case .processingRequested:
+            guard phase == .transcribing else { return [] }
+            phase = .reviewing
+            return [.requestProcessing]
+
+        case .reviewAccepted:
+            guard phase == .reviewing else { return [] }
+            phase = .inserting
+            return [.deliverTranscript]
+
+        case .reviewCancelled:
+            guard phase == .reviewing else { return [] }
+            phase = .cancelled
+            return [.cancelSession, .showBadge(.hidden)]
 
         case .deliveryFinished:
             guard phase == .inserting else { return [] }

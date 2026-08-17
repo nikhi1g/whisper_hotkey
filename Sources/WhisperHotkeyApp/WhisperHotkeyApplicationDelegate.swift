@@ -280,6 +280,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var predecodeBoundaryInProgress = false
     private var predecodeFailed = false
     private var sessionGeneration: UInt64 = 0
+    private var pendingReviewRequest: PostProcessRequest?
+    private var activeReviewRequest: PostProcessRequest?
+    private var presentedReviewPreview: PostProcessPreview?
+    private var reviewController: PostProcessReviewController?
+    private var reviewSession: PostProcessingReviewSession?
+    /// Created on first use only: when post-processing is disabled the app
+    /// never instantiates the processor, its session, or the key provider.
+    private lazy var transcriptProcessor = DeepSeekTranscriptProcessor(
+        apiKeyProvider: {
+            guard let key = try ProcessorKeychain.read() else {
+                throw ProcessorError.missingKey
+            }
+            return key
+        }
+    )
     private var startupError: String?
     private var startupBadgeVisible = false
     private var runtimeReadyForHotkey = false
@@ -633,7 +648,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             isActive: machine.phase == .preparing || machine.phase == .listening
         )
         updateMenuBar()
-        if event == .cancel, machine.phase == .cancelled {
+        if (event == .cancel || event == .reviewCancelled),
+           machine.phase == .cancelled
+        {
             scheduleCancellationPresentationFinished()
         }
     }
@@ -659,6 +676,31 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
             return deliver(transcript)
+
+        case .requestProcessing:
+            guard let request = pendingReviewRequest else {
+                fail("Transcription result was unavailable.")
+                return false
+            }
+            pendingReviewRequest = nil
+            activeReviewRequest = request
+            let session = reviewSession ?? PostProcessingReviewSession(
+                processor: transcriptProcessor,
+                isSessionCurrent: { [weak self] generation in
+                    self?.sessionGeneration == generation
+                        && self?.machine.phase == .reviewing
+                },
+                onPreview: { [weak self] preview in
+                    self?.apply(.showReview(preview), transcript: nil)
+                }
+            )
+            reviewSession = session
+            session.start(request, generation: sessionGeneration)
+            return true
+
+        case .showReview(let preview):
+            presentReview(preview)
+            return true
 
         case .showBadge(let presentation):
             presentBadge(presentation)
@@ -961,7 +1003,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     // was suppressed without a generation change, use the
                     // canonical outcome once so the badge cannot remain stuck.
                     if self.machine.phase == .transcribing {
-                        self.process(.transcriptReady, transcript: outcome.text)
+                        self.handleFinalTranscript(outcome.text, delivery: nil)
                     }
                     return
                 }
@@ -1222,7 +1264,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             // machine still owns insertion and badge teardown. Skipping this
             // transition leaves Toggle Mode in `.transcribing` forever even
             // though the text was pasted successfully.
-            process(.transcriptReady, transcript: text)
+            handleFinalTranscript(text, delivery: event)
         }
     }
 
@@ -1248,6 +1290,147 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return .ignore
         }
         return .finalTranscript(event.text)
+    }
+
+    /// Routes a final (non-pause) transcript. Local voice commands and the
+    /// post-processing review gate run before the direct insertion path,
+    /// which stays byte-identical when the feature is disabled, no key is
+    /// stored, or the transcript is empty.
+    private func handleFinalTranscript(
+        _ text: String,
+        delivery: RecognitionPipelineDelivery?
+    ) {
+        let enabled = PostProcessingPreference.isEnabled()
+        let route = PostProcessingReviewFlow.routeFinalTranscript(
+            text,
+            postProcessingEnabled: enabled,
+            // Short-circuited: the keychain is never touched while the
+            // feature is disabled, keeping that path free of extra work.
+            apiKeyAvailable: enabled && (try? ProcessorKeychain.read()) != nil,
+            profile: PostProcessingPreference.selectedProfile(),
+            protectedTerms: delivery?.protectedTerms ?? [],
+            uncertainSpans: delivery?.uncertainSpans ?? [],
+            internalDictionaryEntries: internalDictionary.entries,
+            frontmostApp: NSWorkspace.shared.frontmostApplication?.localizedName
+        )
+        switch route {
+        case .directInsert:
+            process(.transcriptReady, transcript: text)
+        case .voiceCommand(let command):
+            handleVoiceCommand(command)
+        case .review(let request):
+            pendingReviewRequest = request
+            process(.processingRequested)
+        }
+    }
+
+    /// Local, deterministic command handling: commands never reach the
+    /// processor and never make a network request.
+    private func handleVoiceCommand(_ command: VoiceCommand) {
+        switch command {
+        case .setProfile(let profile):
+            PostProcessingPreference.setProfile(profile)
+            logger.info(
+                "Post-processing profile changed to \(profile.rawValue, privacy: .public)"
+            )
+            process(.chunkedSessionFinished)
+
+        case .scratchLastSegment, .cancel:
+            process(.cancel)
+
+        case .send:
+            // Commands are only parsed on final-transcript delivery, so a
+            // review is never pending here; the branch keeps the documented
+            // accept-if-reviewing contract for any future call site.
+            if machine.phase == .reviewing,
+               let preview = presentedReviewPreview
+            {
+                reviewController?.dismiss()
+                process(
+                    .reviewAccepted,
+                    transcript: PostProcessingReviewFlow.acceptedText(
+                        for: preview
+                    )
+                )
+            } else {
+                process(.chunkedSessionFinished)
+            }
+
+        case .showOriginal:
+            if machine.phase == .reviewing,
+               let preview = presentedReviewPreview
+            {
+                reviewController?.dismiss()
+                process(.reviewAccepted, transcript: preview.rawText)
+            } else {
+                process(.chunkedSessionFinished)
+            }
+        }
+    }
+
+    /// Presents one review preview through the shared review controller.
+    /// The controller owns the key handling (Enter / Escape / Cmd+Z / Tab);
+    /// this closure only maps its choices onto state-machine events and the
+    /// existing delivery path.
+    private func presentReview(_ preview: PostProcessPreview) {
+        presentedReviewPreview = preview
+        let controller: PostProcessReviewController
+        if let existing = reviewController {
+            controller = existing
+        } else {
+            let created = PostProcessReviewController(badge: badge)
+            reviewController = created
+            controller = created
+        }
+        controller.present(
+            preview,
+            accept: { [weak self] acceptedPreview, choice in
+                guard let self else { return }
+                self.reviewController?.dismiss()
+                guard self.machine.phase == .reviewing else { return }
+                self.presentedReviewPreview = nil
+                switch choice {
+                case .cancel:
+                    self.process(.reviewCancelled)
+                case .acceptProcessed:
+                    self.process(
+                        .reviewAccepted,
+                        transcript: PostProcessingReviewFlow.acceptedText(
+                            for: acceptedPreview
+                        )
+                    )
+                case .restoreRaw:
+                    self.process(
+                        .reviewAccepted,
+                        transcript: PostProcessingReviewFlow.restoredText(
+                            for: acceptedPreview
+                        )
+                    )
+                }
+            },
+            onProfileChange: { [weak self] newProfile in
+                guard let self,
+                      self.machine.phase == .reviewing,
+                      let request = self.activeReviewRequest
+                else {
+                    return
+                }
+                let updated = PostProcessRequest(
+                    rawText: request.rawText,
+                    profile: newProfile,
+                    locale: request.locale,
+                    context: request.context,
+                    alternatives: request.alternatives,
+                    uncertainSpans: request.uncertainSpans,
+                    protectedTerms: request.protectedTerms
+                )
+                self.activeReviewRequest = updated
+                self.reviewSession?.start(
+                    updated,
+                    generation: self.sessionGeneration
+                )
+            }
+        )
     }
 
     private func deliver(_ transcript: String) -> Bool {
@@ -1333,6 +1516,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         primedAudioCaptureToken = nil
         primedBadgeVisible = false
         insertionContext = nil
+        reviewSession?.cancel()
+        reviewController?.dismiss()
+        pendingReviewRequest = nil
+        activeReviewRequest = nil
+        presentedReviewPreview = nil
 
         let precedingCleanup = recognizerCleanupTask
         let recognizer = recognizer
@@ -1402,6 +1590,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentBadge(_ presentation: BadgePresentation) {
+        // While a review is pending, PostProcessReviewController owns the
+        // badge panel; no other state may replace its presentation.
+        if machine.phase == .reviewing, presentation != .hidden {
+            return
+        }
         if presentation == .hidden {
             badgeAnchorResolutionTask?.cancel()
             badgeAnchorResolutionTask = nil
@@ -1691,6 +1884,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             .listening
         case .transcribing:
             .transcribing
+        case .reviewing:
+            // The review panel is the review surface; the menu bar keeps the
+            // transcript-in-progress state while it is open.
+            .transcribing
         case .inserting:
             .inserting
         case .cancelled:
@@ -1724,7 +1921,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             availableEngines: availableEngines,
             configurationEnabled: !machine.phase.isBusy,
             automaticallyChecksForUpdates: automaticallyChecksForUpdates,
-            softwareUpdateStatus: softwareUpdateStatus
+            softwareUpdateStatus: softwareUpdateStatus,
+            postProcessingEnabled: PostProcessingPreference.isEnabled(),
+            postProcessingProfile: PostProcessingPreference.selectedProfile(),
+            postProcessingModel: PostProcessingPreference.selectedModel(),
+            postProcessingThinkingEnabled:
+                PostProcessingPreference.isThinkingEnabled(),
+            postProcessingReasoningEffort:
+                PostProcessingPreference.selectedReasoningEffort()
         )
     }
 
@@ -1818,6 +2022,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     cancelModelInstall: { [weak self] in
                         self?.parakeetInstallTask?.cancel()
+                    },
+                    setPostProcessingEnabled: { [weak self] enabled in
+                        self?.setPostProcessingEnabled(enabled)
+                    },
+                    selectPostProcessingProfile: { [weak self] profile in
+                        self?.selectPostProcessingProfile(profile)
+                    },
+                    selectPostProcessingModel: { [weak self] model in
+                        self?.selectPostProcessingModel(model)
+                    },
+                    setPostProcessingThinkingEnabled: { [weak self] enabled in
+                        self?.setPostProcessingThinkingEnabled(enabled)
+                    },
+                    selectPostProcessingReasoningEffort: { [weak self] effort in
+                        self?.selectPostProcessingReasoningEffort(effort)
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -2417,6 +2636,36 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         updateMenuBar()
     }
 
+    private func setPostProcessingEnabled(_ enabled: Bool) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setEnabled(enabled)
+        updateMenuBar()
+    }
+
+    private func selectPostProcessingProfile(_ profile: SemanticProfileID) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setProfile(profile)
+        updateMenuBar()
+    }
+
+    private func selectPostProcessingModel(_ model: String) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setModel(model)
+        updateMenuBar()
+    }
+
+    private func setPostProcessingThinkingEnabled(_ enabled: Bool) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setThinkingEnabled(enabled)
+        updateMenuBar()
+    }
+
+    private func selectPostProcessingReasoningEffort(_ effort: String) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setReasoningEffort(effort)
+        updateMenuBar()
+    }
+
     private func addInternalDictionaryEntries(_ entries: [String]) {
         guard !machine.phase.isBusy else {
             return
@@ -2845,5 +3094,142 @@ private final class ParakeetInstallObserver: @unchecked Sendable {
         Task { @MainActor [weak delegate] in
             delegate?.updateParakeetInstallPanel(phase)
         }
+    }
+}
+
+// MARK: - Post-processing review flow
+
+/// Decision core for the post-processing review flow, kept free of UI and
+/// network so WhisperHotkeyAppTests can drive it with a stubbed processor.
+enum PostProcessingReviewFlow {
+    /// Where one final transcript goes: straight to the existing insertion
+    /// path, to a local voice command, or into a post-processing review.
+    enum FinalTranscriptRoute: Equatable {
+        case directInsert(String)
+        case voiceCommand(VoiceCommand)
+        case review(PostProcessRequest)
+    }
+
+    /// The review gate: commands run only when the feature is enabled and a
+    /// key is available, so the disabled path stays byte-identical to today.
+    /// The trimmed-transcript check mirrors the direct path's empty check.
+    static func routeFinalTranscript(
+        _ transcript: String,
+        postProcessingEnabled: Bool,
+        apiKeyAvailable: Bool,
+        profile: SemanticProfileID,
+        protectedTerms: [String],
+        uncertainSpans: [String],
+        internalDictionaryEntries: [String],
+        frontmostApp: String?
+    ) -> FinalTranscriptRoute {
+        let trimmed = transcript.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard postProcessingEnabled, apiKeyAvailable else {
+            return .directInsert(transcript)
+        }
+        if let command = VoiceCommandParser.parse(transcript) {
+            return .voiceCommand(command)
+        }
+        guard !trimmed.isEmpty else {
+            return .directInsert(transcript)
+        }
+        let request = PostProcessRequest(
+            rawText: transcript,
+            profile: profile,
+            locale: "en-US",
+            context: PostProcessContext(frontmostApp: frontmostApp),
+            alternatives: [],
+            uncertainSpans: uncertainSpans,
+            protectedTerms: protectedTerms.isEmpty
+                ? internalDictionaryEntries
+                : protectedTerms
+        )
+        return .review(request)
+    }
+
+    /// The text accepting a review delivers through the existing clipboard
+    /// transaction + Command-V path. An unavailable preview has no processed
+    /// result, so accepting inserts the raw transcript.
+    static func acceptedText(for preview: PostProcessPreview) -> String {
+        preview.processed?.finalText ?? preview.rawText
+    }
+
+    /// The text restoring the raw transcript delivers.
+    static func restoredText(for preview: PostProcessPreview) -> String {
+        preview.rawText
+    }
+
+    /// Runs the processor and builds the preview shown by the review panel.
+    /// Any failure — transport, timeout, validation — yields the
+    /// unavailable state, in which the raw transcript is shown and Enter
+    /// still inserts it.
+    static func process(
+        request: PostProcessRequest,
+        using processor: any TranscriptProcessor
+    ) async -> PostProcessPreview {
+        do {
+            let result = try await processor.process(request)
+            try PostProcessLimits.validateResult(result)
+            let report = PreservationChecker.report(request, result)
+            return PostProcessPreview(
+                rawText: request.rawText,
+                processed: result,
+                report: report,
+                profile: request.profile,
+                unavailable: false
+            )
+        } catch {
+            return PostProcessPreview(
+                rawText: request.rawText,
+                processed: nil,
+                report: PreservationReport(issues: [], pass: false),
+                profile: request.profile,
+                unavailable: true
+            )
+        }
+    }
+}
+
+/// Owns one in-flight processing task per review. Results that settle after
+/// the session was invalidated (cancel, a newer session) are never presented.
+@MainActor
+final class PostProcessingReviewSession {
+    private let processor: any TranscriptProcessor
+    private let isSessionCurrent: (UInt64) -> Bool
+    private let onPreview: (PostProcessPreview) -> Void
+    private var processingTask: Task<Void, Never>?
+
+    init(
+        processor: any TranscriptProcessor,
+        isSessionCurrent: @escaping (UInt64) -> Bool,
+        onPreview: @escaping (PostProcessPreview) -> Void
+    ) {
+        self.processor = processor
+        self.isSessionCurrent = isSessionCurrent
+        self.onPreview = onPreview
+    }
+
+    func start(_ request: PostProcessRequest, generation: UInt64) {
+        processingTask?.cancel()
+        processingTask = Task { [weak self, processor] in
+            let preview = await PostProcessingReviewFlow.process(
+                request: request,
+                using: processor
+            )
+            guard !Task.isCancelled,
+                  let self,
+                  self.isSessionCurrent(generation)
+            else {
+                return
+            }
+            self.onPreview(preview)
+        }
+    }
+
+    func cancel() {
+        processingTask?.cancel()
+        processingTask = nil
     }
 }
