@@ -210,6 +210,8 @@ enum PostProcessingSettingsPresentation {
         ("Low", "low"),
         ("Medium", "medium"),
         ("High", "high"),
+        ("X-High", "xhigh"),
+        ("Max", "max"),
     ]
 }
 
@@ -330,6 +332,16 @@ public final class AdvancedSettingsWindowController:
     private let postProcessingReasoningControl = NSSegmentedControl()
     private var postProcessingReasoningRow: NSGridRow?
     private let postProcessingAPIKeyField = NSSecureTextField()
+    private let postProcessingAPIKeyPasteButton = NSButton(
+        title: "Paste",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingAPIKeyTestButton = NSButton(
+        title: "Test",
+        target: nil,
+        action: nil
+    )
     private let postProcessingAPIKeySaveButton = NSButton(
         title: "Save",
         target: nil,
@@ -341,6 +353,9 @@ public final class AdvancedSettingsWindowController:
         action: nil
     )
     private let postProcessingAPIKeyStatus = NSTextField(labelWithString: "")
+    private var postProcessingKeyCheckTask: Task<Void, Never>?
+    private var postProcessingKeyRevertTask: Task<Void, Never>?
+    private var postProcessingKeyCheckInFlight = false
     private let versionLabel = NSTextField(labelWithString: "")
     private let githubButton = NSButton()
     private let helpButton = NSButton()
@@ -1081,25 +1096,36 @@ public final class AdvancedSettingsWindowController:
         refresh()
     }
 
-    @objc private func savePostProcessingAPIKey() {
-        guard stateProvider().configurationEnabled else {
-            refresh()
+    @objc private func pastePostProcessingAPIKey() {
+        guard stateProvider().configurationEnabled,
+              !postProcessingKeyCheckInFlight
+        else {
             return
         }
-        let key = postProcessingAPIKeyField.stringValue
+        let pasted = NSPasteboard.general
+            .string(forType: .string)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else {
-            updatePostProcessingAPIKeyStatus()
+        guard let pasted, !pasted.isEmpty else {
+            showPostProcessingKeyFeedback(
+                success: false,
+                text: "Clipboard has no text"
+            )
             return
         }
-        do {
-            try ProcessorKeychain.store(apiKey: key)
-            postProcessingAPIKeyField.stringValue = ""
-        } catch {
-            postProcessingAPIKeyStatus.stringValue = "Save failed"
-            return
-        }
+        postProcessingAPIKeyField.stringValue = pasted
         updatePostProcessingAPIKeyStatus()
+    }
+
+    /// Validates the typed key against the API with the currently selected
+    /// model, then stores it in the keychain only on success. A failed check
+    /// never overwrites a working stored key.
+    @objc private func savePostProcessingAPIKey() {
+        validatePostProcessingKey(persist: true)
+    }
+
+    /// Validates the typed key without storing anything.
+    @objc private func testPostProcessingAPIKey() {
+        validatePostProcessingKey(persist: false)
     }
 
     @objc private func clearPostProcessingAPIKey() {
@@ -1107,6 +1133,8 @@ public final class AdvancedSettingsWindowController:
             refresh()
             return
         }
+        postProcessingKeyCheckTask?.cancel()
+        postProcessingKeyRevertTask?.cancel()
         do {
             try ProcessorKeychain.delete()
             postProcessingAPIKeyField.stringValue = ""
@@ -1117,7 +1145,119 @@ public final class AdvancedSettingsWindowController:
         updatePostProcessingAPIKeyStatus()
     }
 
+    private func validatePostProcessingKey(persist: Bool) {
+        guard stateProvider().configurationEnabled,
+              !postProcessingKeyCheckInFlight
+        else {
+            return
+        }
+        let key = postProcessingAPIKeyField.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            updatePostProcessingAPIKeyStatus()
+            return
+        }
+        let model = stateProvider().postProcessingModel
+        postProcessingKeyCheckInFlight = true
+        postProcessingKeyRevertTask?.cancel()
+        setPostProcessingKeyControlsEnabled(false)
+        setPostProcessingKeyStatus(text: "Testing…", color: .secondaryLabelColor)
+
+        let processor = DeepSeekTranscriptProcessor(
+            apiKeyProvider: { key },
+            configuration: DeepSeekConfiguration(model: model)
+        )
+        postProcessingKeyCheckTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.postProcessingKeyCheckInFlight = false
+                self.setPostProcessingKeyControlsEnabled(true)
+            }
+            do {
+                try await processor.validateCredentials()
+            } catch {
+                self.showPostProcessingKeyFeedback(
+                    success: false,
+                    text: Self.postProcessingKeyFailureText(error)
+                )
+                return
+            }
+            guard persist else {
+                self.showPostProcessingKeyFeedback(
+                    success: true,
+                    text: "Key works"
+                )
+                return
+            }
+            do {
+                try ProcessorKeychain.store(apiKey: key)
+                self.postProcessingAPIKeyField.stringValue = ""
+            } catch {
+                self.showPostProcessingKeyFeedback(
+                    success: false,
+                    text: "Save failed"
+                )
+                return
+            }
+            self.showPostProcessingKeyFeedback(
+                success: true,
+                text: "Key verified and saved"
+            )
+        }
+    }
+
+    private func setPostProcessingKeyControlsEnabled(_ enabled: Bool) {
+        let effective = enabled && stateProvider().configurationEnabled
+        postProcessingAPIKeyPasteButton.isEnabled = effective
+        postProcessingAPIKeyTestButton.isEnabled = effective
+        postProcessingAPIKeySaveButton.isEnabled = effective
+        postProcessingAPIKeyClearButton.isEnabled = effective
+    }
+
+    /// Temporary ✓/✗ feedback; the status reverts to Stored/Not stored after
+    /// a short delay unless a newer feedback replaces it.
+    private func showPostProcessingKeyFeedback(success: Bool, text: String) {
+        setPostProcessingKeyStatus(
+            text: "\(success ? "✓" : "✗") \(text)",
+            color: success ? .systemGreen : .systemRed
+        )
+        postProcessingKeyRevertTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            self?.updatePostProcessingAPIKeyStatus()
+        }
+    }
+
+    private func setPostProcessingKeyStatus(text: String, color: NSColor) {
+        let value = NSMutableAttributedString(string: text)
+        value.addAttribute(
+            .foregroundColor,
+            value: color,
+            range: NSRange(location: 0, length: value.length)
+        )
+        postProcessingAPIKeyStatus.attributedStringValue = value
+    }
+
+    private static func postProcessingKeyFailureText(_ error: Error) -> String {
+        switch error {
+        case ProcessorError.missingKey:
+            return "Key is empty"
+        case ProcessorError.httpStatus(401):
+            return "Key rejected (401)"
+        case ProcessorError.httpStatus(403):
+            return "Key rejected (403)"
+        case ProcessorError.httpStatus(let code):
+            return "API error (\(code))"
+        case ProcessorError.transport:
+            return "Network error"
+        default:
+            return "Key check failed"
+        }
+    }
+
     private func updatePostProcessingAPIKeyStatus() {
+        postProcessingKeyRevertTask?.cancel()
+        postProcessingKeyRevertTask = nil
         do {
             postProcessingAPIKeyStatus.stringValue =
                 try ProcessorKeychain.read() == nil ? "Not stored" : "Stored"
@@ -1410,6 +1550,22 @@ public final class AdvancedSettingsWindowController:
         )
         postProcessingAPIKeyField.placeholderString = "DeepSeek API key"
         postProcessingAPIKeyField.setAccessibilityLabel("DeepSeek API key")
+        postProcessingAPIKeyPasteButton.target = self
+        postProcessingAPIKeyPasteButton.action =
+            #selector(pastePostProcessingAPIKey)
+        postProcessingAPIKeyPasteButton.bezelStyle = .rounded
+        postProcessingAPIKeyPasteButton.controlSize = .small
+        postProcessingAPIKeyPasteButton.setAccessibilityLabel(
+            "Paste API key"
+        )
+        postProcessingAPIKeyTestButton.target = self
+        postProcessingAPIKeyTestButton.action =
+            #selector(testPostProcessingAPIKey)
+        postProcessingAPIKeyTestButton.bezelStyle = .rounded
+        postProcessingAPIKeyTestButton.controlSize = .small
+        postProcessingAPIKeyTestButton.setAccessibilityLabel(
+            "Test API key"
+        )
         postProcessingAPIKeySaveButton.target = self
         postProcessingAPIKeySaveButton.action =
             #selector(savePostProcessingAPIKey)
@@ -1979,6 +2135,8 @@ public final class AdvancedSettingsWindowController:
         let apiKeyControls = NSStackView(
             views: [
                 postProcessingAPIKeyField,
+                postProcessingAPIKeyPasteButton,
+                postProcessingAPIKeyTestButton,
                 postProcessingAPIKeySaveButton,
                 postProcessingAPIKeyClearButton,
                 postProcessingAPIKeyStatus,

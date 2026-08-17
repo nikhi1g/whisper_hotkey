@@ -451,6 +451,13 @@ final class DeepSeekTranscriptProcessorTests: XCTestCase {
 
     // MARK: Thinking and reasoning effort
 
+    func testReasoningEffortExposesAllDocumentedLevels() {
+        XCTAssertEqual(
+            DeepSeekReasoningEffort.allCases.map(\.rawValue),
+            ["low", "medium", "high", "xhigh", "max"]
+        )
+    }
+
     func testThinkingEnabledEmitsEnabledToggleAndEffort() async throws {
         let journal = RequestJournal()
         let processor = makeProcessor(
@@ -462,6 +469,7 @@ final class DeepSeekTranscriptProcessorTests: XCTestCase {
             journal: journal
         )
         _ = try await processor.process(makeRequest())
+
 
         let body = try XCTUnwrap(
             requestBody(try XCTUnwrap(journal.all.first))
@@ -526,6 +534,69 @@ final class DeepSeekTranscriptProcessorTests: XCTestCase {
             "Open the terminal and run the build."
         )
     }
+
+    // MARK: Credential validation
+
+    func testValidateCredentialsSucceedsOn200WithChoices() async throws {
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (
+                httpResponse(status: 200),
+                envelopeJSON(validResultContent)
+            ) },
+            journal: journal
+        )
+        try await processor.validateCredentials()
+        XCTAssertEqual(journal.all.count, 1)
+    }
+
+    func testValidateCredentialsFailsFastOn401WithoutRetry() async {
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (httpResponse(status: 401), Data()) },
+            journal: journal
+        )
+        do {
+            try await processor.validateCredentials()
+            XCTFail("expected failure")
+        } catch ProcessorError.httpStatus(let status) {
+            XCTAssertEqual(status, 401)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+        XCTAssertEqual(journal.all.count, 1)
+    }
+
+    func testValidateCredentialsPingForcesThinkingOffAndOneToken() async throws {
+        let journal = RequestJournal()
+        let processor = makeProcessor(
+            handler: { _ in (
+                httpResponse(status: 200),
+                envelopeJSON(validResultContent)
+            ) },
+            configuration: makeConfiguration(
+                thinkingEnabled: true,
+                reasoningEffort: .max
+            ),
+            journal: journal
+        )
+        try await processor.validateCredentials()
+
+        let body = try XCTUnwrap(
+            requestBody(try XCTUnwrap(journal.all.first))
+        )
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        XCTAssertEqual(
+            (json["thinking"] as? [String: Any])?["type"] as? String,
+            "disabled"
+        )
+        XCTAssertNil(json["reasoning_effort"])
+        XCTAssertNil(json["response_format"])
+        XCTAssertEqual(json["max_tokens"] as? Int, 1)
+    }
+
 
     /// The env override is trimmed and returned without touching the
     /// keychain at all.

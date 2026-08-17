@@ -159,7 +159,7 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
     // model from configuration (default env DEEPSEEK_PROCESSOR_MODEL ?? "deepseek-v4-flash")
     // response_format {"type":"json_object"}; max_tokens 800
     // thinking: {"type": enabled|disabled} ALWAYS sent (DeepSeek defaults to enabled);
-    // reasoning_effort (low|medium|high) sent only while thinking is enabled
+    // reasoning_effort (low|medium|high|xhigh|max) sent only while thinking is enabled
     // 5 s timeout; retry once ONLY on empty output or schema-invalid JSON;
     // never retry 401/403/429(no) — fail to raw-transcript fallback
     // logs: provider, model, latency ms, request/response byte sizes, validation outcome. NEVER text.

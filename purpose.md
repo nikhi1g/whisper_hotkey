@@ -342,10 +342,9 @@ through a semantic profile — verbatim, clarity, or coding — and returns a
 bounded result: final text, intent, unresolved spans, explicit corrections,
 and a meaning-change risk. The selected processor model
 (`deepseek-v4-flash` or `deepseek-v4-pro`), the Thinking toggle, and the
-reasoning effort (low/medium/high) are Settings-controlled. Thinking mode is
+reasoning effort (low/medium/high/x-high/max) are Settings-controlled. Thinking mode is
 explicitly disabled by default; DeepSeek enables it server-side by default,
 so every request carries an explicit toggle.
-
 The feature is off by default: with no API key stored or the toggle off, the
 path is identical to the release behavior — zero network requests, no timers,
 no observers. The API key lives in the login keychain

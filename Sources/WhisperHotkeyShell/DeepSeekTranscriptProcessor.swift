@@ -20,11 +20,14 @@ public enum ProcessorError: Error, Equatable, Sendable {
 }
 
 /// Thinking effort accepted by the DeepSeek chat-completions endpoint.
-/// `medium` and `high` both map to the model's high tier (documented).
+/// Server mapping (documented): low → low; medium/high/xhigh → high;
+/// max → max.
 public enum DeepSeekReasoningEffort: String, Codable, CaseIterable, Sendable {
     case low
     case medium
     case high
+    case xhigh
+    case max
 }
 
 /// Configuration for the DeepSeek chat-completions endpoint.
@@ -80,10 +83,9 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
         struct Thinking: Encodable {
             let type: String
         }
-
         let model: String
         let messages: [Message]
-        let responseFormat: ResponseFormat
+        let responseFormat: ResponseFormat?
         let maxTokens: Int
         let thinking: Thinking
         let reasoningEffort: String?
@@ -249,6 +251,7 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
                 )
                 return result
             }
+
             let error = outcome.error ?? ProcessorError.emptyOutput
             let retryable: Bool
             switch error {
@@ -269,6 +272,78 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
             throw error
         }
         throw ProcessorError.emptyOutput
+    }
+    // MARK: - Credential validation
+
+    /// One-shot, minimal live check that the configured model accepts the
+    /// current key. Never retried: a credentials test must fail fast, and a
+    /// retry would double the user's wait. Thinking is forced off for the
+    /// ping so the check stays cheap and deterministic.
+    public func validateCredentials() async throws {
+        // Logger interpolation is a nonisolated closure: hoist actor state
+        // into locals so the allowed metadata fields are all that is captured.
+        let model = configuration.model
+        let baseURL = configuration.baseURL
+        let timeout = configuration.timeout
+        let apiKey: String
+        do {
+            apiKey = try await obtainAPIKey()
+        } catch let error as ProcessorError {
+            Self.logger.error(
+                "\(Self.logLine(model: model, attempt: 0, latencyMs: 0, requestBytes: 0, responseBytes: 0, validation: "failed", errorCode: Self.errorCode(error)), privacy: .public)"
+            )
+            throw error
+        }
+
+        let chatRequest = ChatRequest(
+            model: model,
+            messages: [
+                ChatRequest.Message(role: "user", content: "ping"),
+            ],
+            responseFormat: nil,
+            maxTokens: 1,
+            thinking: ChatRequest.Thinking(type: "disabled"),
+            reasoningEffort: nil
+        )
+        let payload: Data
+        do {
+            payload = try JSONEncoder().encode(chatRequest)
+        } catch {
+            throw ProcessorError.invalidOutput("could not encode credentials ping")
+        }
+
+        var urlRequest = URLRequest(url: Self.endpoint(baseURL: baseURL))
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = timeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = payload
+        let started = ContinuousClock().now
+        var responseBytes = 0
+        do {
+            let (body, response) = try await session.data(for: urlRequest)
+            responseBytes = body.count
+            guard let http = response as? HTTPURLResponse else {
+                throw ProcessorError.transport(.badServerResponse)
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                throw ProcessorError.httpStatus(http.statusCode)
+            }
+        } catch let error as ProcessorError {
+            Self.logger.error(
+                "\(Self.logLine(model: model, attempt: 0, latencyMs: Self.milliseconds(from: started, to: ContinuousClock().now), requestBytes: payload.count, responseBytes: responseBytes, validation: "failed", errorCode: Self.errorCode(error)), privacy: .public)"
+            )
+            throw error
+        } catch let error as URLError {
+            let transport = ProcessorError.transport(error.code)
+            Self.logger.error(
+                "\(Self.logLine(model: model, attempt: 0, latencyMs: Self.milliseconds(from: started, to: ContinuousClock().now), requestBytes: payload.count, responseBytes: responseBytes, validation: "failed", errorCode: Self.errorCode(transport)), privacy: .public)"
+            )
+            throw transport
+        }
+        Self.logger.info(
+            "\(Self.logLine(model: model, attempt: 0, latencyMs: Self.milliseconds(from: started, to: ContinuousClock().now), requestBytes: payload.count, responseBytes: responseBytes, validation: "passed", errorCode: nil), privacy: .public)"
+        )
     }
 
     // MARK: - Key handling
