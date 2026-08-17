@@ -327,3 +327,46 @@ and `test-other` splits used by OpenAI's Whisper evaluation. Benchmark results
 contain aggregate timing and word-error measurements plus utterance identifiers
 and numeric confidence measurements, never audio or transcript text. Benchmark
 downloads and conversion tools are never invoked by the running app.
+
+---
+
+# Voice-to-prompt post-processing (post_processing branch only)
+
+This section describes the `post_processing` branch. It is a deliberate,
+owner-approved deviation from the no-network contract above and is never part
+of a release until the owner decides otherwise.
+
+After local transcription, an optional post-processing step may send the
+transcript to the DeepSeek API (chat completions, JSON mode) to rewrite it
+through a semantic profile — verbatim, clarity, or coding — and returns a
+bounded result: final text, intent, unresolved spans, explicit corrections,
+and a meaning-change risk. The selected processor model
+(`deepseek-v4-flash` or `deepseek-v4-pro`), the Thinking toggle, and the
+reasoning effort (low/medium/high) are Settings-controlled. Thinking mode is
+explicitly disabled by default; DeepSeek enables it server-side by default,
+so every request carries an explicit toggle.
+
+The feature is off by default: with no API key stored or the toggle off, the
+path is identical to the release behavior — zero network requests, no timers,
+no observers. The API key lives in the login keychain
+(service `com.whisperhotkey.deepseek`, account `api-key`), written by
+`setup_deepseek_wh_hotkey.sh` or by Settings; `DEEPSEEK_API_KEY` overrides it
+for development. It is never stored in preferences, logs, or source.
+
+Control-plane phrases ("mode clarity", "mode coding", "mode verbatim",
+"scratch that", "send", "cancel", "show original") are parsed locally and
+never reach the API. A processed result is presented in a review state on the
+existing badge with raw/processed text, preserved tokens, corrections, and
+risk; Enter inserts the processed text through the normal clipboard
+transaction, Escape cancels, Cmd+Z restores the raw transcript. The model
+never decides whether to auto-send: the app computes that gate from schema
+validity, unresolved spans, preserved-token checks, and reported risk, and
+auto-send remains disabled until the owner enables it after bench-gate
+review.
+
+Privacy constraints hold on this branch: transcripts travel only over the
+explicit DeepSeek request and are never logged, persisted, or retained
+beyond the active dictation; logs carry provider, model, latency, byte
+sizes, and validation outcome only. Processor failures, timeouts, or schema
+rejections fall back to inserting the raw transcript. Benchmarks use
+aggregate scores and gitignored cassettes; cassette recording is explicit.
