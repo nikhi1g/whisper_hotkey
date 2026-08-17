@@ -157,18 +157,32 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
                 configuration: DeepSeekConfiguration = .init())
     // POST {baseURL}/chat/completions — OpenAI-compatible shape
     // model from configuration (default env DEEPSEEK_PROCESSOR_MODEL ?? "deepseek-v4-flash")
-    // response_format {"type":"json_object"}; extra_body thinking disabled; max_tokens 800
+    // response_format {"type":"json_object"}; max_tokens 800
+    // thinking: {"type": enabled|disabled} ALWAYS sent (DeepSeek defaults to enabled);
+    // reasoning_effort (low|medium|high) sent only while thinking is enabled
     // 5 s timeout; retry once ONLY on empty output or schema-invalid JSON;
     // never retry 401/403/429(no) — fail to raw-transcript fallback
     // logs: provider, model, latency ms, request/response byte sizes, validation outcome. NEVER text.
 }
 
-public struct DeepSeekConfiguration: Sendable {
-    public var baseURL: URL            // https://api.deepseek.com
-    public var model: String           // env override, else deepseek-v4-flash
-    public var timeout: TimeInterval   // 5.0
-    public var maxOutputTokens: Int    // 800
+public enum DeepSeekReasoningEffort: String, Codable, CaseIterable, Sendable {
+    case low, medium, high   // medium and high both map to the model's high tier (documented)
 }
+
+public struct DeepSeekConfiguration: Sendable {
+    public var baseURL: URL             // https://api.deepseek.com
+    public var model: String            // env override, else deepseek-v4-flash
+    public var timeout: TimeInterval    // 5.0
+    public var maxOutputTokens: Int     // 800
+    public var thinkingEnabled: Bool    // default false (explicit toggle; server default is ON)
+    public var reasoningEffort: DeepSeekReasoningEffort   // default .low
+}
+
+// Settings UI exposes (owner requirement): processor model picker
+// (deepseek-v4-flash | deepseek-v4-pro), Thinking toggle, Reasoning-effort
+// picker (low/medium/high, shown while Thinking is ON). Preference keys:
+// postProcessingModel, postProcessingThinkingEnabled, postProcessingReasoningEffort.
+// setup_deepseek_wh_hotkey.sh verifies BOTH models are reachable with the key.
 
 // WhisperHotkeyShell — ProcessorKeychain.swift (Security framework)
 public enum ProcessorKeychain {
