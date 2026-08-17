@@ -243,7 +243,7 @@ All worktrees are created from `post_processing`:
 # w14-postprocess-contracts
 objective: Implement the Core post-processing contract, profiles, parser, preservation and gating logic exactly as specified in POST_PROCESSING_PLAN.md §2
 worktree: .claude/worktrees/w14-postprocess-contracts
-branch: post_processing/w14-contracts
+branch: w14-contracts
 owned_paths:
   - Sources/WhisperHotkeyCore/PostProcessingContract.swift      # new
   - Sources/WhisperHotkeyCore/SemanticProfile.swift            # new
@@ -269,7 +269,7 @@ handoff: commit
 # w15-deepseek-client
 objective: Implement the DeepSeek transcript processor actor, prompt assembly, and keychain helper exactly per POST_PROCESSING_PLAN.md §2
 worktree: .claude/worktrees/w15-deepseek-client
-branch: post_processing/w15-client
+branch: w15-client
 owned_paths:
   - Sources/WhisperHotkeyShell/DeepSeekTranscriptProcessor.swift    # new
   - Sources/WhisperHotkeyShell/ProcessorKeychain.swift              # new
@@ -290,7 +290,7 @@ handoff: commit
 # w16-review-ui
 objective: Add the review surface (raw vs processed diff, corrections, preserved tokens, risk) reusing the existing badge, plus Settings controls (toggle, profile picker, API-key entry)
 worktree: .claude/worktrees/w16-review-ui
-branch: post_processing/w16-ui
+branch: w16-ui
 owned_paths:
   - Sources/WhisperHotkeyShell/PostProcessReviewController.swift    # new
   - Sources/WhisperHotkeyShell/AdvancedSettingsWindowController.swift  # additive section only
@@ -313,7 +313,7 @@ handoff: commit
 # w17-app-integration
 objective: Wire the processor into the dictation flow behind the local command parser; add the reviewing state-machine phase; reuse the existing clipboard transaction for accepted text
 worktree: .claude/worktrees/w17-app-integration
-branch: post_processing/w17-integration
+branch: w17-integration
 owned_paths:
   - Sources/WhisperHotkeyCore/DictationStateMachine.swift           # additive phase/events/effects
   - Sources/WhisperHotkeyApp/WhisperHotkeyApplicationDelegate.swift # additive wiring only
@@ -336,7 +336,7 @@ handoff: commit
 # w18-eval-bench
 objective: Build the preservation evaluation corpus, cassette recorder, and bench runner with the go/no-go gates of POST_PROCESSING_PLAN.md §6
 worktree: .claude/worktrees/w18-eval-bench
-branch: post_processing/w18-bench
+branch: w18-bench
 owned_paths:
   - Benchmarks/Performance/post-processing/corpus.json            # new, synthetic fixtures only
   - Benchmarks/Performance/post-processing/record_cassette.py     # new; writes gitignored Benchmarks/Data/postprocessing-cassettes/
