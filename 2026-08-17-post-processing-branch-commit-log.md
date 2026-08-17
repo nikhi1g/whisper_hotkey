@@ -130,3 +130,45 @@ kind:    generic password
 - Bench: `python3 Benchmarks/Performance/post-processing/run_bench.py`
 - Owner's test flow: Settings → Post-processing → enable → model/thinking/
   effort → profile → dictate → review → Enter.
+
+## Session 2 — 2026-08-17 (enhanced insert + custom profile)
+
+**Symptom the owner reported:** with Post-processing enabled the injected text
+was still the raw local transcript. Three independent causes, all fixed:
+
+1. **The review gate never auto-delivered.** The processed preview waited for
+   an Enter keystroke on the review panel. Enabling enhancement now *replaces*
+   the inserted text: `.showReview` goes straight to `.reviewAccepted` →
+   `.deliverTranscript` through the existing clipboard transaction. A failed
+   rewrite still inserts the raw transcript.
+2. **`max_tokens: 800` starved thinking runs.** DeepSeek counts reasoning
+   tokens against `max_tokens`, so with Thinking on the response carried empty
+   content → `emptyOutput` → raw fallback. New
+   `DeepSeekConfiguration.maxOutputTokens(thinkingEnabled:)` = 8000 / 800.
+3. **The 5 s timeout was below real latency.** Measured on
+   `deepseek-v4-flash`: high ≈ 17 s, max ≈ 35 s. New
+   `DeepSeekConfiguration.timeout(thinkingEnabled:reasoningEffort:)` =
+   8 s off, 30 / 60 / 120 s by effort.
+
+**New feature:** a fourth, user-editable profile. `SemanticProfileID.custom`
+carries the owner's own objective, stored in
+`postProcessingCustomPrompt` (blank → built-in default, capped at 2000 chars)
+and typed into the "Custom prompt" Settings row, which is visible only while
+the Custom chip is selected. The transducer constraints and the JSON result
+contract still apply, so a custom prompt changes the rewrite but not the wire
+shape. Voice command "mode custom" selects it.
+
+**Verification**
+- Full suite: 484 tests, 0 failures, 7 skipped.
+- Live tests (skipped unless `DEEPSEEK_LIVE_TEST=1` + `DEEPSEEK_API_KEY`):
+  `DeepSeekLiveProcessorTests` — real rewrite, custom-prompt steering, bad-key
+  path.
+- Live end-to-end (`PostProcessingEndToEndTests`, also needs
+  `WHISPER_HOTKEY_PARAKEET_FIXTURE`): local WAV → Parakeet recognition →
+  review gate → real DeepSeek → delivered text. Coding profile turned
+  "Use FastAppy no I mean FastAppy to build the endpoint enum make sure that
+  it doesn't cache the response" into a structured Goal/Constraints brief with
+  `FastAPI` restored; the custom profile returned it ALL CAPS as instructed.
+  Passed 3/3 consecutive runs after the timeout fix (1/3 before).
+- Signed bundle rebuilt with bundled Parakeet checkpoints and reinstalled at
+  `/Applications/whisper_hotkey.app`.

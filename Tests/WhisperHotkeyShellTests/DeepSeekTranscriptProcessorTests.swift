@@ -598,6 +598,39 @@ final class DeepSeekTranscriptProcessorTests: XCTestCase {
     }
 
 
+    /// Reasoning tokens count against `max_tokens`, so a thinking pass gets a
+    /// far larger budget than a plain rewrite; otherwise the model returns
+    /// empty content and the rewrite silently degrades to raw text.
+    func testThinkingBudgetsExceedNonThinkingBudgets() {
+        XCTAssertEqual(
+            DeepSeekConfiguration.maxOutputTokens(thinkingEnabled: false),
+            800
+        )
+        XCTAssertGreaterThan(
+            DeepSeekConfiguration.maxOutputTokens(thinkingEnabled: true),
+            DeepSeekConfiguration.maxOutputTokens(thinkingEnabled: false)
+        )
+    }
+
+    /// Timeouts grow with reasoning effort; a max-effort pass measurably
+    /// takes longer than the five seconds a plain rewrite needs.
+    func testTimeoutGrowsWithReasoningEffort() {
+        let off = DeepSeekConfiguration.timeout(
+            thinkingEnabled: false,
+            reasoningEffort: .max
+        )
+        let low = DeepSeekConfiguration.timeout(
+            thinkingEnabled: true,
+            reasoningEffort: .low
+        )
+        let max = DeepSeekConfiguration.timeout(
+            thinkingEnabled: true,
+            reasoningEffort: .max
+        )
+        XCTAssertLessThan(off, low)
+        XCTAssertLessThan(low, max)
+    }
+
     /// The env override is trimmed and returned without touching the
     /// keychain at all.
     func testProcessorKeychainPrefersEnvironmentVariable() throws {

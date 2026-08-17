@@ -79,13 +79,17 @@ final class PostProcessReviewControllerTests: XCTestCase {
 
     // MARK: - Tab cycling order
 
-    func testTabCyclesClarityCodingVerbatimThenClarity() {
+    func testTabCyclesClarityCodingCustomVerbatimThenClarity() {
         XCTAssertEqual(
             PostProcessReviewProfileCycle.next(after: .clarity),
             .coding
         )
         XCTAssertEqual(
             PostProcessReviewProfileCycle.next(after: .coding),
+            .custom
+        )
+        XCTAssertEqual(
+            PostProcessReviewProfileCycle.next(after: .custom),
             .verbatim
         )
         XCTAssertEqual(
@@ -215,7 +219,7 @@ final class PostProcessReviewControllerTests: XCTestCase {
         XCTAssertTrue(controller.handleKeyDown(keyCode: 48, modifiers: []))
         XCTAssertTrue(controller.handleKeyDown(keyCode: 48, modifiers: []))
         XCTAssertTrue(controller.handleKeyDown(keyCode: 48, modifiers: []))
-        XCTAssertEqual(profiles, [.coding, .verbatim, .clarity])
+        XCTAssertEqual(profiles, [.coding, .custom, .verbatim])
         XCTAssertTrue(delivered.isEmpty)
     }
 

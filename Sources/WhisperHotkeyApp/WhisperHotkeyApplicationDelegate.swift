@@ -299,10 +299,19 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let effort = DeepSeekReasoningEffort(
             rawValue: PostProcessingPreference.selectedReasoningEffort()
         ) ?? .low
+        let thinkingEnabled = PostProcessingPreference.isThinkingEnabled()
         let configuration = DeepSeekConfiguration(
             model: model,
-            thinkingEnabled: PostProcessingPreference.isThinkingEnabled(),
-            reasoningEffort: effort
+            timeout: DeepSeekConfiguration.timeout(
+                thinkingEnabled: thinkingEnabled,
+                reasoningEffort: effort
+            ),
+            maxOutputTokens: DeepSeekConfiguration.maxOutputTokens(
+                thinkingEnabled: thinkingEnabled
+            ),
+            thinkingEnabled: thinkingEnabled,
+            reasoningEffort: effort,
+            customProfilePrompt: PostProcessingPreference.customPrompt()
         )
         return DeepSeekTranscriptProcessor(
             apiKeyProvider: {
@@ -719,7 +728,17 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .showReview(let preview):
-            presentReview(preview)
+            // Enhancement replaces the dictated text outright: the processed
+            // rewrite goes through the existing insertion path with no review
+            // step. A failed rewrite still inserts the raw transcript, so the
+            // feature can never swallow a dictation.
+            presentedReviewPreview = nil
+            activeReviewRequest = nil
+            guard machine.phase == .reviewing else { return true }
+            process(
+                .reviewAccepted,
+                transcript: PostProcessingReviewFlow.acceptedText(for: preview)
+            )
             return true
 
         case .showBadge(let presentation):
@@ -1950,6 +1969,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             postProcessingModel: PostProcessingPreference.selectedModel(),
             postProcessingThinkingEnabled:
                 PostProcessingPreference.isThinkingEnabled(),
+            postProcessingCustomPrompt:
+                PostProcessingPreference.customPrompt(),
             postProcessingReasoningEffort:
                 PostProcessingPreference.selectedReasoningEffort()
         )
@@ -2060,6 +2081,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectPostProcessingReasoningEffort: { [weak self] effort in
                         self?.selectPostProcessingReasoningEffort(effort)
+                    },
+                    setPostProcessingCustomPrompt: { [weak self] prompt in
+                        self?.setPostProcessingCustomPrompt(prompt)
                     }
                 ),
                 loginItemManager: loginItemManager
@@ -2686,6 +2710,12 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func selectPostProcessingReasoningEffort(_ effort: String) {
         guard !machine.phase.isBusy else { return }
         PostProcessingPreference.setReasoningEffort(effort)
+        updateMenuBar()
+    }
+
+    private func setPostProcessingCustomPrompt(_ prompt: String) {
+        guard !machine.phase.isBusy else { return }
+        PostProcessingPreference.setCustomPrompt(prompt)
         updateMenuBar()
     }
 

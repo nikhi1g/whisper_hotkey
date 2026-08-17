@@ -4,6 +4,9 @@ public enum SemanticProfileID: String, Codable, CaseIterable, Equatable, Sendabl
     case verbatim
     case clarity
     case coding
+    /// User-authored profile: its objective is the prompt the owner typed in
+    /// Settings, so the rewrite instructions are theirs rather than built in.
+    case custom
 }
 
 public struct SemanticProfile: Codable, Equatable, Sendable {
@@ -34,9 +37,22 @@ public struct SemanticProfile: Codable, Equatable, Sendable {
 /// The built-in profile data.  Profiles are data, not control flow: prompt
 /// assembly consumes these fields and never branches on profile identity.
 public enum SemanticProfileCatalog {
-    public static let builtIn: [SemanticProfile] = [verbatim, clarity, coding]
+    public static let builtIn: [SemanticProfile] = [
+        verbatim, clarity, coding, custom,
+    ]
 
-    public static func profile(_ id: SemanticProfileID) -> SemanticProfile {
+    /// The default instructions the custom profile carries until the owner
+    /// edits them in Settings.
+    public static let defaultCustomObjective =
+        "Clean up the dictated text and return it ready to paste."
+
+    /// `customObjective` replaces the custom profile's objective only; every
+    /// other profile ignores it, so prompt assembly still never branches on
+    /// profile identity.
+    public static func profile(
+        _ id: SemanticProfileID,
+        customObjective: String? = nil
+    ) -> SemanticProfile {
         switch id {
         case .verbatim:
             return verbatim
@@ -44,6 +60,15 @@ public enum SemanticProfileCatalog {
             return clarity
         case .coding:
             return coding
+        case .custom:
+            var profile = custom
+            let objective = customObjective?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+            if !objective.isEmpty {
+                profile.objective = objective
+            }
+            return profile
         }
     }
 
@@ -83,6 +108,18 @@ public enum SemanticProfileCatalog {
             "Inventing facts or details not dictated",
             "Altering numbers, percentages, URLs, identifiers, or code",
         ]
+    )
+
+    /// The owner's own profile. Only the objective is theirs; the transducer
+    /// constraints and the JSON contract still apply, so a custom prompt can
+    /// change how the text is rewritten but not what the app receives back.
+    private static let custom = SemanticProfile(
+        id: .custom,
+        name: "Custom",
+        objective: defaultCustomObjective,
+        structure: [],
+        allowed: [],
+        forbidden: []
     )
 
     private static let coding = SemanticProfile(

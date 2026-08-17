@@ -36,6 +36,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let postProcessingModel: String
     public let postProcessingThinkingEnabled: Bool
     public let postProcessingReasoningEffort: String
+    public let postProcessingCustomPrompt: String
 
     public init(
         selectedHotkey: HotkeyKey,
@@ -59,6 +60,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         postProcessingProfile: SemanticProfileID = .clarity,
         postProcessingModel: String = PostProcessingPreference.defaultModel,
         postProcessingThinkingEnabled: Bool = false,
+        postProcessingCustomPrompt: String =
+            PostProcessingPreference.defaultCustomPrompt,
         postProcessingReasoningEffort: String =
             PostProcessingPreference.defaultReasoningEffort
     ) {
@@ -84,6 +87,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.postProcessingModel = postProcessingModel
         self.postProcessingThinkingEnabled = postProcessingThinkingEnabled
         self.postProcessingReasoningEffort = postProcessingReasoningEffort
+        self.postProcessingCustomPrompt = postProcessingCustomPrompt
     }
 }
 
@@ -115,6 +119,7 @@ public struct AdvancedSettingsActions {
     public var selectPostProcessingModel: (String) -> Void
     public var setPostProcessingThinkingEnabled: (Bool) -> Void
     public var selectPostProcessingReasoningEffort: (String) -> Void
+    public var setPostProcessingCustomPrompt: (String) -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -144,7 +149,8 @@ public struct AdvancedSettingsActions {
         setPostProcessingThinkingEnabled:
             @escaping (Bool) -> Void = { _ in },
         selectPostProcessingReasoningEffort:
-            @escaping (String) -> Void = { _ in }
+            @escaping (String) -> Void = { _ in },
+        setPostProcessingCustomPrompt: @escaping (String) -> Void = { _ in }
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -174,6 +180,7 @@ public struct AdvancedSettingsActions {
             setPostProcessingThinkingEnabled
         self.selectPostProcessingReasoningEffort =
             selectPostProcessingReasoningEffort
+        self.setPostProcessingCustomPrompt = setPostProcessingCustomPrompt
     }
 }
 
@@ -324,6 +331,8 @@ public final class AdvancedSettingsWindowController:
     )
     private let postProcessingProfileControl = NSSegmentedControl()
     private let postProcessingModelPopup = NSPopUpButton()
+    private let postProcessingCustomPromptField = NSTextField()
+    private var postProcessingCustomPromptRow: NSGridRow?
     private let postProcessingThinkingToggle = NSButton(
         checkboxWithTitle: "Think before rewriting",
         target: nil,
@@ -670,6 +679,13 @@ public final class AdvancedSettingsWindowController:
         postProcessingToggle.isEnabled = state.configurationEnabled
         select(profile: state.postProcessingProfile)
         postProcessingProfileControl.isEnabled = state.configurationEnabled
+        postProcessingCustomPromptRow?.isHidden =
+            state.postProcessingProfile != .custom
+        if postProcessingCustomPromptField.currentEditor() == nil {
+            postProcessingCustomPromptField.stringValue =
+                state.postProcessingCustomPrompt
+        }
+        postProcessingCustomPromptField.isEnabled = state.configurationEnabled
         select(rawValue: state.postProcessingModel, in: postProcessingModelPopup)
         postProcessingModelPopup.isEnabled = state.configurationEnabled
         postProcessingThinkingToggle.state =
@@ -1094,6 +1110,19 @@ public final class AdvancedSettingsWindowController:
                 sender.selectedSegment
             ].rawValue
         )
+        refresh()
+    }
+
+    /// Commits the owner's custom-profile prompt. Blank input clears the
+    /// stored prompt, which restores the built-in default text.
+    @objc private func commitPostProcessingCustomPrompt(
+        _ sender: NSTextField
+    ) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setPostProcessingCustomPrompt(sender.stringValue)
         refresh()
     }
 
@@ -1545,6 +1574,15 @@ public final class AdvancedSettingsWindowController:
         )
         postProcessingModelPopup.setAccessibilityLabel(
             "Post-processing model"
+        )
+        postProcessingCustomPromptField.target = self
+        postProcessingCustomPromptField.action =
+            #selector(commitPostProcessingCustomPrompt(_:))
+        postProcessingCustomPromptField.placeholderString =
+            PostProcessingPreference.defaultCustomPrompt
+        postProcessingCustomPromptField.lineBreakMode = .byTruncatingTail
+        postProcessingCustomPromptField.setAccessibilityLabel(
+            "Post-processing custom prompt"
         )
         postProcessingThinkingToggle.target = self
         postProcessingThinkingToggle.action =
@@ -2130,6 +2168,11 @@ public final class AdvancedSettingsWindowController:
             title: "Profile",
             control: postProcessingProfileControl
         )
+        postProcessingCustomPromptRow = addRow(
+            to: postProcessingGrid,
+            title: "Custom prompt",
+            control: postProcessingCustomPromptField
+        )
         addRow(
             to: postProcessingGrid,
             title: "Processor",
@@ -2299,6 +2342,20 @@ public final class AdvancedSettingsWindowController:
         label.font = .systemFont(ofSize: 13, weight: .medium)
         themedPrimaryLabels.append(label)
         return grid.addRow(with: [label, control])
+    }
+
+    var postProcessingCustomPromptVisibleForTesting: Bool {
+        postProcessingCustomPromptRow.map { !$0.isHidden } ?? false
+    }
+
+    var postProcessingCustomPromptTextForTesting: String {
+        postProcessingCustomPromptField.stringValue
+    }
+
+    /// Drives the custom-prompt field the way a user committing an edit does.
+    func commitPostProcessingCustomPromptForTesting(_ prompt: String) {
+        postProcessingCustomPromptField.stringValue = prompt
+        commitPostProcessingCustomPrompt(postProcessingCustomPromptField)
     }
 
     var selectedHotkeyForTesting: HotkeyKey? {

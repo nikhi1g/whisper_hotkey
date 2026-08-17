@@ -1003,6 +1003,59 @@ private final class AdvancedSettingsStateBox {
     }
 }
 
+/// The custom profile is the fourth chip; its prompt row is the only place
+/// the owner can author the instructions DeepSeek receives.
+@MainActor
+final class PostProcessingCustomPromptUITests: XCTestCase {
+    func testCustomPromptRowAppearsOnlyForTheCustomProfile() {
+        var edited: [String] = []
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: {
+                makeAdvancedSettingsState(
+                    postProcessingProfile: .custom,
+                    postProcessingCustomPrompt: "Make it a changelog entry."
+                )
+            },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in },
+                setPostProcessingCustomPrompt: { edited.append($0) }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+        controller.showWindow(nil)
+        XCTAssertTrue(controller.postProcessingCustomPromptVisibleForTesting)
+        XCTAssertEqual(
+            controller.postProcessingCustomPromptTextForTesting,
+            "Make it a changelog entry."
+        )
+
+        controller.commitPostProcessingCustomPromptForTesting("All caps only.")
+        XCTAssertEqual(edited, ["All caps only."])
+        controller.close()
+    }
+
+    func testCustomPromptRowIsHiddenForBuiltInProfiles() {
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: {
+                makeAdvancedSettingsState(postProcessingProfile: .clarity)
+            },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+        controller.showWindow(nil)
+        XCTAssertFalse(controller.postProcessingCustomPromptVisibleForTesting)
+        controller.close()
+    }
+}
+
 private func makeAdvancedSettingsState(
     hotkey: HotkeyKey = .rightCommand,
     mode: HotkeyActivationMode = .hold,
@@ -1021,7 +1074,10 @@ private func makeAdvancedSettingsState(
     availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
     configurationEnabled: Bool = true,
     automaticallyChecksForUpdates: Bool = false,
-    softwareUpdateStatus: SoftwareUpdateStatus = .idle
+    softwareUpdateStatus: SoftwareUpdateStatus = .idle,
+    postProcessingProfile: SemanticProfileID = .clarity,
+    postProcessingCustomPrompt: String =
+        PostProcessingPreference.defaultCustomPrompt
 ) -> AdvancedSettingsState {
     AdvancedSettingsState(
         selectedHotkey: hotkey,
@@ -1040,7 +1096,9 @@ private func makeAdvancedSettingsState(
         availableEngines: availableEngines,
         configurationEnabled: configurationEnabled,
         automaticallyChecksForUpdates: automaticallyChecksForUpdates,
-        softwareUpdateStatus: softwareUpdateStatus
+        softwareUpdateStatus: softwareUpdateStatus,
+        postProcessingProfile: postProcessingProfile,
+        postProcessingCustomPrompt: postProcessingCustomPrompt
     )
 }
 

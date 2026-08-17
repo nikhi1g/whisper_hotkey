@@ -212,3 +212,74 @@ final class PostProcessingContractTests: XCTestCase {
         }
     }
 }
+
+/// The user-authored fourth profile: its objective is the owner's prompt,
+/// while the transducer constraints and JSON contract stay built in.
+final class CustomSemanticProfileTests: XCTestCase {
+    func testCustomProfileUsesTheOwnersPrompt() {
+        let profile = SemanticProfileCatalog.profile(
+            .custom,
+            customObjective: "  Rewrite as a terse bullet list.  "
+        )
+        XCTAssertEqual(profile.id, .custom)
+        XCTAssertEqual(profile.objective, "Rewrite as a terse bullet list.")
+    }
+
+    func testBlankCustomPromptFallsBackToTheDefaultObjective() {
+        XCTAssertEqual(
+            SemanticProfileCatalog.profile(.custom, customObjective: "   ")
+                .objective,
+            SemanticProfileCatalog.defaultCustomObjective
+        )
+        XCTAssertEqual(
+            SemanticProfileCatalog.profile(.custom).objective,
+            SemanticProfileCatalog.defaultCustomObjective
+        )
+    }
+
+    func testBuiltInProfilesIgnoreTheCustomPrompt() {
+        for id in SemanticProfileID.allCases where id != .custom {
+            XCTAssertEqual(
+                SemanticProfileCatalog.profile(id, customObjective: "ignored"),
+                SemanticProfileCatalog.profile(id)
+            )
+        }
+    }
+
+    func testCustomPromptRoundTripsThroughPreferences() {
+        let defaults = UserDefaults(
+            suiteName: "custom-prompt-\(UUID().uuidString)"
+        )!
+        XCTAssertEqual(
+            PostProcessingPreference.customPrompt(defaults: defaults),
+            PostProcessingPreference.defaultCustomPrompt
+        )
+        PostProcessingPreference.setCustomPrompt(
+            "Make it a changelog entry.",
+            defaults: defaults
+        )
+        XCTAssertEqual(
+            PostProcessingPreference.customPrompt(defaults: defaults),
+            "Make it a changelog entry."
+        )
+        PostProcessingPreference.setCustomPrompt("  ", defaults: defaults)
+        XCTAssertEqual(
+            PostProcessingPreference.customPrompt(defaults: defaults),
+            PostProcessingPreference.defaultCustomPrompt
+        )
+    }
+
+    func testStoredCustomPromptIsBounded() {
+        let defaults = UserDefaults(
+            suiteName: "custom-prompt-\(UUID().uuidString)"
+        )!
+        PostProcessingPreference.setCustomPrompt(
+            String(repeating: "x", count: 5_000),
+            defaults: defaults
+        )
+        XCTAssertEqual(
+            PostProcessingPreference.customPrompt(defaults: defaults).count,
+            PostProcessingPreference.maximumCustomPromptLength
+        )
+    }
+}

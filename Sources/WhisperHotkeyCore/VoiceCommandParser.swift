@@ -19,6 +19,8 @@ public enum VoiceCommandParser {
             return .setProfile(.verbatim)
         case "mode coding":
             return .setProfile(.coding)
+        case "mode custom":
+            return .setProfile(.custom)
         case "scratch that":
             return .scratchLastSegment
         case "send":

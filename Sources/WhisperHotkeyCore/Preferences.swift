@@ -28,6 +28,8 @@ public enum WhisperHotkeyPreferenceKeys {
         "postProcessingThinkingEnabled"
     public static let postProcessingReasoningEffort =
         "postProcessingReasoningEffort"
+    public static let postProcessingCustomPrompt =
+        "postProcessingCustomPrompt"
 }
 
 public struct FirstRunPerformanceProfile: Equatable, Sendable {
@@ -1355,6 +1357,40 @@ public enum PostProcessingPreference {
     public static let defaultModel = "deepseek-v4-flash"
     public static let defaultThinkingEnabled = false
     public static let defaultReasoningEffort = "low"
+    public static let defaultCustomPrompt =
+        SemanticProfileCatalog.defaultCustomObjective
+    /// The stored prompt is a system-prompt objective, not free-form output;
+    /// the cap keeps one pathological paste from crowding out the transcript.
+    public static let maximumCustomPromptLength = 2_000
+
+    /// The owner's custom-profile instructions. Blank storage falls back to
+    /// the built-in default so the custom profile is never prompt-less.
+    public static func customPrompt(
+        defaults: UserDefaults = .standard
+    ) -> String {
+        let stored = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let stored, !stored.isEmpty else { return defaultCustomPrompt }
+        return stored
+    }
+
+    public static func setCustomPrompt(
+        _ prompt: String,
+        defaults: UserDefaults = .standard
+    ) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            defaults.removeObject(
+                forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
+            )
+            return
+        }
+        defaults.set(
+            String(trimmed.prefix(maximumCustomPromptLength)),
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingCustomPrompt
+        )
+    }
 
     public static func isEnabled(
         defaults: UserDefaults = .standard

@@ -42,6 +42,9 @@ public struct DeepSeekConfiguration: Sendable {
     public var thinkingEnabled: Bool
     /// Only emitted when `thinkingEnabled` is true.
     public var reasoningEffort: DeepSeekReasoningEffort
+    /// The owner's instructions for the custom profile. Ignored by every
+    /// built-in profile.
+    public var customProfilePrompt: String?
 
     public init(
         baseURL: URL = URL(string: "https://api.deepseek.com")!,
@@ -50,7 +53,8 @@ public struct DeepSeekConfiguration: Sendable {
         timeout: TimeInterval = 5.0,
         maxOutputTokens: Int = 800,
         thinkingEnabled: Bool = false,
-        reasoningEffort: DeepSeekReasoningEffort = .low
+        reasoningEffort: DeepSeekReasoningEffort = .low,
+        customProfilePrompt: String? = nil
     ) {
         self.baseURL = baseURL
         self.model = model
@@ -58,6 +62,38 @@ public struct DeepSeekConfiguration: Sendable {
         self.maxOutputTokens = maxOutputTokens
         self.thinkingEnabled = thinkingEnabled
         self.reasoningEffort = reasoningEffort
+        self.customProfilePrompt = customProfilePrompt
+    }
+
+    /// Output-token budget for a given thinking configuration. DeepSeek
+    /// counts reasoning tokens against `max_tokens`, so a thinking pass that
+    /// fits the rewrite in 800 tokens still returns empty content once the
+    /// chain of thought consumes the budget. Rewrites are short; the extra
+    /// headroom is spent on reasoning, not output.
+    public static func maxOutputTokens(thinkingEnabled: Bool) -> Int {
+        thinkingEnabled ? 8_000 : 800
+    }
+
+    /// Request timeout for a given thinking configuration. Thinking-off
+    /// rewrites answer in about a second; a thinking pass at high effort
+    /// measurably exceeds five seconds, so the budget grows with effort
+    /// instead of timing the rewrite out and falling back to raw text.
+    public static func timeout(
+        thinkingEnabled: Bool,
+        reasoningEffort: DeepSeekReasoningEffort
+    ) -> TimeInterval {
+        guard thinkingEnabled else { return 8.0 }
+        switch reasoningEffort {
+        // Measured against deepseek-v4-flash on a dictation-sized transcript:
+        // high ≈ 17 s, max ≈ 35 s. The ceilings sit well above those so a
+        // slow-but-normal thinking pass is not cut off into raw fallback.
+        case .low, .medium:
+            return 30.0
+        case .high, .xhigh:
+            return 60.0
+        case .max:
+            return 120.0
+        }
     }
 }
 
@@ -218,7 +254,10 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
             throw error
         }
 
-        let profile = SemanticProfileCatalog.profile(request.profile)
+        let profile = SemanticProfileCatalog.profile(
+            request.profile,
+            customObjective: configuration.customProfilePrompt
+        )
         let prompt = Self.systemPrompt(for: profile)
         let payload: Data
         do {
@@ -379,6 +418,8 @@ public actor DeepSeekTranscriptProcessor: TranscriptProcessor {
                 + "and identifiers exactly.",
             "- Resolve only explicit self-corrections; change nothing else that "
                 + "affects meaning.",
+            "- Keep every clause the speaker dictated: rewriting may reorder or "
+                + "restructure, but never drop or summarize away content.",
             "- Output a single JSON object and nothing else.",
             "",
             "Objective: \(profile.objective)",

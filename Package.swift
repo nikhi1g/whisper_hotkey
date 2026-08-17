@@ -115,6 +115,7 @@ let package = Package(
                 "WhisperHotkeyApp",
                 "WhisperHotkeyASR",
                 "WhisperHotkeyCore",
+                "WhisperHotkeyShell",
                 "WhisperHotkeySystem",
             ]
         ),

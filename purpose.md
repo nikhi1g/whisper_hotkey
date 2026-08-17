@@ -338,7 +338,8 @@ of a release until the owner decides otherwise.
 
 After local transcription, an optional post-processing step may send the
 transcript to the DeepSeek API (chat completions, JSON mode) to rewrite it
-through a semantic profile — verbatim, clarity, or coding — and returns a
+through a semantic profile — verbatim, clarity, coding, or the owner's own
+custom profile, whose system-prompt objective is typed in Settings — and returns a
 bounded result: final text, intent, unresolved spans, explicit corrections,
 and a meaning-change risk. The selected processor model
 (`deepseek-v4-flash` or `deepseek-v4-pro`), the Thinking toggle, and the
@@ -352,12 +353,22 @@ no observers. The API key lives in the login keychain
 `setup_deepseek_wh_hotkey.sh` or by Settings; `DEEPSEEK_API_KEY` overrides it
 for development. It is never stored in preferences, logs, or source.
 
+When post-processing is enabled and a key is stored, the rewrite *replaces*
+the dictated text: the processed result goes straight through the normal
+clipboard transaction with no review keystroke. Any failure — transport,
+timeout, schema rejection — inserts the raw transcript instead, so enabling
+the feature can never swallow a dictation. Thinking runs get a larger output
+budget (DeepSeek counts reasoning tokens against `max_tokens`) and an
+effort-scaled timeout, because a max-effort pass takes ~35 s.
+
 Control-plane phrases ("mode clarity", "mode coding", "mode verbatim",
+"mode custom",
 "scratch that", "send", "cancel", "show original") are parsed locally and
 never reach the API. A processed result is presented in a review state on the
 existing badge with raw/processed text, preserved tokens, corrections, and
-risk; Enter inserts the processed text through the normal clipboard
-transaction, Escape cancels, Cmd+Z restores the raw transcript. The model
+risk; that review surface remains available for future opt-in use, with
+Enter inserting the processed text, Escape cancelling, and Cmd+Z restoring
+the raw transcript. The model
 never decides whether to auto-send: the app computes that gate from schema
 validity, unresolved spans, preserved-token checks, and reported risk, and
 auto-send remains disabled until the owner enables it after bench-gate
