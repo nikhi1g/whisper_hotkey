@@ -1,0 +1,121 @@
+{
+  "cases": [
+    {
+      "id": "g01-self-correction",
+      "raw_text": "Tuesday, no, Thursday",
+      "profile": "verbatim",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": ["Thursday"],
+        "forbidden_substrings": ["Tuesday"],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    },
+    {
+      "id": "g02-uncertainty",
+      "raw_text": "I might need to delete it",
+      "profile": "clarity",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": ["might"],
+        "forbidden_substrings": [],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    },
+    {
+      "id": "g03-negation",
+      "raw_text": "Do not delete it",
+      "profile": "clarity",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": ["not"],
+        "forbidden_substrings": [],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    },
+    {
+      "id": "g04-identifiers",
+      "raw_text": "Use the use effect hook to fetch data from the C plus plus backend at slash API v1",
+      "profile": "coding",
+      "protected_terms": ["useEffect", "C++", "/api/v1"],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": [],
+        "required_tokens": ["useEffect", "C++", "/api/v1"],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    },
+    {
+      "id": "g05-low-confidence-name",
+      "raw_text": "Ask professor alvarez to review the migration plan",
+      "profile": "clarity",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": [],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": true
+      }
+    },
+    {
+      "id": "g06-explain-request",
+      "raw_text": "Explain how caching works",
+      "profile": "clarity",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": ["caching works by"],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": true
+      }
+    },
+    {
+      "id": "g07-unspecified-language",
+      "raw_text": "Refactor the service into smaller modules",
+      "profile": "coding",
+      "protected_terms": [],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": [],
+        "required_tokens": [],
+        "max_meaning_change_risk": "low",
+        "manual_review": true
+      }
+    },
+    {
+      "id": "p01-fastapi-self-correction",
+      "raw_text": "Use fast API no I mean FastAPI and make the route post slash process",
+      "profile": "coding",
+      "protected_terms": ["FastAPI", "POST", "/process"],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": ["fast API", "no I mean"],
+        "required_tokens": ["FastAPI", "POST", "/process"],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    },
+    {
+      "id": "p02-dictation-phrasing",
+      "raw_text": "Increase the cache TTL to twenty four hours and the failure threshold to five percent",
+      "profile": "clarity",
+      "protected_terms": ["24 hours", "5%"],
+      "checks": {
+        "required_substrings": [],
+        "forbidden_substrings": [],
+        "required_tokens": ["24", "5%"],
+        "max_meaning_change_risk": "low",
+        "manual_review": false
+      }
+    }
+  ]
+}
