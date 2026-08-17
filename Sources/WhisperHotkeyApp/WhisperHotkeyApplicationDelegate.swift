@@ -1444,10 +1444,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             self.logger.error(
                 "Post-processing did not report back within \(Int(deadline), privacy: .public)s; inserting the raw transcript"
             )
+            self.reviewSession?.cancel()
             PostProcessingPreference.recordLastRun(
                 "no response in \(Int(deadline)) s — raw text inserted"
             )
-            self.reviewSession?.cancel()
             self.reviewWatchdogTask = nil
             self.presentedReviewPreview = nil
             self.activeReviewRequest = nil
@@ -3288,6 +3288,12 @@ enum PostProcessingReviewFlow {
         preview.rawText
     }
 
+    static func isCancellation(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        if case ProcessorError.transport(.cancelled) = error { return true }
+        return false
+    }
+
     /// A short, privacy-safe reason for the Settings status row: error codes
     /// only, never transcript text.
     static func describe(_ error: any Error) -> String {
@@ -3335,9 +3341,15 @@ enum PostProcessingReviewFlow {
                 unavailable: false
             )
         } catch {
-            PostProcessingPreference.recordLastRun(
-                "failed (\(describe(error))) — raw text inserted"
-            )
+            // A cancellation is always something the app did (a newer
+            // dictation, an explicit cancel, the watchdog). Whoever cancelled
+            // records the real reason, so this must not overwrite it with the
+            // -999 that cancelling the URLSession task produces.
+            if !isCancellation(error) {
+                PostProcessingPreference.recordLastRun(
+                    "failed (\(describe(error))) — raw text inserted"
+                )
+            }
             return PostProcessPreview(
                 rawText: request.rawText,
                 processed: nil,
