@@ -21,6 +21,13 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let firstRunDefaultsVersion = "firstRunDefaultsVersion"
     public static let hasPresentedFirstRunSettings =
         "hasPresentedFirstRunSettings"
+    public static let postProcessingEnabled = "postProcessingEnabled"
+    public static let postProcessingProfile = "postProcessingProfile"
+    public static let postProcessingModel = "postProcessingModel"
+    public static let postProcessingThinkingEnabled =
+        "postProcessingThinkingEnabled"
+    public static let postProcessingReasoningEffort =
+        "postProcessingReasoningEffort"
 }
 
 public struct FirstRunPerformanceProfile: Equatable, Sendable {
@@ -1336,5 +1343,125 @@ public enum RecognitionChoice: String, CaseIterable, Codable, Sendable {
                 return true
             }
         }
+    }
+}
+
+/// Post-processing preferences.  The feature is off by default; every value
+/// here defaults to something that keeps the processor inert until the user
+/// opts in.
+public enum PostProcessingPreference {
+    public static let defaultEnabled = false
+    public static let defaultProfile: SemanticProfileID = .clarity
+    public static let defaultModel = "deepseek-v4-flash"
+    public static let defaultThinkingEnabled = false
+    public static let defaultReasoningEffort = "low"
+
+    public static func isEnabled(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard defaults.object(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingEnabled
+        ) != nil else {
+            return defaultEnabled
+        }
+        return defaults.bool(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingEnabled
+        )
+    }
+
+    public static func setEnabled(
+        _ enabled: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            enabled,
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingEnabled
+        )
+    }
+
+    public static func selectedProfile(
+        defaults: UserDefaults = .standard
+    ) -> SemanticProfileID {
+        guard let rawValue = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingProfile
+        ) else {
+            return defaultProfile
+        }
+        return SemanticProfileID(rawValue: rawValue) ?? defaultProfile
+    }
+
+    public static func setProfile(
+        _ profile: SemanticProfileID,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            profile.rawValue,
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingProfile
+        )
+    }
+
+    public static func selectedModel(
+        defaults: UserDefaults = .standard
+    ) -> String {
+        guard let value = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingModel
+        ) else {
+            return defaultModel
+        }
+        return value
+    }
+
+    public static func setModel(
+        _ model: String,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            model,
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingModel
+        )
+    }
+
+    public static func isThinkingEnabled(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard defaults.object(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingThinkingEnabled
+        ) != nil else {
+            return defaultThinkingEnabled
+        }
+        return defaults.bool(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingThinkingEnabled
+        )
+    }
+
+    public static func setThinkingEnabled(
+        _ enabled: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            enabled,
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingThinkingEnabled
+        )
+    }
+
+    public static func selectedReasoningEffort(
+        defaults: UserDefaults = .standard
+    ) -> String {
+        guard let value = defaults.string(
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingReasoningEffort
+        ) else {
+            return defaultReasoningEffort
+        }
+        return value
+    }
+
+    public static func setReasoningEffort(
+        _ effort: String,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            effort,
+            forKey: WhisperHotkeyPreferenceKeys.postProcessingReasoningEffort
+        )
     }
 }

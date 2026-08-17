@@ -112,6 +112,7 @@ public final class CaretBadgeController {
             // ordered-out NSPanel leaks the old window in NSApplication.windows.
             // Reassert its cross-Space behavior before ordering it back in.
             panel.collectionBehavior = Self.overlayCollectionBehavior
+            badgeView.reviewSnapshot = nil
             lastCaretFrame = nil
             lastFieldFrame = nil
             lastScreenFrame = nil
@@ -153,6 +154,43 @@ public final class CaretBadgeController {
             badgeView.presentation = presentation
         }
         panel.ignoresMouseEvents = presentation != .listening
+        let size = badgeView.preferredSize
+        badgeView.frame = CGRect(origin: .zero, size: size)
+        badgeView.layoutSubtreeIfNeeded()
+        panel.setContentSize(size)
+
+        placePanel(size: size, display: true)
+        panel.orderFrontRegardless()
+        panel.displayIfNeeded()
+        lastVisibilityAssertion = ProcessInfo.processInfo.systemUptime
+    }
+
+    /// Switches the existing badge panel to the reviewing presentation.  The
+    /// review layout is wider than the capsule, but its size is fixed for the
+    /// whole review session: re-presenting a reprocessed preview never resizes
+    /// the panel.  Placement reuses the session origin captured at listening
+    /// time, with the same screen-edge clamping as every other presentation.
+    public func presentReview(_ preview: PostProcessPreview) {
+        if lastScreenFrame == nil {
+            let runtimeAnchor = BadgePlacement.resolvedRuntimeAnchor(
+                caretFrame: nil,
+                fieldFrame: nil,
+                pointerLocation: NSEvent.mouseLocation
+            )
+            let visibleFrame = screen(containing: runtimeAnchor.frame)?
+                .visibleFrame ?? NSScreen.main?.visibleFrame
+            guard let visibleFrame else {
+                panel.orderOut(nil)
+                return
+            }
+            if case let .pointer(location) = runtimeAnchor {
+                lastPointerFallback = location
+            }
+            lastScreenFrame = visibleFrame
+        }
+        panel.collectionBehavior = Self.overlayCollectionBehavior
+        badgeView.reviewSnapshot = preview
+        panel.ignoresMouseEvents = true
         let size = badgeView.preferredSize
         badgeView.frame = CGRect(origin: .zero, size: size)
         badgeView.layoutSubtreeIfNeeded()
@@ -218,6 +256,7 @@ public final class CaretBadgeController {
 
     public var acceptsAutomaticAnchorUpdates: Bool {
         badgeView.presentation == .listening
+            && badgeView.reviewSnapshot == nil
             && !sessionPositionWasDragged
     }
 
@@ -264,6 +303,7 @@ public final class CaretBadgeController {
     }
 
     public func hide() {
+        badgeView.reviewSnapshot = nil
         badgeView.presentation = .hidden
         panel.ignoresMouseEvents = true
         panel.orderOut(nil)
@@ -404,6 +444,26 @@ public final class CaretBadgeController {
         badgeView.activityOriginSnapshotForTesting
     }
 
+    var reviewRawTextForTesting: String? {
+        badgeView.reviewRawTextForTesting
+    }
+
+    var reviewProcessedTextForTesting: String? {
+        badgeView.reviewProcessedTextForTesting
+    }
+
+    var reviewStatusTextForTesting: String? {
+        badgeView.reviewStatusTextForTesting
+    }
+
+    var reviewFooterTextForTesting: String? {
+        badgeView.reviewFooterTextForTesting
+    }
+
+    var reviewRiskColorForTesting: NSColor? {
+        badgeView.reviewRiskColorForTesting
+    }
+
     var badgeAccessibilityLabelForTesting: String? {
         badgeView.accessibilityLabel()
     }
@@ -502,6 +562,7 @@ private final class BadgeView: NSView {
     private let activityOriginLayer = CALayer()
     private let transcribingIndicatorLayer =
         CapsuleActivityIndicatorLayer()
+    private let reviewView = ReviewBadgeView()
     private var listeningProgress: CGFloat = 0
     private var dragStart: (pointer: CGPoint, windowOrigin: CGPoint)?
     var dragHandler: (@MainActor (CGPoint) -> Void)?
@@ -512,8 +573,18 @@ private final class BadgeView: NSView {
         }
     }
 
+    /// When set, the capsule content is replaced by the reviewing
+    /// presentation until it is cleared again.
+    var reviewSnapshot: PostProcessPreview? {
+        didSet {
+            updatePresentation()
+        }
+    }
+
     var preferredSize: CGSize {
-        RuntimeBadgeLayout.size
+        reviewSnapshot == nil
+            ? RuntimeBadgeLayout.size
+            : ReviewBadgeLayout.size
     }
 
     init(
@@ -588,6 +659,9 @@ private final class BadgeView: NSView {
         sendButton.target = self
         sendButton.action = #selector(sendAndSubmit)
         addSubview(sendButton)
+
+        reviewView.isHidden = true
+        addSubview(reviewView)
 
         updatePresentation()
     }
@@ -678,7 +752,10 @@ private final class BadgeView: NSView {
 
     override func layout() {
         super.layout()
-        layer?.cornerRadius = bounds.height / 2
+        layer?.cornerRadius = reviewSnapshot == nil
+            ? bounds.height / 2
+            : ReviewBadgeLayout.cornerRadius
+        reviewView.frame = bounds
         statusLabel.frame = BadgeTextLayout.centeredFrame(
             in: bounds,
             horizontalInset: StatusBadgeLayout.horizontalMargin,
@@ -718,7 +795,7 @@ private final class BadgeView: NSView {
         limit: TimeInterval,
         level: Float
     ) {
-        guard presentation == .listening else {
+        guard presentation == .listening, reviewSnapshot == nil else {
             return
         }
         let metrics = ListeningBadgeMetrics(
@@ -766,6 +843,11 @@ private final class BadgeView: NSView {
     }
 
     private func updatePresentation() {
+        if let snapshot = reviewSnapshot {
+            showReview(snapshot)
+            return
+        }
+        reviewView.isHidden = true
         let showsListeningContent =
             presentation == .listening || presentation == .transcribing
         statusLabel.isHidden =
@@ -809,6 +891,26 @@ private final class BadgeView: NSView {
             statusLabel.stringValue = ""
             layer?.backgroundColor = NSColor.clear.cgColor
         }
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    private func showReview(_ snapshot: PostProcessPreview) {
+        statusLabel.isHidden = true
+        waveformView.isHidden = true
+        timeLabel.isHidden = true
+        stopButton.isHidden = true
+        sendButton.isHidden = true
+        limitTrackLayer.isHidden = true
+        activityOriginLayer.isHidden = true
+        transcribingIndicatorLayer.stopAnimating()
+        layer?.backgroundColor = normalBackground.cgColor
+        reviewView.apply(
+            PostProcessReviewRendering.content(for: snapshot),
+            palette: palette
+        )
+        reviewView.isHidden = false
+        setAccessibilityLabel("Reviewing dictation")
         invalidateIntrinsicContentSize()
         needsLayout = true
     }
@@ -907,6 +1009,151 @@ private final class BadgeView: NSView {
             isVisible: !activityOriginLayer.isHidden,
             frame: activityOriginLayer.frame
         )
+    }
+
+    var reviewRawTextForTesting: String? {
+        reviewSnapshot == nil ? nil : reviewView.rawTextForTesting
+    }
+
+    var reviewProcessedTextForTesting: String? {
+        reviewSnapshot == nil ? nil : reviewView.processedTextForTesting
+    }
+
+    var reviewStatusTextForTesting: String? {
+        reviewSnapshot == nil ? nil : reviewView.statusTextForTesting
+    }
+
+    var reviewFooterTextForTesting: String? {
+        reviewSnapshot == nil ? nil : reviewView.footerTextForTesting
+    }
+
+    var reviewRiskColorForTesting: NSColor? {
+        reviewSnapshot == nil ? nil : reviewView.riskColorForTesting
+    }
+}
+
+/// Fixed geometry for the reviewing presentation.  Like the capsule's
+/// `RuntimeBadgeLayout`, both dimensions are immutable for the whole review
+/// session so content changes (a Tab-driven reprocess) never resize the
+/// panel.
+struct ReviewBadgeLayout {
+    static let size = CGSize(width: 420, height: 110)
+    static let cornerRadius: CGFloat = 16
+    static let horizontalInset: CGFloat = 14
+    static let rowHeight: CGFloat = 20
+    static let rowGap: CGFloat = 3
+    static let topInset: CGFloat = 10
+
+    /// Frames one text row of the review card.  Rows count from the visual
+    /// top: 0 raw, 1 processed, 2 risk, 3 footer.
+    static func textFrame(visualRow: Int) -> CGRect {
+        let topRow = 3
+        return CGRect(
+            x: horizontalInset,
+            y: topInset + CGFloat(topRow - visualRow) * (rowHeight + rowGap),
+            width: size.width - horizontalInset * 2,
+            height: rowHeight
+        )
+    }
+}
+
+@MainActor
+private final class ReviewBadgeView: NSView {
+    private let rawLabel = NSTextField(labelWithString: "")
+    private let processedLabel = NSTextField(labelWithString: "")
+    private let riskLabel = NSTextField(labelWithString: "")
+    private let footerLabel = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        rawLabel.font = .systemFont(ofSize: 12)
+        rawLabel.lineBreakMode = .byTruncatingTail
+        addSubview(rawLabel)
+        processedLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        processedLabel.lineBreakMode = .byTruncatingTail
+        addSubview(processedLabel)
+        riskLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        riskLabel.lineBreakMode = .byTruncatingTail
+        addSubview(riskLabel)
+        footerLabel.font = .systemFont(ofSize: 11)
+        footerLabel.lineBreakMode = .byTruncatingTail
+        addSubview(footerLabel)
+        statusLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        statusLabel.lineBreakMode = .byTruncatingTail
+        addSubview(statusLabel)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func apply(
+        _ content: PostProcessReviewContent,
+        palette: BadgeThemePalette
+    ) {
+        rawLabel.stringValue = content.rawText
+        rawLabel.textColor = palette.primaryText.withAlphaComponent(0.62)
+
+        if let processedText = content.processedText {
+            processedLabel.stringValue = processedText
+            processedLabel.textColor = palette.primaryText
+            processedLabel.isHidden = false
+            statusLabel.isHidden = true
+            if let risk = content.risk {
+                riskLabel.stringValue = content.riskText ?? ""
+                riskLabel.textColor = risk == .low
+                    ? palette.waveform
+                    : NSColor.systemRed
+                riskLabel.isHidden = false
+            } else {
+                riskLabel.isHidden = true
+            }
+            footerLabel.stringValue = content.footerText ?? ""
+            footerLabel.textColor = palette.primaryText.withAlphaComponent(0.62)
+            footerLabel.isHidden = content.footerText == nil
+        } else {
+            // Processor unavailable: raw only, with the plan's status text.
+            processedLabel.isHidden = true
+            riskLabel.isHidden = true
+            footerLabel.isHidden = true
+            statusLabel.stringValue = "unavailable — raw shown"
+            statusLabel.textColor = NSColor.systemRed
+            statusLabel.isHidden = false
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        rawLabel.frame = ReviewBadgeLayout.textFrame(visualRow: 0)
+        processedLabel.frame = ReviewBadgeLayout.textFrame(visualRow: 1)
+        riskLabel.frame = ReviewBadgeLayout.textFrame(visualRow: 2)
+        footerLabel.frame = ReviewBadgeLayout.textFrame(visualRow: 3)
+        statusLabel.frame = ReviewBadgeLayout.textFrame(visualRow: 2)
+    }
+
+    var rawTextForTesting: String {
+        rawLabel.stringValue
+    }
+
+    var processedTextForTesting: String? {
+        processedLabel.isHidden ? nil : processedLabel.stringValue
+    }
+
+    var riskTextForTesting: String? {
+        riskLabel.isHidden ? nil : riskLabel.stringValue
+    }
+
+    var footerTextForTesting: String? {
+        footerLabel.isHidden ? nil : footerLabel.stringValue
+    }
+
+    var statusTextForTesting: String? {
+        statusLabel.isHidden ? nil : statusLabel.stringValue
+    }
+
+    var riskColorForTesting: NSColor {
+        riskLabel.textColor ?? .clear
     }
 }
 

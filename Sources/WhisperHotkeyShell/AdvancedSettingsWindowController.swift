@@ -31,6 +31,11 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public let configurationEnabled: Bool
     public let automaticallyChecksForUpdates: Bool
     public let softwareUpdateStatus: SoftwareUpdateStatus
+    public let postProcessingEnabled: Bool
+    public let postProcessingProfile: SemanticProfileID
+    public let postProcessingModel: String
+    public let postProcessingThinkingEnabled: Bool
+    public let postProcessingReasoningEffort: String
 
     public init(
         selectedHotkey: HotkeyKey,
@@ -49,7 +54,13 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         availableEngines: Set<RecognitionEngine> = [.whisperCppMetal],
         configurationEnabled: Bool,
         automaticallyChecksForUpdates: Bool = false,
-        softwareUpdateStatus: SoftwareUpdateStatus = .idle
+        softwareUpdateStatus: SoftwareUpdateStatus = .idle,
+        postProcessingEnabled: Bool = false,
+        postProcessingProfile: SemanticProfileID = .clarity,
+        postProcessingModel: String = PostProcessingPreference.defaultModel,
+        postProcessingThinkingEnabled: Bool = false,
+        postProcessingReasoningEffort: String =
+            PostProcessingPreference.defaultReasoningEffort
     ) {
         self.selectedHotkey = selectedHotkey
         self.activationMode = activationMode
@@ -68,6 +79,11 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         self.configurationEnabled = configurationEnabled
         self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         self.softwareUpdateStatus = softwareUpdateStatus
+        self.postProcessingEnabled = postProcessingEnabled
+        self.postProcessingProfile = postProcessingProfile
+        self.postProcessingModel = postProcessingModel
+        self.postProcessingThinkingEnabled = postProcessingThinkingEnabled
+        self.postProcessingReasoningEffort = postProcessingReasoningEffort
     }
 }
 
@@ -94,6 +110,11 @@ public struct AdvancedSettingsActions {
     public var installUpdate: () -> Void
     /// Aborts an in-flight model install started from this window.
     public var cancelModelInstall: () -> Void
+    public var setPostProcessingEnabled: (Bool) -> Void
+    public var selectPostProcessingProfile: (SemanticProfileID) -> Void
+    public var selectPostProcessingModel: (String) -> Void
+    public var setPostProcessingThinkingEnabled: (Bool) -> Void
+    public var selectPostProcessingReasoningEffort: (String) -> Void
 
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
@@ -115,7 +136,15 @@ public struct AdvancedSettingsActions {
         setAutomaticallyChecksForUpdates: @escaping (Bool) -> Void = { _ in },
         checkForUpdates: @escaping () -> Void = {},
         installUpdate: @escaping () -> Void = {},
-        cancelModelInstall: @escaping () -> Void = {}
+        cancelModelInstall: @escaping () -> Void = {},
+        setPostProcessingEnabled: @escaping (Bool) -> Void = { _ in },
+        selectPostProcessingProfile:
+            @escaping (SemanticProfileID) -> Void = { _ in },
+        selectPostProcessingModel: @escaping (String) -> Void = { _ in },
+        setPostProcessingThinkingEnabled:
+            @escaping (Bool) -> Void = { _ in },
+        selectPostProcessingReasoningEffort:
+            @escaping (String) -> Void = { _ in }
     ) {
         self.selectDictationMode = selectDictationMode
         self.selectHotkey = selectHotkey
@@ -138,6 +167,13 @@ public struct AdvancedSettingsActions {
         self.checkForUpdates = checkForUpdates
         self.installUpdate = installUpdate
         self.cancelModelInstall = cancelModelInstall
+        self.setPostProcessingEnabled = setPostProcessingEnabled
+        self.selectPostProcessingProfile = selectPostProcessingProfile
+        self.selectPostProcessingModel = selectPostProcessingModel
+        self.setPostProcessingThinkingEnabled =
+            setPostProcessingThinkingEnabled
+        self.selectPostProcessingReasoningEffort =
+            selectPostProcessingReasoningEffort
     }
 }
 
@@ -163,6 +199,18 @@ enum DictationModelPresentation {
             "Turbo"
         }
     }
+}
+
+enum PostProcessingSettingsPresentation {
+    static let processorModels: [(title: String, rawValue: String)] = [
+        ("DeepSeek V4 Flash", "deepseek-v4-flash"),
+        ("DeepSeek V4 Pro", "deepseek-v4-pro"),
+    ]
+    static let reasoningEfforts: [(title: String, rawValue: String)] = [
+        ("Low", "low"),
+        ("Medium", "medium"),
+        ("High", "high"),
+    ]
 }
 
 @MainActor
@@ -267,6 +315,32 @@ public final class AdvancedSettingsWindowController:
         action: nil
     )
     private let softwareUpdateStatusLabel = NSTextField(labelWithString: "")
+    private let postProcessingToggle = NSButton(
+        checkboxWithTitle: "Enhance transcripts",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingProfileControl = NSSegmentedControl()
+    private let postProcessingModelPopup = NSPopUpButton()
+    private let postProcessingThinkingToggle = NSButton(
+        checkboxWithTitle: "Think before rewriting",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingReasoningControl = NSSegmentedControl()
+    private var postProcessingReasoningRow: NSGridRow?
+    private let postProcessingAPIKeyField = NSSecureTextField()
+    private let postProcessingAPIKeySaveButton = NSButton(
+        title: "Save",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingAPIKeyClearButton = NSButton(
+        title: "Clear",
+        target: nil,
+        action: nil
+    )
+    private let postProcessingAPIKeyStatus = NSTextField(labelWithString: "")
     private let versionLabel = NSTextField(labelWithString: "")
     private let githubButton = NSButton()
     private let helpButton = NSButton()
@@ -300,6 +374,7 @@ public final class AdvancedSettingsWindowController:
         configurePrivacyControls()
         configureLoginItemControls()
         configureUpdateControls()
+        configurePostProcessingControls()
         configureProjectMetadata()
         configureHelpButton()
 
@@ -574,6 +649,26 @@ public final class AdvancedSettingsWindowController:
             state.configurationEnabled && loginStatus != .unknown
         loginItemSettingsButton.isEnabled = state.configurationEnabled
         automaticUpdateCheckToggle.isEnabled = state.configurationEnabled
+
+        postProcessingToggle.state = state.postProcessingEnabled ? .on : .off
+        postProcessingToggle.isEnabled = state.configurationEnabled
+        select(profile: state.postProcessingProfile)
+        postProcessingProfileControl.isEnabled = state.configurationEnabled
+        select(rawValue: state.postProcessingModel, in: postProcessingModelPopup)
+        postProcessingModelPopup.isEnabled = state.configurationEnabled
+        postProcessingThinkingToggle.state =
+            state.postProcessingThinkingEnabled ? .on : .off
+        postProcessingThinkingToggle.isEnabled = state.configurationEnabled
+        postProcessingReasoningRow?.isHidden =
+            !state.postProcessingThinkingEnabled
+        select(reasoningEffort: state.postProcessingReasoningEffort)
+        postProcessingReasoningControl.isEnabled =
+            state.configurationEnabled && state.postProcessingThinkingEnabled
+        postProcessingAPIKeyField.isEnabled = state.configurationEnabled
+        postProcessingAPIKeySaveButton.isEnabled = state.configurationEnabled
+        postProcessingAPIKeyClearButton.isEnabled = state.configurationEnabled
+        updatePostProcessingAPIKeyStatus()
+
         sizeWindowToFitContent()
     }
 
@@ -920,6 +1015,117 @@ public final class AdvancedSettingsWindowController:
         userGuidePopover.toggle(relativeTo: helpButton)
     }
 
+    @objc private func togglePostProcessing(_ sender: NSButton) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setPostProcessingEnabled(sender.state == .on)
+        refresh()
+    }
+
+    @objc private func selectPostProcessingProfile(
+        _ sender: NSSegmentedControl
+    ) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              SemanticProfileID.allCases.indices.contains(
+                  sender.selectedSegment
+              )
+        else {
+            refresh()
+            return
+        }
+        actions.selectPostProcessingProfile(
+            SemanticProfileID.allCases[sender.selectedSegment]
+        )
+        refresh()
+    }
+
+    @objc private func selectPostProcessingModel(_ sender: NSPopUpButton) {
+        guard stateProvider().configurationEnabled,
+              let rawValue = sender.selectedItem?.representedObject
+                  as? String
+        else {
+            refresh()
+            return
+        }
+        actions.selectPostProcessingModel(rawValue)
+        refresh()
+    }
+
+    @objc private func togglePostProcessingThinking(_ sender: NSButton) {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        actions.setPostProcessingThinkingEnabled(sender.state == .on)
+        refresh()
+    }
+
+    @objc private func selectPostProcessingReasoningEffort(
+        _ sender: NSSegmentedControl
+    ) {
+        guard stateProvider().configurationEnabled,
+              PostProcessingSettingsPresentation.reasoningEfforts.indices
+                  .contains(sender.selectedSegment)
+        else {
+            refresh()
+            return
+        }
+        actions.selectPostProcessingReasoningEffort(
+            PostProcessingSettingsPresentation.reasoningEfforts[
+                sender.selectedSegment
+            ].rawValue
+        )
+        refresh()
+    }
+
+    @objc private func savePostProcessingAPIKey() {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        let key = postProcessingAPIKeyField.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            updatePostProcessingAPIKeyStatus()
+            return
+        }
+        do {
+            try ProcessorKeychain.store(apiKey: key)
+            postProcessingAPIKeyField.stringValue = ""
+        } catch {
+            postProcessingAPIKeyStatus.stringValue = "Save failed"
+            return
+        }
+        updatePostProcessingAPIKeyStatus()
+    }
+
+    @objc private func clearPostProcessingAPIKey() {
+        guard stateProvider().configurationEnabled else {
+            refresh()
+            return
+        }
+        do {
+            try ProcessorKeychain.delete()
+            postProcessingAPIKeyField.stringValue = ""
+        } catch {
+            postProcessingAPIKeyStatus.stringValue = "Clear failed"
+            return
+        }
+        updatePostProcessingAPIKeyStatus()
+    }
+
+    private func updatePostProcessingAPIKeyStatus() {
+        do {
+            postProcessingAPIKeyStatus.stringValue =
+                try ProcessorKeychain.read() == nil ? "Not stored" : "Stored"
+        } catch {
+            postProcessingAPIKeyStatus.stringValue = "Unavailable"
+        }
+    }
+
     private var dictationModes: [HotkeyActivationMode] {
         [.hold, .toggle, .pause]
     }
@@ -1163,6 +1369,59 @@ public final class AdvancedSettingsWindowController:
             for: .horizontal
         )
         themedSecondaryLabels.append(softwareUpdateStatusLabel)
+    }
+
+    private func configurePostProcessingControls() {
+        postProcessingToggle.target = self
+        postProcessingToggle.action = #selector(togglePostProcessing(_:))
+        postProcessingToggle.setAccessibilityLabel("Post-processing")
+        configure(
+            postProcessingProfileControl,
+            labels: SemanticProfileID.allCases.map {
+                SemanticProfileCatalog.profile($0).name
+            },
+            action: #selector(selectPostProcessingProfile(_:))
+        )
+        postProcessingProfileControl.setAccessibilityLabel(
+            "Post-processing profile"
+        )
+        configure(
+            postProcessingModelPopup,
+            values: PostProcessingSettingsPresentation.processorModels,
+            action: #selector(selectPostProcessingModel(_:))
+        )
+        postProcessingModelPopup.setAccessibilityLabel(
+            "Post-processing model"
+        )
+        postProcessingThinkingToggle.target = self
+        postProcessingThinkingToggle.action =
+            #selector(togglePostProcessingThinking(_:))
+        postProcessingThinkingToggle.setAccessibilityLabel(
+            "Post-processing thinking"
+        )
+        configure(
+            postProcessingReasoningControl,
+            labels: PostProcessingSettingsPresentation.reasoningEfforts
+                .map(\.title),
+            action: #selector(selectPostProcessingReasoningEffort(_:))
+        )
+        postProcessingReasoningControl.setAccessibilityLabel(
+            "Post-processing reasoning effort"
+        )
+        postProcessingAPIKeyField.placeholderString = "DeepSeek API key"
+        postProcessingAPIKeyField.setAccessibilityLabel("DeepSeek API key")
+        postProcessingAPIKeySaveButton.target = self
+        postProcessingAPIKeySaveButton.action =
+            #selector(savePostProcessingAPIKey)
+        postProcessingAPIKeySaveButton.bezelStyle = .rounded
+        postProcessingAPIKeySaveButton.controlSize = .small
+        postProcessingAPIKeyClearButton.target = self
+        postProcessingAPIKeyClearButton.action =
+            #selector(clearPostProcessingAPIKey)
+        postProcessingAPIKeyClearButton.bezelStyle = .rounded
+        postProcessingAPIKeyClearButton.controlSize = .small
+        postProcessingAPIKeyStatus.font = .systemFont(ofSize: 11)
+        postProcessingAPIKeyStatus.textColor = .secondaryLabelColor
     }
 
     private func configureProjectMetadata() {
@@ -1455,6 +1714,24 @@ public final class AdvancedSettingsWindowController:
         processingModeControl.selectedSegment = index
     }
 
+    private func select(profile: SemanticProfileID) {
+        guard let index = SemanticProfileID.allCases.firstIndex(
+            of: profile
+        ) else {
+            return
+        }
+        postProcessingProfileControl.selectedSegment = index
+    }
+
+    private func select(reasoningEffort: String) {
+        guard let index = PostProcessingSettingsPresentation.reasoningEfforts
+            .firstIndex(where: { $0.rawValue == reasoningEffort })
+        else {
+            return
+        }
+        postProcessingReasoningControl.selectedSegment = index
+    }
+
     private func makeInternalDictionaryControl() -> NSView {
         let addStack = NSStackView()
         addStack.orientation = .vertical
@@ -1671,6 +1948,62 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(recognitionGrid)
         stack.setCustomSpacing(20, after: recognitionGrid)
 
+        let postProcessingTitle = makeSectionTitle("POST-PROCESSING")
+        stack.addArrangedSubview(postProcessingTitle)
+        let postProcessingGrid = makeGrid()
+        addRow(
+            to: postProcessingGrid,
+            title: "Post-processing",
+            control: postProcessingToggle
+        )
+        addRow(
+            to: postProcessingGrid,
+            title: "Profile",
+            control: postProcessingProfileControl
+        )
+        addRow(
+            to: postProcessingGrid,
+            title: "Processor",
+            control: postProcessingModelPopup
+        )
+        addRow(
+            to: postProcessingGrid,
+            title: "Thinking",
+            control: postProcessingThinkingToggle
+        )
+        postProcessingReasoningRow = addRow(
+            to: postProcessingGrid,
+            title: "Reasoning effort",
+            control: postProcessingReasoningControl
+        )
+        let apiKeyControls = NSStackView(
+            views: [
+                postProcessingAPIKeyField,
+                postProcessingAPIKeySaveButton,
+                postProcessingAPIKeyClearButton,
+                postProcessingAPIKeyStatus,
+            ]
+        )
+        apiKeyControls.orientation = .horizontal
+        apiKeyControls.alignment = .centerY
+        apiKeyControls.spacing = 6
+        postProcessingAPIKeyField.setContentHuggingPriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        postProcessingAPIKeyStatus.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        addRow(
+            to: postProcessingGrid,
+            title: "API key",
+            control: apiKeyControls
+        )
+        sizeColumns(in: postProcessingGrid)
+        stack.addArrangedSubview(postProcessingGrid)
+        stack.setCustomSpacing(20, after: postProcessingGrid)
+
         let appearanceTitle = makeSectionTitle("APPEARANCE")
         stack.addArrangedSubview(appearanceTitle)
         let appearanceGrid = makeGrid()
@@ -1753,6 +2086,9 @@ public final class AdvancedSettingsWindowController:
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -24),
             inputGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             recognitionGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            postProcessingGrid.widthAnchor.constraint(
+                equalTo: stack.widthAnchor
+            ),
             appearanceGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startupGrid.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
