@@ -3,6 +3,13 @@
 Read [`purpose.md`](purpose.md) before changing application behavior. It is the
 product contract for this repository.
 
+## Session context
+
+The `post_processing` branch carries active voice-to-prompt development. Read
+[`2026-08-17-post-processing-branch-commit-log.md`](2026-08-17-post-processing-branch-commit-log.md)
+for the session commit log, keychain contract, known bug fixes, and handoff
+pointers before working on or near that branch.
+
 ## Product boundaries
 
 - `whisper_hotkey` is a native, headless macOS 14+ arm64 dictation agent.
