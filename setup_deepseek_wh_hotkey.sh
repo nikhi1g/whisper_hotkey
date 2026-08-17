@@ -74,8 +74,12 @@ if [ "$VERIFY_ONLY" -eq 0 ]; then
 
     # --- 4. Store in the login keychain -------------------------------------
     say "${BOLD}Storing the key in the login keychain…${RESET}"
+    # `-T` trusts the installed app explicitly; without it the keychain ACL
+    # ties the item to the `security` tool and the app cannot read or replace
+    # it. `-A` is kept as a fallback for dev binaries run from .build paths.
     security delete-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1 || true
-    security add-generic-password -U -s "$SERVICE" -a "$ACCOUNT" -w "$KEY" \
+    security add-generic-password -U -A -T "/Applications/whisper_hotkey.app" \
+        -s "$SERVICE" -a "$ACCOUNT" -w "$KEY" \
         || die "Keychain write failed."
 
     # --- 5. Read-back verification ------------------------------------------
@@ -87,7 +91,6 @@ if [ "$VERIFY_ONLY" -eq 0 ]; then
     fi
     unset STORED
 fi
-
 # --- 6. Live verification against both processor models -----------------------
 if [ "$VERIFY_ONLY" -eq 1 ] || [ "${1:-}" = "--verify" ]; then
     say "${BOLD}Verifying the key against the DeepSeek API…${RESET}"

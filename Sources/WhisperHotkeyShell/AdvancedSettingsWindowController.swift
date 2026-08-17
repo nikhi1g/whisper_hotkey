@@ -354,6 +354,7 @@ public final class AdvancedSettingsWindowController:
     )
     private let postProcessingAPIKeyStatus = NSTextField(labelWithString: "")
     private var postProcessingKeyCheckTask: Task<Void, Never>?
+    private var postProcessingKeyStatusTask: Task<Void, Never>?
     private var postProcessingKeyRevertTask: Task<Void, Never>?
     private var postProcessingKeyCheckInFlight = false
     private let versionLabel = NSTextField(labelWithString: "")
@@ -1258,11 +1259,23 @@ public final class AdvancedSettingsWindowController:
     private func updatePostProcessingAPIKeyStatus() {
         postProcessingKeyRevertTask?.cancel()
         postProcessingKeyRevertTask = nil
-        do {
-            postProcessingAPIKeyStatus.stringValue =
-                try ProcessorKeychain.read() == nil ? "Not stored" : "Stored"
-        } catch {
-            postProcessingAPIKeyStatus.stringValue = "Unavailable"
+        postProcessingKeyStatusTask?.cancel()
+        // The keychain read can stall on a restricted ACL; never let it
+        // block refresh() or the main thread. The label updates when the
+        // read settles.
+        postProcessingKeyStatusTask = Task.detached { [weak self] in
+            let state: String
+            do {
+                state = try ProcessorKeychain.read() == nil
+                    ? "Not stored"
+                    : "Stored"
+            } catch {
+                state = "Unavailable"
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.postProcessingAPIKeyStatus.stringValue = state
+            }
         }
     }
 

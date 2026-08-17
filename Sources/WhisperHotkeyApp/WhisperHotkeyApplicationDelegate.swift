@@ -1321,12 +1321,15 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         delivery: RecognitionPipelineDelivery?
     ) {
         let enabled = PostProcessingPreference.isEnabled()
+        // `try?` over a `String?`-returning function nests optionals; the
+        // explicit flatten keeps "no stored key" and "keychain denied"
+        // distinct from "key present".
+        let apiKeyAvailable = enabled
+            && ((try? ProcessorKeychain.read()) ?? nil) != nil
         let route = PostProcessingReviewFlow.routeFinalTranscript(
             text,
             postProcessingEnabled: enabled,
-            // Short-circuited: the keychain is never touched while the
-            // feature is disabled, keeping that path free of extra work.
-            apiKeyAvailable: enabled && (try? ProcessorKeychain.read()) != nil,
+            apiKeyAvailable: apiKeyAvailable,
             profile: PostProcessingPreference.selectedProfile(),
             protectedTerms: delivery?.protectedTerms ?? [],
             uncertainSpans: delivery?.uncertainSpans ?? [],

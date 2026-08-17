@@ -81,9 +81,31 @@ public enum ProcessorKeychain {
             kSecValueData as String: Data(value.utf8),
         ]
         let status = SecItemAdd(attributes as CFDictionary, nil)
-        guard status == errSecSuccess else {
+        if status == errSecDuplicateItem {
+            // A duplicate means the delete could not see the item (for
+            // example a legacy ACL). Update it in place instead of failing
+            // the save.
+            let update: [String: Any] = [
+                kSecValueData as String: Data(value.utf8),
+            ]
+            let updateStatus = SecItemUpdate(
+                query() as CFDictionary,
+                update as CFDictionary
+            )
+            guard updateStatus == errSecSuccess else {
+                throw ProcessorKeychainError.unexpectedStatus(updateStatus)
+            }
+        } else if status != errSecSuccess {
             throw ProcessorKeychainError.unexpectedStatus(status)
         }
+    }
+
+    private static func query() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
     }
 
     /// Removes the stored item, tolerating absence.
