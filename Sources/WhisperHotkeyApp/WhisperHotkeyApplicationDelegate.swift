@@ -285,16 +285,35 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var presentedReviewPreview: PostProcessPreview?
     private var reviewController: PostProcessReviewController?
     private var reviewSession: PostProcessingReviewSession?
-    /// Created on first use only: when post-processing is disabled the app
+    /// Created on demand only: when post-processing is disabled the app
     /// never instantiates the processor, its session, or the key provider.
-    private lazy var transcriptProcessor = DeepSeekTranscriptProcessor(
-        apiKeyProvider: {
-            guard let key = try ProcessorKeychain.read() else {
-                throw ProcessorError.missingKey
-            }
-            return key
-        }
-    )
+    /// A fresh instance per dictation keeps model/thinking/effort preference
+    /// changes effective immediately; construction is inert (no network).
+    private func makeTranscriptProcessor() -> DeepSeekTranscriptProcessor {
+        let environmentModel = ProcessInfo.processInfo.environment[
+            "DEEPSEEK_PROCESSOR_MODEL"
+        ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = (environmentModel?.isEmpty == false)
+            ? environmentModel!
+            : PostProcessingPreference.selectedModel()
+        let effort = DeepSeekReasoningEffort(
+            rawValue: PostProcessingPreference.selectedReasoningEffort()
+        ) ?? .low
+        let configuration = DeepSeekConfiguration(
+            model: model,
+            thinkingEnabled: PostProcessingPreference.isThinkingEnabled(),
+            reasoningEffort: effort
+        )
+        return DeepSeekTranscriptProcessor(
+            apiKeyProvider: {
+                guard let key = try ProcessorKeychain.read() else {
+                    throw ProcessorError.missingKey
+                }
+                return key
+            },
+            configuration: configuration
+        )
+    }
     private var startupError: String?
     private var startupBadgeVisible = false
     private var runtimeReadyForHotkey = false
@@ -655,6 +674,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @discardableResult
     private func apply(
         _ effect: DictationEffect,
         transcript: String?
@@ -685,7 +705,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             pendingReviewRequest = nil
             activeReviewRequest = request
             let session = reviewSession ?? PostProcessingReviewSession(
-                processor: transcriptProcessor,
+                processor: makeTranscriptProcessor(),
                 isSessionCurrent: { [weak self] generation in
                     self?.sessionGeneration == generation
                         && self?.machine.phase == .reviewing
