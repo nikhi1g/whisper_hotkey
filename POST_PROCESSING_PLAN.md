@@ -195,6 +195,20 @@ public struct PostProcessPreview: Equatable, Sendable {
 // DictationEffect: add case requestProcessing, showReview(PostProcessPreview)
 ```
 
+**Keychain contract (fixed; setup script and app share it):**
+
+```text
+service: com.whisperhotkey.deepseek
+account: api-key
+kind:    generic password
+```
+
+Read precedence in `ProcessorKeychain.read()`: `DEEPSEEK_API_KEY` env first
+(dev override), then Keychain. `store()` overwrites atomically.
+`setup_deepseek_wh_hotkey.sh` writes the same item via
+`security add-generic-password -U` with no `-T` ACL, so the dev build can read
+it without signature coupling.
+
 ---
 
 ## 3. Context pack policy (v1)
@@ -281,12 +295,14 @@ owned_paths:
   - Sources/WhisperHotkeyShell/PostProcessReviewController.swift    # new
   - Sources/WhisperHotkeyShell/AdvancedSettingsWindowController.swift  # additive section only
   - Sources/WhisperHotkeyShell/CaretBadgeController.swift           # additive reviewing state only, no redesign
+  - Sources/WhisperHotkeyCore/Preferences.swift                     # additive: postProcessingEnabled (default false), postProcessingProfile (default "clarity")
   - Tests/WhisperHotkeyShellTests/PostProcessReviewControllerTests.swift  # new (state logic only)
 acceptance_criteria:
   - swift build --target WhisperHotkeyShell succeeds
   - Review state renders raw/processed stacked with preserved-token and correction footer and risk color per BadgeThemePalette; Enter accepts, Escape cancels, Cmd+Z restores raw, Tab cycles profile (key handling mirrors existing badge patterns)
   - Non-activating panel; one panel reused for process lifetime; no timer added at idle
   - Settings gains: Post-processing toggle (off default), profile picker (3 chips), API-key SecureTextField writing to ProcessorKeychain only; "unavailable — raw shown" state renders
+  - Preference keys added exactly: postProcessingEnabled (Bool), postProcessingProfile (String raw SemanticProfileID); no other preference surface changes
   - No DOM/website coupling; no destination changes
 role: ui
 verification: compile
