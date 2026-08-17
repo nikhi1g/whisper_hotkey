@@ -316,6 +316,7 @@ worktree: .claude/worktrees/w17-app-integration
 branch: w17-integration
 owned_paths:
   - Sources/WhisperHotkeyCore/DictationStateMachine.swift           # additive phase/events/effects
+  - Sources/WhisperHotkeyCore/Contracts.swift                       # additive: DictationPhase case reviewing + isBusy
   - Sources/WhisperHotkeyApp/WhisperHotkeyApplicationDelegate.swift # additive wiring only
   - Sources/WhisperHotkeyApp/RecognitionPipelineCoordinator.swift   # hook after delivery, additive
   - Tests/WhisperHotkeyCoreTests/DictationStateMachineReviewTests.swift  # new (state transitions)
@@ -357,7 +358,7 @@ handoff: commit
 | File area | Owner |
 |---|---|
 | `Sources/WhisperHotkeyCore/Post*.swift`, `SemanticProfile.swift`, `VoiceCommandParser.swift` | w14 |
-| `Sources/WhisperHotkeyCore/DictationStateMachine.swift` | w17 |
+| `Sources/WhisperHotkeyCore/DictationStateMachine.swift`, `Contracts.swift` (DictationPhase case only) | w17 |
 | `Sources/WhisperHotkeyShell/DeepSeek*.swift`, `ProcessorKeychain.swift` | w15 |
 | `Sources/WhisperHotkeyShell/PostProcessReviewController.swift`, `CaretBadgeController.swift`, `AdvancedSettingsWindowController.swift` | w16 |
 | `Sources/WhisperHotkeyApp/*` | w17 |
