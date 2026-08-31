@@ -468,6 +468,97 @@ final class AudioCaptureTests: XCTestCase {
         XCTAssertLessThan(written.length, 1_700)
     }
 
+    func testConfigurationObserverHandlesOnlyItsEngineAndUnregisters() {
+        let notificationCenter = NotificationCenter()
+        let ownedEngine = AVAudioEngine()
+        let otherEngine = AVAudioEngine()
+        let count = LockedCounter()
+        var observer: WhisperAudioConfigurationObserver? =
+            WhisperAudioConfigurationObserver(
+                engine: ownedEngine,
+                notificationCenter: notificationCenter
+            ) {
+                count.increment()
+            }
+
+        notificationCenter.post(
+            name: .AVAudioEngineConfigurationChange,
+            object: otherEngine
+        )
+        XCTAssertEqual(count.value, 0)
+
+        notificationCenter.post(
+            name: .AVAudioEngineConfigurationChange,
+            object: ownedEngine
+        )
+        XCTAssertEqual(count.value, 1)
+
+        observer = nil
+        notificationCenter.post(
+            name: .AVAudioEngineConfigurationChange,
+            object: ownedEngine
+        )
+        XCTAssertEqual(count.value, 1)
+        XCTAssertNil(observer)
+    }
+
+    func testWriterConvertsConsecutiveAirPodsFormatTransitions() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "whisper_hotkey-airpods-format-test-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("dictation.wav")
+        let fileFormat = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        var outputFile: AVAudioFile? = try AVAudioFile(
+            forWriting: url,
+            settings: fileFormat.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let writer = WhisperWAVWriter(
+            file: try XCTUnwrap(outputFile),
+            segmentFile: nil,
+            segmentAudioFile: nil,
+            outputFormat: try XCTUnwrap(outputFile?.processingFormat)
+        )
+
+        for sampleRate in [48_000.0, 16_000.0, 24_000.0] {
+            let inputFormat = try XCTUnwrap(
+                AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: sampleRate,
+                    channels: 1,
+                    interleaved: false
+                )
+            )
+            writer.consume(
+                try makeConstantBuffer(format: inputFormat, value: 0.2)
+            )
+        }
+
+        XCTAssertNil(writer.finish())
+        outputFile = nil
+        let written = try AVAudioFile(forReading: url)
+        XCTAssertEqual(written.fileFormat.sampleRate, 16_000)
+        XCTAssertEqual(written.fileFormat.channelCount, 1)
+        XCTAssertGreaterThan(written.length, 600)
+        XCTAssertLessThan(written.length, 680)
+    }
+
     func testAudioFileDeletesItsWholePrivateDirectoryIdempotently()
         throws {
         let directory = FileManager.default.temporaryDirectory
@@ -628,6 +719,23 @@ final class AudioCaptureTests: XCTestCase {
             samples[index] = value
         }
         return buffer
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }
 

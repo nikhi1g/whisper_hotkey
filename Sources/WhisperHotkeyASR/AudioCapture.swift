@@ -367,6 +367,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         case provisional
         case adopted
     }
+    private static let configurationRecoveryRetryDelay: TimeInterval = 0.1
+    private static let maximumConfigurationRecoveryFailures = 2
+
 
     private let engineBox: WhisperAudioEngineBox
     private let fileManager: FileManager
@@ -387,6 +390,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private var pauseSegmentation = false
     private var startupError: WhisperASRError?
     private var rejectedTokens: [WhisperAudioCaptureToken: WhisperASRError] = [:]
+    private var captureError: WhisperASRError?
+    private var configurationRecoveryFailures = 0
+    private var configurationRecoveryScheduled = false
+    private var configurationObserver: WhisperAudioConfigurationObserver?
     private var rejectedTokenOrder: [WhisperAudioCaptureToken] = []
     private var writer: WhisperWAVWriter?
     private var sink: WhisperBufferedAudioSink?
@@ -402,6 +409,15 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         engineBox = WhisperAudioEngineBox(audioEngine)
         self.fileManager = fileManager
         self.temporaryDirectory = temporaryDirectory
+        configurationObserver = WhisperAudioConfigurationObserver(
+            engine: audioEngine
+        ) { [weak self] in
+            self?.audioEngineConfigurationChanged()
+        }
+    }
+
+    deinit {
+        configurationObserver = nil
     }
 
     var isRecording: Bool {
@@ -487,6 +503,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
                 cleanupCapture()
                 throw startupError
             }
+            if let captureError {
+                cleanupCapture()
+                throw captureError
+            }
             guard let audioFile else {
                 cleanupCapture()
                 throw WhisperASRError.captureFailed(
@@ -513,6 +533,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             guard phase == .adopted, let audioFile, let writer else {
                 throw WhisperASRError.noActiveRecording
             }
+            if let captureError {
+                cleanupCapture()
+                throw captureError
+            }
             let lease = audioLease
             stopEngineAndTap()
             let queueError = sink?.finishAcceptingAndWait()
@@ -525,6 +549,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             phase = nil
             startupError = nil
 
+            captureError = nil
+            configurationRecoveryFailures = 0
+            configurationRecoveryScheduled = false
             if queueError != nil || writeError != nil {
                 audioFile.delete()
                 lease?.finish()
@@ -545,9 +572,15 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
                   pauseSegmentation,
                   let writer,
                   let sink,
-                  audioFile != nil,
-                  engineBox.engine.isRunning
+                  audioFile != nil
             else {
+                throw WhisperASRError.noActiveRecording
+            }
+            if let captureError {
+                cleanupCapture()
+                throw captureError
+            }
+            guard engineBox.engine.isRunning else {
                 throw WhisperASRError.noActiveRecording
             }
             let nextAudio = try makePrivateAudioFile()
@@ -586,6 +619,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             else {
                 throw WhisperASRError.noActiveRecording
             }
+            if let captureError {
+                cleanupCapture()
+                throw captureError
+            }
             let lease = audioLease
             stopEngineAndTap()
             let queueError = sink?.finishAcceptingAndWait()
@@ -598,6 +635,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             phase = nil
             startupError = nil
 
+            captureError = nil
+            configurationRecoveryFailures = 0
+            configurationRecoveryScheduled = false
             guard queueError == nil,
                   result.error == nil,
                   let finalSegment = result.segment
@@ -646,6 +686,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         phase = .provisional
         self.pauseSegmentation = pauseSegmentation
         startupError = nil
+        captureError = nil
+        configurationRecoveryFailures = 0
+        configurationRecoveryScheduled = false
 
         do {
             try prepareCapture(
@@ -701,15 +744,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         // exception if the hardware changed before tap installation. A nil
         // format asks the input node to supply its current native format; the
         // writer creates its converter from the first actual buffer.
-        inputNode.removeTap(onBus: 0)
-        inputTapInstalled = false
-        inputNode.installTap(
-            onBus: 0,
-            bufferSize: 1_024,
-            format: nil,
-            block: makeWhisperAudioTapHandler(sink: sink)
-        )
-        inputTapInstalled = true
+        installInputTap(on: inputNode, sink: sink)
 
         let prepared = try activateWhisperCaptureFastPath(
             activateCapture: {
@@ -815,6 +850,101 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         return file
     }
 
+    private func installInputTap(
+        on inputNode: AVAudioInputNode,
+        sink: WhisperBufferedAudioSink
+    ) {
+        inputNode.removeTap(onBus: 0)
+        inputTapInstalled = false
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: nil,
+            block: makeWhisperAudioTapHandler(sink: sink)
+        )
+        inputTapInstalled = true
+    }
+
+    private func audioEngineConfigurationChanged() {
+        controlQueue.async { [weak self] in
+            self?.scheduleConfigurationRecovery()
+        }
+    }
+
+    private func scheduleConfigurationRecovery(
+        after delay: TimeInterval = 0
+    ) {
+        guard activeToken != nil,
+              phase != nil,
+              startupError == nil,
+              captureError == nil,
+              !configurationRecoveryScheduled
+        else {
+            return
+        }
+        configurationRecoveryScheduled = true
+        controlQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.recoverFromConfigurationChange()
+        }
+    }
+
+    private func recoverFromConfigurationChange() {
+        configurationRecoveryScheduled = false
+        guard activeToken != nil,
+              phase != nil,
+              startupError == nil,
+              captureError == nil
+        else {
+            return
+        }
+
+        do {
+            try restartCaptureAfterConfigurationChange()
+            configurationRecoveryFailures = 0
+        } catch {
+            configurationRecoveryFailures += 1
+            if configurationRecoveryFailures
+                < Self.maximumConfigurationRecoveryFailures
+            {
+                scheduleConfigurationRecovery(
+                    after: Self.configurationRecoveryRetryDelay
+                )
+                return
+            }
+            let failure = (error as? WhisperASRError)
+                ?? WhisperASRError.captureFailed(
+                    "Microphone input did not recover after its route changed."
+                )
+            stopEngineAndTap()
+            if phase == .provisional {
+                startupError = failure
+            } else {
+                captureError = failure
+            }
+        }
+    }
+
+    private func restartCaptureAfterConfigurationChange() throws {
+        guard let sink else {
+            throw WhisperASRError.captureFailed(
+                "The microphone writer is unavailable."
+            )
+        }
+        removeInputTap()
+        engineBox.engine.reset()
+
+        let inputNode = engineBox.engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0,
+              inputFormat.channelCount > 0
+        else {
+            throw WhisperASRError.microphoneUnavailable
+        }
+        installInputTap(on: inputNode, sink: sink)
+        engineBox.engine.prepare()
+        try engineBox.engine.start()
+    }
+
     private func removeInputTap() {
         guard inputTapInstalled else { return }
         engineBox.engine.inputNode.removeTap(onBus: 0)
@@ -841,6 +971,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         phase = nil
         pauseSegmentation = false
         startupError = nil
+        captureError = nil
+        configurationRecoveryFailures = 0
+        configurationRecoveryScheduled = false
     }
 
     private func rememberRejectedToken(
@@ -1619,6 +1752,32 @@ struct WhisperSpeechActivityDetector: Equatable {
             typicalPauseDuration = trailingSilenceDuration
         }
         trailingSilenceDuration = 0
+    }
+}
+
+final class WhisperAudioConfigurationObserver: @unchecked Sendable {
+    private let notificationCenter: NotificationCenter
+    private var token: NSObjectProtocol?
+
+    init(
+        engine: AVAudioEngine,
+        notificationCenter: NotificationCenter = .default,
+        onConfigurationChange: @escaping @Sendable () -> Void
+    ) {
+        self.notificationCenter = notificationCenter
+        token = notificationCenter.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { _ in
+            onConfigurationChange()
+        }
+    }
+
+    deinit {
+        if let token {
+            notificationCenter.removeObserver(token)
+        }
     }
 }
 
