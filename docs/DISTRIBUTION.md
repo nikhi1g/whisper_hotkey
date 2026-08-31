@@ -2,90 +2,113 @@
 
 The public product route is
 [`https://nikhi1g.github.io/whisper_hotkey/`](https://nikhi1g.github.io/whisper_hotkey/).
-GitHub Pages deploys the static files in `site/` through `pages.yml`. The page
-queries the latest GitHub release and sends its primary button to the
-`whisper_hotkey.zip` asset, falling back to `whisper_hotkey.dmg` and then to
-the releases page.
+GitHub Pages deploys `site/` through `pages.yml`. The page queries the latest
+stable GitHub release and links only the exact `whisper_hotkey.dmg` asset. If
+that asset is absent, the page leaves the user on the releases page rather than
+silently selecting a source archive or an obsolete application ZIP.
 
-## Signing status
+## Signing and notarization policy
 
-This project has no paid Apple Developer Program membership, so releases cannot
-be notarized. Every release is signed with a stable **Apple Development**
-identity instead. That choice is deliberate:
+Every stable release must be:
 
-- A stable identity keeps the app's designated requirement constant, which is
-  what `SoftwareUpdateInstaller` checks before it will install an update, and
-  what keeps Microphone, Accessibility, and Input Monitoring grants attached
-  across versions. Ad-hoc signing would break both.
-- Without an Apple ticket, Gatekeeper blocks the first launch. Users clear it
-  once through **System Settings → Privacy & Security → Open Anyway**. The
-  README and the product page both document that step.
-- `spctl --assess` reports `rejected` for these artifacts. That is the expected
-  state, not a regression.
+- signed with the project's **Developer ID Application** identity;
+- signed with secure timestamps and the hardened runtime;
+- granted only the hardened-runtime audio-input entitlement required for local
+  microphone capture;
+- submitted to Apple's notary service with `notarytool`;
+- accepted, stapled, and validated before its checksum is written;
+- accepted by Gatekeeper as a disk image before publication.
 
-The ZIP is the human download because macOS 15 and later block an unnotarized
-disk image *before it mounts*, which leaves the user with a "Move to Trash"
-dialog and no obvious recovery. The DMG is still published under its exact
-historical name because the in-app updater fetches
-`whisper_hotkey.dmg` and `whisper_hotkey.dmg.sha256` and mounts them directly,
-where no quarantine flag is involved.
+The human download and the in-app updater use the same
+`whisper_hotkey.dmg`/`whisper_hotkey.dmg.sha256` pair. Stable releases never
+publish an application ZIP, an Apple Development build, an ad-hoc build, or an
+unnotarized fallback.
 
-Apple Development certificates expire after about a year. A reissued certificate
-changes the designated requirement, so in-app updates from older versions will
-stop working and those users need a manual download.
+The first Developer ID release changes the designated requirement from the
+historical Apple Development identity. The existing updater permits this
+one-time migration by accepting a differently signed candidate only when
+Gatekeeper trusts it. macOS may still require existing users to regrant
+Microphone, Accessibility, and Input Monitoring once after that transition.
+The bundle identifier, application name, preference domain, and update asset
+names must not change.
 
-## One-time repository setup
+## One-time Apple and repository setup
 
-In **Settings → Pages**, select **GitHub Actions** as the Pages source. In
-**Settings → Secrets and variables → Actions**, add:
+Create a **Developer ID Application** certificate for the project's Apple
+Developer team, install it with its private key, and export that identity as a
+password-protected PKCS #12 file. Create an Apple ID app-specific password for
+`notarytool` and confirm the team ID in the Apple Developer account.
+
+Create a GitHub environment named `release`. Add these environment secrets
+under **Settings → Environments → release**:
 
 | Secret | Value |
 | --- | --- |
-| `APPLE_SIGNING_CERTIFICATE_P12_BASE64` | Base64-encoded signing certificate and private key exported as PKCS #12 |
-| `APPLE_SIGNING_CERTIFICATE_P12_PASSWORD` | Password used for that PKCS #12 export |
+| `APPLE_SIGNING_CERTIFICATE_P12_BASE64` | Base64-encoded Developer ID Application certificate and private key |
+| `APPLE_SIGNING_CERTIFICATE_P12_PASSWORD` | Password protecting the PKCS #12 export |
+| `NOTARY_APPLE_ID` | Apple ID used by the developer team |
+| `NOTARY_PASSWORD` | Apple ID app-specific password |
+| `APPLE_TEAM_ID` | Developer team identifier |
 
-Export the same identity that signed the previous release, otherwise existing
-installs lose in-app updates:
+Export and upload the certificate without printing its contents:
 
 ```sh
 /usr/bin/security export -k login.keychain-db -t identities -f pkcs12 \
-  -P '<choose-a-password>' -o ~/Desktop/whisper_hotkey-signing.p12
-gh secret set APPLE_SIGNING_CERTIFICATE_P12_BASE64 \
-  --body "$(base64 -i ~/Desktop/whisper_hotkey-signing.p12)"
-gh secret set APPLE_SIGNING_CERTIFICATE_P12_PASSWORD --body '<same-password>'
-rm ~/Desktop/whisper_hotkey-signing.p12
+  -P '<temporary-export-password>' \
+  -o ~/Desktop/whisper_hotkey-developer-id.p12
+gh secret set --env release APPLE_SIGNING_CERTIFICATE_P12_BASE64 \
+  < <(base64 -i ~/Desktop/whisper_hotkey-developer-id.p12)
+gh secret set --env release APPLE_SIGNING_CERTIFICATE_P12_PASSWORD
+gh secret set --env release NOTARY_APPLE_ID
+gh secret set --env release NOTARY_PASSWORD
+gh secret set --env release APPLE_TEAM_ID
+rm ~/Desktop/whisper_hotkey-developer-id.p12
 ```
 
-The personal-site repository only needs a normal link to
-`/whisper_hotkey/`. GitHub serves this project repository's Pages site at that
-route automatically; do not create a competing directory with the same name in
-`nikhi1g.github.io`.
+Enter secret values only at the hidden prompts. Never place a certificate,
+private key, Apple password, or app-specific password in a tracked file,
+command-line argument, release note, issue, or chat.
+
+In **Settings → Pages**, keep **GitHub Actions** as the Pages source. The
+personal-site repository needs only its normal `/whisper_hotkey/` link; do not
+create a competing directory with the same route in `nikhi1g.github.io`.
+
+## CI preflight
+
+Before the first notarized tag, run `release.yml` manually against the release
+commit. `workflow_dispatch` performs the complete build, Developer ID signing,
+notarization, stapling, and Gatekeeper assessment but does not create a GitHub
+release. A missing credential or rejected submission fails before publication.
+
+Inspect the workflow's `notarytool log` output even when Apple accepts the
+submission. Resolve every signing or hardened-runtime warning before tagging.
 
 ## Publish a release
 
-1. Update `VERSION`, the embedded login-launcher version, release notes, and the
-   matching file under `docs/releases/`.
-2. Run `swift test` and `python3 build_app.py` locally with a stable development
-   identity.
-3. Commit the release, then create and push the matching tag, such as `v3.2.3`.
-4. The `release.yml` workflow builds pinned whisper.cpp 1.9.1 for the declared
-   macOS 14 deployment target, downloads Base English, verifies its pinned
-   SHA-256, tests the project, and imports the temporary signing identity.
-5. The workflow builds with secure timestamps, packages the ZIP and the DMG, and
-   uploads both with their checksums and the source archive to the matching
-   GitHub release.
+1. Update `VERSION`, the embedded login-launcher version, `RELEASE_NOTES.md`,
+   `CHANGELOG.md`, and the matching file under `docs/releases/`.
+2. Run the complete suite and a local Developer ID/notarization candidate.
+3. Commit the release and push the release commit.
+4. Run the non-publishing `workflow_dispatch` preflight.
+5. Create and push the matching stable tag, such as `v4.2.8`.
+6. `release.yml` builds the pinned macOS 14 dependencies, downloads the bundled
+   Parakeet checkpoints, tests the project, imports the temporary Developer ID
+   identity, notarizes and staples the DMG, then creates the GitHub release.
+7. Confirm the release contains the DMG, its checksum, the source archive, and
+   its checksum. It must not contain a separately packaged application ZIP.
+8. Download the public DMG through a browser and complete the Finder-based
+   fresh-install test.
 
-### Publishing without CI
+The workflow creates the release only after every notarization and assessment
+gate passes. Do not hand-upload a failed, locally substituted, or unnotarized
+artifact under the stable asset name.
 
-This is the current route. The workflow secrets are not set, so `release.yml`
-exits in ~15 seconds at "Validate release ref and secrets" on every tag push,
-before it touches the release. That failure is expected and harmless; the
-assets below are what actually ship.
+## Local release-candidate build
 
-First build the pinned whisper.cpp for the declared deployment target.
-`build_app.py` refuses Homebrew's `whisper-cpp` because it targets the host
-macOS, and `verify_distribution_targets` rejects anything above macOS 14 — that
-guardrail is what keeps the release runnable on macOS 14 and later:
+Build the pinned whisper.cpp library for the declared macOS 14 deployment
+target. `build_app.py` refuses Homebrew's host-targeted `whisper-cpp`, and
+`verify_distribution_targets` rejects any bundled binary requiring a newer
+macOS version.
 
 ```sh
 git clone --depth 1 --branch v1.9.1 \
@@ -106,36 +129,66 @@ export GGML_PREFIX=/tmp/whisper.cpp-install
 export HOMEBREW_PREFIX="$(brew --prefix)"
 ```
 
-Then produce and upload the assets on the release commit:
+With the bundled Parakeet checkpoints present in FluidAudio's model cache:
 
 ```sh
+export WHISPER_HOTKEY_CODESIGN_IDENTITY='Developer ID Application: …'
+export NOTARY_APPLE_ID='…'
+export NOTARY_PASSWORD='…'
+export APPLE_TEAM_ID='…'
 WHISPER_HOTKEY_BUNDLE_MODEL=1 WHISPER_HOTKEY_DISTRIBUTION=1 \
-  WHISPER_HOTKEY_UNNOTARIZED=1 python3 build_app.py
-python3 tools/package_zip.py
-python3 tools/package_dmg.py --unnotarized
+  python3 build_app.py
+python3 tools/package_dmg.py --notarize
+```
+
+For an actual tagged release, create the source archive with:
+
+```sh
 python3 tools/package_release.py "v$(cat VERSION)"
-gh release create "v$(cat VERSION)" --title "whisper_hotkey $(cat VERSION)" \
-  --notes-file RELEASE_NOTES.md --verify-tag
-gh release upload "v$(cat VERSION)" --clobber dist/release/*
 ```
 
 `package_release.py` refuses a dirty tree and a tag that does not match
-`VERSION`, so commit and tag before packaging. The ZIP and DMG are ~1.2 GB
-each; uploading them in separate `gh release upload` calls makes a failure
-easier to retry. Confirm what landed with
-`shasum -a 256 -c dist/release/*.sha256` and by diffing the published
-`.sha256` files against the local ones.
+`VERSION`. Never replace assets under a published tag. If a release must be
+withdrawn, restore the previous release as latest and publish the correction
+under a higher version.
+
+## Verification gates
+
+The final public artifact must pass all of these checks:
+
+```sh
+codesign --verify --deep --strict --verbose=2 dist/whisper_hotkey.app
+codesign --display --verbose=4 dist/whisper_hotkey.app
+codesign --display --entitlements :- dist/whisper_hotkey.app
+xcrun stapler validate dist/release/whisper_hotkey.dmg
+hdiutil verify dist/release/whisper_hotkey.dmg
+spctl --assess --type open --context context:primary-signature \
+  --verbose=4 dist/release/whisper_hotkey.dmg
+shasum -a 256 -c dist/release/whisper_hotkey.dmg.sha256
+```
+
+The entitlement output must contain
+`com.apple.security.device.audio-input = true`, must not contain
+`com.apple.security.get-task-allow = true`, and the code-directory flags must
+include `runtime`.
+
+Command-line mounting is not proof of the user installation path. Download the
+published DMG through Safari on a clean macOS 14-or-newer VM, open it through
+Finder, drag the app to Applications, and launch it. Gatekeeper must not show
+**Move to Trash** or require **Open Anyway**. Complete all three permissions,
+dictate in TextEdit, Safari, and an Electron application, restart, verify the
+login item, and exercise an update from the previous Apple Development-signed
+release.
 
 ## Guardrails
 
-`tools/package_dmg.py` requires exactly one channel and refuses to blur them:
+`tools/package_dmg.py` exposes only two explicit channels:
 
-| Flag | Accepts | Asset name |
+| Flag | Accepts | Stable asset name allowed |
 | --- | --- | --- |
-| `--notarize` | Developer ID Application only | `whisper_hotkey.dmg` |
-| `--unnotarized` | any named identity, never ad-hoc | `whisper_hotkey.dmg` |
-| `--preview` | ad-hoc signature only | must not be `whisper_hotkey.dmg` |
+| `--notarize` | Developer ID Application, hardened runtime, audio-input entitlement | yes |
+| `--preview` | ad-hoc signature under an explicitly different filename | no |
 
-It also refuses any app that does not contain the pinned, verified Base model.
-Never publish an ad-hoc or self-signed build as the release asset: it changes the
-designated requirement on every build and silently breaks in-app updates.
+The packager also requires every bundled model/checkpoint, a valid deep code
+signature, an accepted notary response, a stapled ticket, and a successful
+Gatekeeper assessment. The checksum is generated only after those steps.

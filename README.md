@@ -6,44 +6,28 @@ focused at release time. Audio and transcripts are not sent to a server.
 
 ## Install the Mac app
 
-The fastest path is the signed, self-contained download:
+The fastest path is the notarized, self-contained disk image:
 
 1. **[Download the latest release](https://github.com/nikhi1g/whisper_hotkey/releases/latest)**
-   and pick `whisper_hotkey.zip`.
-2. Unzip it and drag **whisper_hotkey** into **Applications**.
-3. Open `/Applications/whisper_hotkey.app`. macOS blocks the first launch with
-   *"Apple could not verify …"*; click **Done**, then open **System Settings →
-   Privacy & Security**, scroll to **Security**, and click **Open Anyway** next
-   to `whisper_hotkey`. This is a one-time step, explained below.
+   and open `whisper_hotkey.dmg`.
+2. Drag **whisper_hotkey** into **Applications**.
+3. Open `/Applications/whisper_hotkey.app`. The app is signed with Developer
+   ID, notarized by Apple, and carries a stapled ticket, so Gatekeeper can verify
+   the download without an **Open Anyway** workaround.
 4. The app has no Dock icon; look for its waveform icon in the menu bar and
    complete the setup window.
 
-The download includes pinned, SHA-256-verified models, so no compiler, Homebrew
-installation, model download, or Terminal command is required. macOS still requires you to grant Microphone, Accessibility, and Input
-Monitoring access because those permissions cannot be pre-approved by an
-installer.
+The download includes pinned, verified local models, so no compiler, Homebrew
+installation, model download, or Terminal command is required. macOS still
+requires you to grant Microphone, Accessibility, and Input Monitoring access
+because those permissions cannot be pre-approved by a download.
 
-### Why macOS blocks the first launch
-
-The app is signed with a stable Apple Development identity, but it is **not
-notarized**. Notarization requires a paid Apple Developer Program membership,
-which this project does not have, so Gatekeeper cannot verify the build on its
-own and asks you to approve it once. Right-click → Open no longer bypasses this
-on macOS 15 and later; the Privacy & Security path above is the supported one.
-
-Every release publishes a checksum, so you can confirm you received the exact
-published file before you approve it:
+Every release publishes a checksum for the final signed, notarized, and stapled
+disk image:
 
 ```sh
-shasum -a 256 -c whisper_hotkey.zip.sha256
+shasum -a 256 -c whisper_hotkey.dmg.sha256
 ```
-
-The `.dmg` asset in each release contains the same app and exists for the in-app
-updater, which fetches it directly so it is never quarantined. Downloading the
-DMG in a browser is refused outright: Finder offers only *Move to Trash* and
-*Done*, with no **Open Anyway**, because an unnotarized disk image cannot be
-overridden the way an unnotarized app can. That is why the ZIP is the
-recommended download.
 
 Visit the product page at
 [nikhi1g.github.io/whisper_hotkey](https://nikhi1g.github.io/whisper_hotkey/)
@@ -101,10 +85,10 @@ interrupted or completed installation.
   controller at `~/bin/whisper_hotkey`, launches the app, and verifies that the
   installed executable and signature match the build.
 
-The app bundle produced by `run.sh` is built and signed on your own Mac, so
-Gatekeeper never questions it and the Open Anyway step above does not apply. The
-bootstrap-created signing certificate is only for this Mac and its login
-keychain; it is not committed to the repository or copied into the app.
+The app bundle produced by `run.sh` is built and signed on your own Mac rather
+than with the public Developer ID release identity. The bootstrap-created
+signing certificate is only for this Mac and its login keychain; it is not
+committed to the repository or copied into the app.
 
 ## Finish macOS setup
 

@@ -56,33 +56,27 @@ cloud API, a package solely for a small utility, or a second speech engine.
 ## Releases
 
 Read [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) before publishing anything.
-Three points are settled policy and must not be re-litigated:
+These points are settled policy:
 
-- **Releases are never notarized.** There is no paid Apple Developer Program
-  membership. Every release is signed with the project's stable **Apple
-  Development** identity. `spctl --assess` reporting `rejected` is the expected
-  state, not a regression. Never describe a release as notarized.
-- **The ZIP is the human download; the DMG exists only for the in-app updater.**
-  macOS 15+ blocks an unnotarized disk image *before it mounts*, which leaves a
-  user at a "Move to Trash" dead end with no Open Anyway. This is a deliberate
-  workaround, accepted by the project owner, and stands until the $99
-  membership is purchased.
-- **The GitHub release workflow is expected to fail on tag push, and that is
-  fine.** It has no `APPLE_SIGNING_CERTIFICATE_P12_*` secrets, so it exits in
-  ~15s at its "Validate release ref and secrets" step, before touching the
-  release. Locally-built assets are never at risk. **Do not "fix" this, and do
-  not raise it as a problem** unless the owner asks or buys the membership.
+- **Stable releases are Developer ID-signed and notarized.** Every public app
+  uses the project's **Developer ID Application** identity, hardened runtime,
+  secure timestamps, Apple's notary service, and a stapled ticket. A failed
+  notarization or Gatekeeper assessment blocks publication.
+- **The DMG is the only packaged application download.** The product site,
+  GitHub release, and in-app updater use `whisper_hotkey.dmg` with its matching
+  SHA-256 asset. Do not restore the historical application ZIP or publish an
+  unnotarized fallback.
+- **GitHub Actions owns stable publication.** Run the non-publishing
+  `workflow_dispatch` preflight before the release tag. A stable tag builds,
+  tests, signs, notarizes, staples, assesses, and uploads only after every gate
+  passes. Never hand-substitute an unnotarized artifact after CI failure.
 
-Releases are therefore built and uploaded locally:
+Local release candidates use:
 
 ```sh
 WHISPER_HOTKEY_BUNDLE_MODEL=1 WHISPER_HOTKEY_DISTRIBUTION=1 \
-  WHISPER_HOTKEY_UNNOTARIZED=1 python3 build_app.py
-python3 tools/package_zip.py
-python3 tools/package_dmg.py --unnotarized
-python3 tools/package_release.py "v$(cat VERSION)"
-gh release create "v$(cat VERSION)" --notes-file RELEASE_NOTES.md --verify-tag
-gh release upload "v$(cat VERSION)" --clobber dist/release/*
+  python3 build_app.py
+python3 tools/package_dmg.py --notarize
 ```
 
 `build_app.py` will refuse Homebrew's `whisper-cpp`: it targets the host macOS

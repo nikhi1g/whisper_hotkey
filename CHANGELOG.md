@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.2.8: 2026-08-31
+
+- Recovered active capture after AirPods or another input device changes its
+  hardware sample rate or channel count. macOS stops `AVAudioEngine` during
+  that transition; the recorder now observes the engine-specific configuration
+  notification, rebuilds its native-format tap, and resumes the same private
+  recording with one bounded retry.
+- Preserved the `v4.2.7` protections for stale input formats, dynamic converter
+  replacement, empty buffers, ordered writes, and private 16 kHz mono output.
+- Added regression coverage for engine-scoped notification observation and
+  consecutive 48 kHz, 16 kHz, and 24 kHz input buffers.
+- Moved stable publication to a Developer ID-signed, hardened, notarized, and
+  stapled DMG. The website, GitHub release, and in-app updater now share that
+  single packaged application artifact.
+
 ## 4.2.7: 2026-08-12
 
 - Fixed repeatable native crashes after wake or an audio-route change. Capture

@@ -12,12 +12,16 @@ permissions:
 
 jobs:
   release:
+    environment: release
     runs-on: macos-15
     env:
       RELEASE_REF_TYPE: ${{ github.ref_type }}
       RELEASE_REF_NAME: ${{ github.ref_name }}
       CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_BASE64 }}
       CERTIFICATE_P12_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_PASSWORD }}
+      NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Check out release ref
         uses: actions/checkout@v6
@@ -26,11 +30,19 @@ jobs:
 
       - name: Validate release ref and secrets
         run: |
-          test "${RELEASE_REF_TYPE}" = "tag"
-          test "${RELEASE_REF_NAME}" = "v$(cat VERSION)"
+          case "${GITHUB_EVENT_NAME}" in
+            push)
+              test "${RELEASE_REF_TYPE}" = "tag"
+              test "${RELEASE_REF_NAME}" = "v$(cat VERSION)"
+              ;;
+            workflow_dispatch) ;;
+            *) exit 1 ;;
+          esac
           test -n "${CERTIFICATE_P12_BASE64}"
           test -n "${CERTIFICATE_P12_PASSWORD}"
-
+          test -n "${NOTARY_APPLE_ID}"
+          test -n "${NOTARY_PASSWORD}"
+          test -n "${APPLE_TEAM_ID}"
       - name: Install CMake
         run: brew install cmake
 
@@ -71,50 +83,32 @@ jobs:
           security list-keychains -d user -s "${KEYCHAIN_PATH}"
           echo "RELEASE_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Download and verify bundled models
-        run: |
-          CACHE="${HOME}/.cache/whisper"
-          mkdir -p "${CACHE}"
-          download() {
-            curl --fail --location --retry 3 --output "${CACHE}/$1" \
-              "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$1"
-            echo "$2  ${CACHE}/$1" | shasum -a 256 --check
-          }
-          download ggml-base.en.bin \
-            a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002
-          download ggml-large-v3-turbo-q5_0.bin \
-            394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
-
       - name: Download bundled Parakeet checkpoints
         run: |
-          # Both checkpoints ship inside the app, so build_app.py copies
-          # them out of FluidAudio's cache. A clean runner has no cache, so
-          # populate it first. This is a no-op when they are already there.
+          # Bundled checkpoints are copied from FluidAudio's cache. A clean
+          # runner has no cache, so populate it first. This is a no-op when
+          # they are already present.
           swift run --package-path Benchmarks/Parakeet -c release \
-            parakeet-benchmark download tdtCtc110m v2
+            parakeet-benchmark download tdtCtc110m v2 unified
 
       - name: Test
         run: swift test
 
-      - name: Build signed app with bundled model
+      - name: Build Developer ID app with bundled models
         env:
           WHISPER_HOTKEY_BUNDLE_MODEL: "1"
           WHISPER_HOTKEY_DISTRIBUTION: "1"
-          WHISPER_HOTKEY_UNNOTARIZED: "1"
         run: python3 build_app.py
 
       - name: Create source archive
+        if: github.ref_type == 'tag'
         run: python3 tools/package_release.py "${GITHUB_REF_NAME}"
 
-      - name: Create DMG
-        run: python3 tools/package_dmg.py --unnotarized
-
-      # The ZIP is the download the site offers. An unnotarized DMG is refused
-      # by Finder with no Open Anyway override; the app inside a ZIP is not.
-      - name: Create ZIP
-        run: python3 tools/package_zip.py
+      - name: Create notarized DMG
+        run: python3 tools/package_dmg.py --notarize
 
       - name: Publish release assets
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -122,8 +116,6 @@ jobs:
             gh release create "${GITHUB_REF_NAME}" --title "whisper_hotkey $(cat VERSION)" --notes-file RELEASE_NOTES.md
           fi
           gh release upload "${GITHUB_REF_NAME}" --clobber \
-            dist/release/whisper_hotkey.zip \
-            dist/release/whisper_hotkey.zip.sha256 \
             dist/release/whisper_hotkey.dmg \
             dist/release/whisper_hotkey.dmg.sha256 \
             dist/release/whisper_hotkey-*-source.tar.gz \

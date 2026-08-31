@@ -5,7 +5,7 @@ import FluidAudio
 //   parakeet-benchmark <v2|v3|tdtCtc110m> <wav-list-file>
 //     Transcribes each WAV and emits one JSON object per line:
 //     {"id":..., "text":..., "seconds":...}
-//   parakeet-benchmark download <v2|v3|tdtCtc110m> [more...]
+//   parakeet-benchmark download <v2|v3|tdtCtc110m|unified> [more...]
 //     Downloads the named checkpoints into FluidAudio's cache and exits.
 //     The release build bundles the checkpoints into the app, so a clean
 //     machine has to populate that cache before build_app.py can copy them.
@@ -29,13 +29,28 @@ let arguments = CommandLine.arguments
 if arguments.count >= 2, arguments[1] == "download" {
     let names = Array(arguments.dropFirst(2))
     guard !names.isEmpty else {
-        fail("usage: parakeet-benchmark download <v2|v3|tdtCtc110m> [more...]")
+        fail(
+            "usage: parakeet-benchmark download "
+                + "<v2|v3|tdtCtc110m|unified> [more...]"
+        )
     }
     for name in names {
-        let version = parseVersion(name)
-        // A no-op when the checkpoint is already complete, so this is safe to
-        // run unconditionally in CI and locally.
-        let directory = try await AsrModels.download(version: version)
+        let directory: URL
+        if name == "unified" {
+            let manager = UnifiedAsrManager()
+            try await manager.loadModels()
+            directory = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(
+                    "Library/Application Support/FluidAudio/Models/"
+                        + "parakeet-unified-en-0.6b",
+                    isDirectory: true
+                )
+        } else {
+            let version = parseVersion(name)
+            // A no-op when the checkpoint is already complete, so this is safe
+            // to run unconditionally in CI and locally.
+            directory = try await AsrModels.download(version: version)
+        }
         FileHandle.standardError.write(
             "ready \(name) at \(directory.path)\n".data(using: .utf8)!
         )

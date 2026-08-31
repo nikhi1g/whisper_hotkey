@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Create and verify the release, unnotarized-release, or preview DMG.
+"""Create and verify the notarized release or an explicitly named preview DMG.
 
 Exactly one channel must be requested, so an artifact can never be published
 under the public release name without stating how it was signed:
 
-  --notarize    Developer ID Application, submitted to Apple and stapled.
-  --unnotarized Stable named identity, no Apple ticket. Gatekeeper blocks the
-                first launch until the user chooses Open Anyway.
-  --preview     Ad-hoc signature only, published under a preview asset name.
+  --notarize Developer ID Application, hardened, submitted to Apple, stapled.
+  --preview  Ad-hoc signature only, published under a preview asset name.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
+import plistlib
 import re
 import subprocess
 import sys
@@ -54,6 +54,29 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def codesign_entitlements(app: Path) -> dict[str, object]:
+    result = subprocess.run(
+        [
+            "/usr/bin/codesign",
+            "--display",
+            "--entitlements",
+            ":-",
+            str(app),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    payload = result.stdout + result.stderr
+    start = payload.find(b"<?xml")
+    end = payload.rfind(b"</plist>")
+    if start < 0 or end < start:
+        raise RuntimeError("Could not read the app's signed entitlements.")
+    entitlements = plistlib.loads(payload[start : end + len(b"</plist>")])
+    if not isinstance(entitlements, dict):
+        raise RuntimeError("The app's signed entitlements are not a dictionary.")
+    return entitlements
+
+
 def verify_release_app(app: Path, *, channel: str) -> str:
     if not app.is_dir():
         raise RuntimeError(f"Application bundle not found at {app}")
@@ -86,19 +109,31 @@ def verify_release_app(app: Path, *, channel: str) -> str:
         if not adhoc or authority is not None:
             raise RuntimeError(
                 "A preview DMG accepts only an ad-hoc signature. An app signed "
-                "by a named identity belongs in --notarize or --unnotarized."
+                "by a named identity belongs in --notarize."
             )
         run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
         return "-"
     if authority is None:
         raise RuntimeError(
-            "The DMG requires a signed app with a named code-signing authority."
+            "The notarized DMG requires a named code-signing authority."
         )
-    if channel == "notarize" and not authority.group(1).startswith(
-        "Developer ID Application:"
-    ):
+    if not authority.group(1).startswith("Developer ID Application:"):
         raise RuntimeError(
             "The notarized DMG requires a Developer ID Application-signed app."
+        )
+    code_directory = re.search(r"^CodeDirectory .+$", details, re.M)
+    if code_directory is None or "runtime" not in code_directory.group(0):
+        raise RuntimeError(
+            "The notarized DMG requires the app's hardened runtime."
+        )
+    entitlements = codesign_entitlements(app)
+    if entitlements.get("com.apple.security.device.audio-input") is not True:
+        raise RuntimeError(
+            "The notarized app requires its audio-input entitlement."
+        )
+    if entitlements.get("com.apple.security.get-task-allow") is True:
+        raise RuntimeError(
+            "A public release must not contain the get-task-allow entitlement."
         )
     run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)])
     with tempfile.TemporaryDirectory(
@@ -130,19 +165,47 @@ def notarize(dmg: Path) -> None:
         raise RuntimeError(
             "Missing notarization environment: " + ", ".join(missing)
         )
-    run([
-        "/usr/bin/xcrun",
-        "notarytool",
-        "submit",
-        str(dmg),
+    credentials = [
         "--apple-id",
         required["NOTARY_APPLE_ID"],
         "--password",
         required["NOTARY_PASSWORD"],
         "--team-id",
         required["APPLE_TEAM_ID"],
-        "--wait",
-    ])
+    ]
+    result = subprocess.run(
+        [
+            "/usr/bin/xcrun",
+            "notarytool",
+            "submit",
+            str(dmg),
+            *credentials,
+            "--wait",
+            "--output-format",
+            "json",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response = {}
+    submission_id = response.get("id")
+    if isinstance(submission_id, str) and submission_id:
+        run([
+            "/usr/bin/xcrun",
+            "notarytool",
+            "log",
+            submission_id,
+            *credentials,
+        ])
+    if result.returncode != 0 or response.get("status") != "Accepted":
+        raise RuntimeError("Apple did not accept the DMG for notarization.")
     run(["/usr/bin/xcrun", "stapler", "staple", str(dmg)])
     run(["/usr/bin/xcrun", "stapler", "validate", str(dmg)])
 
@@ -217,13 +280,6 @@ def main() -> None:
         action="store_const",
         const="notarize",
         help="submit with notarytool, staple, and run a Gatekeeper assessment",
-    )
-    channels.add_argument(
-        "--unnotarized",
-        dest="channel",
-        action="store_const",
-        const="unnotarized",
-        help="publish a stably signed release that Apple has not notarized",
     )
     channels.add_argument(
         "--preview",

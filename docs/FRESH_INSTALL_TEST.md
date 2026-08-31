@@ -11,10 +11,12 @@ permissions, a login item, and the controller installed by `run.sh`.
 3. Open Safari and download the current DMG from the public product site or
    GitHub release.
 4. Open the DMG, drag `whisper_hotkey.app` to Applications, and launch it.
-5. Complete the microphone, Accessibility, and Input Monitoring prompts.
-6. Confirm the default dictation key is Right Option.
-7. Dictate into TextEdit, Safari, and one Electron application.
-8. Use Settings > Check for Updates to verify the public update path.
+5. Confirm Finder mounts the quarantined DMG without **Move to Trash** or an
+   **Open Anyway** workaround, and that the app launches normally.
+6. Complete the Microphone, Accessibility, and Input Monitoring prompts.
+7. Confirm the default dictation key is Right Option.
+8. Dictate into TextEdit, Safari, and one Electron application.
+9. Use Settings > Check for Updates to verify the public update path.
 
 This isolates per-user preferences, permissions, model caches, login items, and
 the controller. Homebrew, Xcode, and the source checkout in the development
@@ -26,6 +28,14 @@ Use a new Apple Silicon macOS virtual machine when testing Gatekeeper, first
 download behavior, and installation without any machine-level development
 tools. Take a snapshot before the first download so the complete flow can be
 repeated without manually clearing private state.
+
+## Developer ID migration test
+
+The first notarized release also needs an upgrade test from the latest
+Apple Development-signed public version. Grant all three permissions to the old
+version, update through Settings, and record whether macOS asks for any one-time
+reapproval after the designated requirement changes. Preferences, models, the
+login item, and in-app replacement must survive.
 
 ## Same-account smoke test
 

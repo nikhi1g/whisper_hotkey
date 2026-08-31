@@ -12,8 +12,10 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 RUN_SH = ROOT / "run.sh"
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 import build_app  # noqa: E402
+import package_dmg  # noqa: E402
 
 
 # Any name works: the bundler is driven by BUNDLED_MODELS, which these
@@ -216,6 +218,67 @@ class RunScriptTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "verification failed"):
                     build_app.bundle_verified_models()
+
+    def test_distribution_accepts_only_developer_id(self) -> None:
+        self.assertEqual(
+            build_app.distribution_identity_prefixes(),
+            ("Developer ID Application:",),
+        )
+
+    def test_distribution_signs_app_with_runtime_audio_entitlements(self) -> None:
+        with (
+            patch.dict(
+                "os.environ",
+                {"WHISPER_HOTKEY_DISTRIBUTION": "1"},
+                clear=True,
+            ),
+            patch.object(build_app, "run") as run_mock,
+        ):
+            build_app.sign("DEVELOPER-ID", [])
+
+        signing_commands = [
+            call.args[0]
+            for call in run_mock.call_args_list
+            if "--sign" in call.args[0]
+        ]
+        app_command = next(
+            command
+            for command in signing_commands
+            if command[-1] == str(build_app.APP)
+        )
+        self.assertIn("--timestamp", app_command)
+        self.assertIn("runtime", app_command)
+        self.assertEqual(
+            app_command[app_command.index("--entitlements") + 1],
+            str(build_app.ENTITLEMENTS),
+        )
+        for command in signing_commands:
+            if command is not app_command:
+                self.assertNotIn("--entitlements", command)
+
+    def test_packager_removed_unnotarized_release_channel(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tools" / "package_dmg.py"),
+                "--unnotarized",
+                "--preview",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unrecognized arguments: --unnotarized", result.stderr)
+
+    def test_notarization_requires_complete_credentials(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "NOTARY_APPLE_ID, NOTARY_PASSWORD, APPLE_TEAM_ID",
+            ):
+                package_dmg.notarize(Path("/tmp/candidate.dmg"))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ RESOURCES = CONTENTS / "Resources"
 FRAMEWORKS = CONTENTS / "Frameworks"
 LAUNCH_AGENTS = CONTENTS / "Library" / "LaunchAgents"
 BUNDLE_ID = "local.whisperhotkey.app"
+ENTITLEMENTS = ROOT / "WhisperHotkey.entitlements"
 LOGIN_LAUNCHER_NAME = "WhisperHotkeyLoginLauncher"
 LOGIN_AGENT_LABEL = f"{BUNDLE_ID}.login-launcher"
 LOGIN_AGENT_PLIST_NAME = f"{LOGIN_AGENT_LABEL}.plist"
@@ -335,25 +336,7 @@ def verify_distribution_targets(binaries: list[Path]) -> None:
         )
 
 
-def unnotarized_distribution() -> bool:
-    """Public build signed with a development identity and never notarized.
-
-    Notarization requires a Developer ID Application certificate, which in turn
-    requires a paid Apple Developer Program membership. Without one, the app is
-    signed with the same stable Apple Development identity on every release so
-    that existing installs keep their designated requirement (in-app updates)
-    and their Microphone, Accessibility, and Input Monitoring grants. Gatekeeper
-    still blocks the first launch; the download instructions cover Open Anyway.
-    """
-    return (
-        os.environ.get("WHISPER_HOTKEY_DISTRIBUTION") == "1"
-        and os.environ.get("WHISPER_HOTKEY_UNNOTARIZED") == "1"
-    )
-
-
 def distribution_identity_prefixes() -> tuple[str, ...]:
-    if unnotarized_distribution():
-        return ("Developer ID Application:", "Apple Development:")
     return ("Developer ID Application:",)
 
 
@@ -420,12 +403,9 @@ def sign(identity: str, libraries: list[Path]) -> None:
             identity,
         ]
         if distribution:
-            command.append("--timestamp")
-            if not unnotarized_distribution():
-                # The hardened runtime is a notarization prerequisite. Enabling
-                # it without notarization would only add entitlement
-                # requirements for microphone access and library loading.
-                command.extend(["--options", "runtime"])
+            command.extend(["--timestamp", "--options", "runtime"])
+            if target == APP:
+                command.extend(["--entitlements", str(ENTITLEMENTS)])
         else:
             command.append("--timestamp=none")
         if identifier:

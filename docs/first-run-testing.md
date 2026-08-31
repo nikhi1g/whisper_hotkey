@@ -55,36 +55,29 @@ re-downloads them, which is usually the point of having run the test.
 
 ## What a correct first run looks like
 
-1. The site's download button resolves to `whisper_hotkey.zip` from the latest
-   release.
-2. Unzipping and dragging the app into `/Applications` works normally.
-3. First launch is blocked. One approval through **System Settings > Privacy &
-   Security > Open Anyway** is expected — the app is signed with a stable Apple
-   Development identity and is deliberately not notarized.
-4. First-run setup presents itself.
-5. Microphone, Accessibility, and Input Monitoring are each requested.
-6. Any model that is not bundled downloads behind the progress row inside
+1. The site's download button resolves to `whisper_hotkey.dmg` from the latest
+   stable release.
+2. Safari downloads the disk image with quarantine metadata.
+3. Finder opens the disk image without **Move to Trash** or **Open Anyway**;
+   dragging the app into `/Applications` works normally.
+4. The app launches from Applications after Gatekeeper validates its Developer
+   ID signature and stapled notarization ticket.
+5. First-run setup presents itself.
+6. Microphone, Accessibility, and Input Monitoring are each requested.
+7. Any model that is not bundled downloads behind the progress row inside
    Settings, not in a separate window.
 
-Step 3 is expected, not a bug, and will remain so without a paid Apple
-Developer membership.
+## Always test through Finder, never only through the terminal
 
-## Always test through Finder, never through the terminal
+This is the lesson of 3.6.0, and it remains a release gate. That release
+switched the site to an unnotarized DMG after a quarantined image mounted
+successfully with `hdiutil`. Finder rejected the same image before mounting,
+with only **Move to Trash** and **Done**. `hdiutil` does not exercise
+Gatekeeper's Finder path.
 
-This is the lesson of 3.6.0, and it is worth stating plainly because getting it
-wrong shipped a download nobody could open.
-
-3.6.0 switched the site to the DMG on the strength of a terminal test: a DMG
-stamped with a real `com.apple.quarantine` value mounted fine under `hdiutil`,
-and the app copied out of it carried only `com.apple.provenance`. Every
-observation was true and the conclusion was still wrong. **`hdiutil` does not
-go through Gatekeeper's verification path at all.** A Finder double-click on
-the exact same file is refused with *"Apple could not verify
-'whisper_hotkey.dmg' is free of malware"* and only two buttons, **Move to
-Trash** and **Done** — no Open Anyway, because an unnotarized disk image cannot
-be overridden the way an unnotarized app can. 3.6.2 reverted to the ZIP.
-
-So: `curl`, `hdiutil`, `unzip`, and `open` from a shell all prove nothing about
-what a user experiences. Download through a browser, open through Finder,
-drag through Finder. `--download` exists only to stage the file quickly; the
-opening is still yours to do by hand.
+The stable DMG is now Developer ID-signed, notarized, and stapled specifically
+to make that browser-to-Finder path work. `curl`, `hdiutil`, and `open` remain
+useful integrity checks but are not user-path evidence. Download through a
+browser, open through Finder, drag through Finder, and launch from Applications.
+`--download` exists only to stage the file quickly; the opening is still yours
+to do by hand.
