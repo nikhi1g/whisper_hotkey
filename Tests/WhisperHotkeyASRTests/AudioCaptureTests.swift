@@ -169,6 +169,155 @@ final class AudioCaptureTests: XCTestCase {
         )
     }
 
+    func testFirstBufferWatchdogDoesNothingAfterBufferArrival() {
+        var watchdog = WhisperFirstBufferWatchdog()
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: true,
+                maximumRecoveries: 1
+            ),
+            .none
+        )
+        XCTAssertEqual(watchdog.recoveryCount, 0)
+    }
+
+    func testFirstBufferWatchdogRecoversOnceThenFails() {
+        var watchdog = WhisperFirstBufferWatchdog()
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .recover
+        )
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .fail
+        )
+        XCTAssertEqual(watchdog.recoveryCount, 1)
+    }
+
+    func testFirstBufferWatchdogAcceptsBufferAfterRecovery() {
+        var watchdog = WhisperFirstBufferWatchdog()
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .recover
+        )
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: true,
+                maximumRecoveries: 1
+            ),
+            .none
+        )
+    }
+
+    func testFirstBufferWatchdogIgnoresStaleCapture() {
+        var watchdog = WhisperFirstBufferWatchdog()
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: false,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .none
+        )
+        XCTAssertEqual(watchdog.recoveryCount, 0)
+    }
+
+    func testFirstBufferWatchdogIgnoresExistingFailure() {
+        var watchdog = WhisperFirstBufferWatchdog()
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: false,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .none
+        )
+        XCTAssertEqual(watchdog.recoveryCount, 0)
+    }
+
+    func testFirstBufferWatchdogResetAllowsLaterCaptureRecovery() {
+        var watchdog = WhisperFirstBufferWatchdog()
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .recover
+        )
+
+        watchdog.reset()
+
+        XCTAssertEqual(
+            watchdog.evaluate(
+                isCurrentCapture: true,
+                isHealthy: true,
+                hasReceivedFirstBuffer: false,
+                maximumRecoveries: 1
+            ),
+            .recover
+        )
+        XCTAssertEqual(watchdog.recoveryCount, 1)
+    }
+
+    func testConfigurationRecoveryGateDeduplicatesPendingRecovery() {
+        var gate = WhisperConfigurationRecoveryGate<Int>()
+
+        XCTAssertTrue(gate.schedule(for: 1))
+        XCTAssertFalse(gate.schedule(for: 1))
+        XCTAssertFalse(gate.schedule(for: 2))
+        XCTAssertEqual(gate.scheduledToken, 1)
+    }
+
+    func testStaleConfigurationRecoveryCannotConsumeReplacementCapture() {
+        var gate = WhisperConfigurationRecoveryGate<Int>()
+        XCTAssertTrue(gate.schedule(for: 1))
+        gate.reset()
+        XCTAssertTrue(gate.schedule(for: 2))
+
+        XCTAssertFalse(gate.begin(for: 1))
+        XCTAssertEqual(gate.scheduledToken, 2)
+        XCTAssertTrue(gate.begin(for: 2))
+        XCTAssertNil(gate.scheduledToken)
+    }
+
+    func testConfigurationRecoveryGateResetCancelsPendingRecovery() {
+        var gate = WhisperConfigurationRecoveryGate<Int>()
+        XCTAssertTrue(gate.schedule(for: 1))
+
+        gate.reset()
+
+        XCTAssertFalse(gate.begin(for: 1))
+        XCTAssertNil(gate.scheduledToken)
+    }
+
     func testCompletionGraceAppliesOnlyToConfirmedRecentSpeech() {
         XCTAssertEqual(
             CompletionCaptureGracePolicy.delay(

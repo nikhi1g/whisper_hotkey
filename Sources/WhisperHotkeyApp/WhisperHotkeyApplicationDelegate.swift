@@ -1480,6 +1480,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 else {
                     return
                 }
+                if let captureError = recorder.activeCaptureError {
+                    fail(captureError)
+                    return
+                }
                 let sampledLevel = recorder.normalizedInputLevel
                 displayedLevel = max(sampledLevel, displayedLevel * 0.58)
                 badge.updateListening(

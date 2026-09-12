@@ -249,6 +249,13 @@ public final class WhisperAudioRecorder {
         backend.isRecording
     }
 
+    /// A content-free failure raised by the active capture runtime. The
+    /// application samples this only while listening so route recovery can
+    /// fail visibly without invoking UI work from the recorder queue.
+    public var activeCaptureError: WhisperASRError? {
+        backend.activeCaptureError
+    }
+
     /// A normalized 0...1 microphone level for lightweight presentation.
     /// Reading this value does not touch AVAudioEngine and is useful only while
     /// recording.
@@ -369,6 +376,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     }
     private static let configurationRecoveryRetryDelay: TimeInterval = 0.1
     private static let maximumConfigurationRecoveryFailures = 2
+    private static let firstBufferDeadline: TimeInterval = 1.0
+    private static let postRecoveryBufferDeadline: TimeInterval = 1.0
+    private static let maximumFirstBufferRecoveries = 1
 
 
     private let engineBox: WhisperAudioEngineBox
@@ -392,7 +402,9 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private var rejectedTokens: [WhisperAudioCaptureToken: WhisperASRError] = [:]
     private var captureError: WhisperASRError?
     private var configurationRecoveryFailures = 0
-    private var configurationRecoveryScheduled = false
+    private var configurationRecoveryGate =
+        WhisperConfigurationRecoveryGate<WhisperAudioCaptureToken>()
+    private var firstBufferWatchdog = WhisperFirstBufferWatchdog()
     private var configurationObserver: WhisperAudioConfigurationObserver?
     private var rejectedTokenOrder: [WhisperAudioCaptureToken] = []
     private var writer: WhisperWAVWriter?
@@ -424,6 +436,10 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         controlQueue.sync {
             audioFile != nil && engineBox.engine.isRunning
         }
+    }
+
+    var activeCaptureError: WhisperASRError? {
+        controlQueue.sync { captureError ?? startupError }
     }
 
     var normalizedInputLevel: Float {
@@ -550,8 +566,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             startupError = nil
 
             captureError = nil
-            configurationRecoveryFailures = 0
-            configurationRecoveryScheduled = false
+            resetRecoveryState()
             if queueError != nil || writeError != nil {
                 audioFile.delete()
                 lease?.finish()
@@ -636,8 +651,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             startupError = nil
 
             captureError = nil
-            configurationRecoveryFailures = 0
-            configurationRecoveryScheduled = false
+            resetRecoveryState()
             guard queueError == nil,
                   result.error == nil,
                   let finalSegment = result.segment
@@ -687,13 +701,17 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         self.pauseSegmentation = pauseSegmentation
         startupError = nil
         captureError = nil
-        configurationRecoveryFailures = 0
-        configurationRecoveryScheduled = false
+        resetRecoveryState()
 
         do {
             try prepareCapture(
                 pauseSegmentation: pauseSegmentation,
                 timing: timing
+            )
+            scheduleFirstBufferWatchdog(
+                for: token,
+                timing: timing,
+                after: Self.firstBufferDeadline
             )
         } catch {
             stopEngineAndTap()
@@ -867,30 +885,33 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
 
     private func audioEngineConfigurationChanged() {
         controlQueue.async { [weak self] in
-            self?.scheduleConfigurationRecovery()
+            guard let self, let token = self.activeToken else { return }
+            self.scheduleConfigurationRecovery(for: token)
         }
     }
 
     private func scheduleConfigurationRecovery(
+        for token: WhisperAudioCaptureToken,
         after delay: TimeInterval = 0
     ) {
-        guard activeToken != nil,
+        guard activeToken == token,
               phase != nil,
               startupError == nil,
               captureError == nil,
-              !configurationRecoveryScheduled
+              configurationRecoveryGate.schedule(for: token)
         else {
             return
         }
-        configurationRecoveryScheduled = true
         controlQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.recoverFromConfigurationChange()
+            self?.recoverFromConfigurationChange(for: token)
         }
     }
 
-    private func recoverFromConfigurationChange() {
-        configurationRecoveryScheduled = false
-        guard activeToken != nil,
+    private func recoverFromConfigurationChange(
+        for token: WhisperAudioCaptureToken
+    ) {
+        guard configurationRecoveryGate.begin(for: token),
+              activeToken == token,
               phase != nil,
               startupError == nil,
               captureError == nil
@@ -901,12 +922,23 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         do {
             try restartCaptureAfterConfigurationChange()
             configurationRecoveryFailures = 0
+            if firstBufferWatchdog.recoveryCount > 0,
+               let timing = timingLock.withLock({ timingTrackers[token] }),
+               !timing.hasReceivedFirstBuffer
+            {
+                scheduleFirstBufferWatchdog(
+                    for: token,
+                    timing: timing,
+                    after: Self.postRecoveryBufferDeadline
+                )
+            }
         } catch {
             configurationRecoveryFailures += 1
             if configurationRecoveryFailures
                 < Self.maximumConfigurationRecoveryFailures
             {
                 scheduleConfigurationRecovery(
+                    for: token,
                     after: Self.configurationRecoveryRetryDelay
                 )
                 return
@@ -916,11 +948,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
                     "Microphone input did not recover after its route changed."
                 )
             stopEngineAndTap()
-            if phase == .provisional {
-                startupError = failure
-            } else {
-                captureError = failure
-            }
+            latchCaptureFailure(failure)
         }
     }
 
@@ -943,6 +971,56 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         installInputTap(on: inputNode, sink: sink)
         engineBox.engine.prepare()
         try engineBox.engine.start()
+    }
+
+    private func scheduleFirstBufferWatchdog(
+        for token: WhisperAudioCaptureToken,
+        timing: WhisperAudioCaptureTimingTracker,
+        after delay: TimeInterval
+    ) {
+        controlQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.evaluateFirstBufferWatchdog(for: token, timing: timing)
+        }
+    }
+
+    private func evaluateFirstBufferWatchdog(
+        for token: WhisperAudioCaptureToken,
+        timing: WhisperAudioCaptureTimingTracker
+    ) {
+        let action = firstBufferWatchdog.evaluate(
+            isCurrentCapture: activeToken == token && phase != nil,
+            isHealthy: startupError == nil && captureError == nil,
+            hasReceivedFirstBuffer: timing.hasReceivedFirstBuffer,
+            maximumRecoveries: Self.maximumFirstBufferRecoveries
+        )
+        switch action {
+        case .none:
+            return
+        case .recover:
+            scheduleConfigurationRecovery(for: token)
+        case .fail:
+            stopEngineAndTap()
+            latchCaptureFailure(
+                .captureFailed(
+                    "Microphone input did not begin delivering audio."
+                )
+            )
+        }
+    }
+
+    private func latchCaptureFailure(_ failure: WhisperASRError) {
+        guard startupError == nil, captureError == nil else { return }
+        if phase == .provisional {
+            startupError = failure
+        } else if phase == .adopted {
+            captureError = failure
+        }
+    }
+
+    private func resetRecoveryState() {
+        configurationRecoveryFailures = 0
+        configurationRecoveryGate.reset()
+        firstBufferWatchdog.reset()
     }
 
     private func removeInputTap() {
@@ -972,8 +1050,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         pauseSegmentation = false
         startupError = nil
         captureError = nil
-        configurationRecoveryFailures = 0
-        configurationRecoveryScheduled = false
+        resetRecoveryState()
     }
 
     private func rememberRejectedToken(
@@ -1029,6 +1106,10 @@ private final class WhisperAudioCaptureTimingTracker: @unchecked Sendable {
         }
     }
 
+    var hasReceivedFirstBuffer: Bool {
+        lock.withLock { firstBufferAtUptimeNanoseconds != nil }
+    }
+
     func markFirstBuffer(_ uptimeNanoseconds: UInt64) {
         lock.withLock {
             if firstBufferAtUptimeNanoseconds == nil {
@@ -1043,6 +1124,56 @@ private final class WhisperAudioCaptureTimingTracker: @unchecked Sendable {
                 firstCommittedSampleAtUptimeNanoseconds = uptimeNanoseconds
             }
         }
+    }
+}
+
+struct WhisperConfigurationRecoveryGate<Token: Equatable> {
+    private(set) var scheduledToken: Token?
+
+    mutating func schedule(for token: Token) -> Bool {
+        guard scheduledToken == nil else { return false }
+        scheduledToken = token
+        return true
+    }
+
+    mutating func begin(for token: Token) -> Bool {
+        guard scheduledToken == token else { return false }
+        scheduledToken = nil
+        return true
+    }
+
+    mutating func reset() {
+        scheduledToken = nil
+    }
+}
+
+enum WhisperFirstBufferWatchdogAction: Equatable {
+    case none
+    case recover
+    case fail
+}
+
+struct WhisperFirstBufferWatchdog {
+    private(set) var recoveryCount = 0
+
+    mutating func evaluate(
+        isCurrentCapture: Bool,
+        isHealthy: Bool,
+        hasReceivedFirstBuffer: Bool,
+        maximumRecoveries: Int
+    ) -> WhisperFirstBufferWatchdogAction {
+        guard isCurrentCapture, isHealthy, !hasReceivedFirstBuffer else {
+            return .none
+        }
+        guard recoveryCount < maximumRecoveries else {
+            return .fail
+        }
+        recoveryCount += 1
+        return .recover
+    }
+
+    mutating func reset() {
+        recoveryCount = 0
     }
 }
 
