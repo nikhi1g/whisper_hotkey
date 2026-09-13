@@ -51,7 +51,8 @@ public struct MicrophoneDeviceCatalog: Sendable {
 
     func apply(
         _ selection: MicrophoneSelection,
-        to engine: AVAudioEngine
+        to engine: AVAudioEngine,
+        preserveCurrentRoute: Bool = false
     ) throws -> MicrophoneDevice {
         let defaultID = try defaultInputDeviceID()
         let devices = try resolvedInputDevices(defaultID: defaultID)
@@ -71,6 +72,17 @@ public struct MicrophoneDeviceCatalog: Sendable {
         }
         guard let audioUnit = engine.inputNode.audioUnit else {
             throw MicrophoneDeviceError.routingFailed(kAudio_ParamError)
+        }
+        if preserveCurrentRoute {
+            var currentDeviceID = AudioDeviceID(kAudioObjectUnknown)
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            let status = AudioUnitGetProperty(
+                audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global, 0, &currentDeviceID, &size
+            )
+            if status == noErr, currentDeviceID == resolved.id {
+                return resolved.device
+            }
         }
         var deviceID = resolved.id
         let status = AudioUnitSetProperty(

@@ -1,28 +1,25 @@
-Version 4.2.9 adds explicit microphone routing and lowers warm whisper.cpp response latency without changing recognition accuracy.
+Version 4.3.1 reduces application-imposed capture onset delay and starts the listening badge's updates before gesture acceptance.
 
-## Selectable microphone routing
+## Physical-edge capture and presentation
 
-The menu bar now offers a Microphone submenu with Automatic plus every available input device. Automatic follows the current macOS default. A manual choice persists the device's stable Core Audio UID, configures only whisper_hotkey's owned audio engine, and never changes the system-wide default. Route recovery reapplies the choice. A disconnected manual device remains visible as unavailable and fails explicitly instead of silently recording another microphone.
+Model Ready and Decode After Speaking now use an AVAudioEngine sink node's native render quanta instead of waiting for an input tap to coalesce audio. The existing bounded FIFO retains an owned copy of each quantum before Core Audio reuses its buffer. Conversion, speech detection, metering, and private WAV writes remain on the writer queue.
 
-Terminal status reports both the configured source and effective active microphone, making AirPods and aggregate-device routing directly observable.
+The provisional pointer-fallback badge starts its waveform and timer updates before Hold dwell or Toggle release acceptance. Accepting capture is asynchronous, so engine startup cannot block the main actor or freeze the badge. Acceptance does not reset its waveform or elapsed time. Quick taps and modifier shortcuts still reject only their matching provisional capture and discard its audio without recognition or insertion.
 
-## Faster Model Ready response
+Content-free diagnostics distinguish badge visibility, recorder queue admission, engine startup, first non-empty buffer, and first committed sample. They do not equate queue admission with microphone readiness. Bluetooth activation can still add hardware latency; audio that the hardware has not supplied cannot be recovered without keeping a microphone active at idle, which this app does not do.
 
-Model Ready retains its complete-session recognition path. Version 4.2.9 removes duplicate per-session preparation and replaces the whisper.cpp helper's 10 ms response polling with event-driven wake-up. Full audio context, dictionary prompt, selected decoding strategy, beam width, sanitizer, formatter, and exactly-once delivery remain unchanged. Parakeet decoding is unchanged.
+## Complete-recording processing and finishing
 
-## Capture reliability
+Decode After Speaking prepares its model only after the complete private WAV seals. Model Ready may warm after recorder admission, but also decodes only sealed full-session audio.
 
-A bounded first-buffer watchdog handles the separate running-but-silent engine state: after one second without a non-empty input buffer, capture requests one token-scoped graph recovery. Continued starvation fails visibly and follows normal private-audio cleanup instead of remaining stuck on Listening.
+Finish input captures the destination immediately. Continued speech is retained until the learned cadence silence target is reached, subject to `0.25 + 0.75 * d / (d + 10)` seconds of maximum additional wait, where `d` is confirmed speaking duration. Cancellation is immediate and the recording limit remains authoritative.
 
-## Verification
-
-- The complete Swift suite passes: 397 tests, with three intentional opt-in integration tests skipped.
-- All 16 bootstrap and release-tooling tests pass.
-- Menu and Settings coverage verifies Automatic, manual, disconnected, and busy-state microphone behavior.
-- Focused capture coverage verifies token-scoped watchdog and route-recovery behavior.
-- The bundled application builds with a valid deep signature; the built and installed executables match.
-- Installed status resolves Automatic to the active Mac microphone.
+Decode While Speaking and Pause Mode retain their existing input tap, segmentation, recognition, reconciliation, prompts, and completion behavior.
 
 ## Distribution
 
-The stable download remains the Developer ID-signed, hardened, notarized, and stapled `whisper_hotkey.dmg`. The website, GitHub release, and in-app updater use that DMG and matching SHA-256 asset. No application ZIP or unnotarized fallback is published.
+The packaged helper now resolves its signed libraries from the application's
+Frameworks directory, rather than depending on the builder's Homebrew or
+temporary dependency paths.
+
+This change does not publish an artifact. Stable distribution still requires a Developer ID-signed, hardened, securely timestamped, notarized, and stapled DMG with its matching SHA-256 asset. A local Apple Development-signed candidate is not a production distribution artifact.

@@ -112,6 +112,43 @@ final class AudioCaptureTests: XCTestCase {
         )
     }
 
+    func testRenderQuantumCopyOutlivesCoreAudioBuffer() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisper_hotkey-render-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("audio.wav")
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
+            channels: 1, interleaved: false
+        ))
+        var file: AVAudioFile? = try AVAudioFile(forWriting: url, settings: format.settings)
+        let writer = WhisperWAVWriter(
+            file: try XCTUnwrap(file), segmentFile: nil, segmentAudioFile: nil,
+            outputFormat: format
+        )
+        let source = try makeConstantBuffer(format: format, value: 0.25)
+        source.frameLength = 128
+        let sink = WhisperBufferedAudioSink()
+        sink.consume(source.audioBufferList, frameCount: source.frameLength, format: format)
+        let original = try XCTUnwrap(source.floatChannelData?[0])
+        for index in 0..<128 { original[index] = -0.25 }
+        sink.attach(writer)
+        XCTAssertNil(sink.finishAcceptingAndWait())
+        XCTAssertNil(writer.finish())
+        file = nil
+        let sealed = try AVAudioFile(forReading: url)
+        XCTAssertEqual(sealed.length, 128)
+        let captured = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 128))
+        try sealed.read(into: captured)
+        let channel = try XCTUnwrap(captured.floatChannelData?[0])
+        XCTAssertGreaterThan(channel[0], 0.24)
+        XCTAssertGreaterThan(channel[127], 0.24)
+    }
+
     func testBufferedSinkOverflowFailsInsteadOfTruncatingSilently()
         throws
     {

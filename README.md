@@ -135,9 +135,12 @@ select **Decode After Speaking** to preserve idle memory; it loads the selected
 model only after the complete recording is sealed, then decodes once.
 Recording itself begins at physical key-down on a dedicated runtime,
 before model preparation, badge placement, audio conversion, or WAV creation.
-Early microphone buffers are retained in order, so speaking immediately does
-not sacrifice the first words. Very quick taps are ignored, and ordinary Option
-shortcuts continue to work.
+Full-recording modes receive native render quanta without an input tap's
+coalescing delay. Their provisional badge and waveform/timer updates start before
+gesture acceptance, and engine startup no longer blocks drawing. Early samples
+are retained in order; hardware activation and first-sample latency are measured
+separately. Very quick taps are ignored, and ordinary Option shortcuts continue
+to work.
 
 For these two full-recording modes, release, Return, Stop, and Send capture the
 destination immediately, then retain continued speech until a cadence-aware

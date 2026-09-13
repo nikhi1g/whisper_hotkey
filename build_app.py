@@ -63,14 +63,40 @@ def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = No
     subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
+def launcher_has_current_version(launcher: Path) -> bool:
+    metadata = subprocess.check_output(
+        ["/bin/launchctl", "plist", str(launcher)], text=True
+    )
+    return all(
+        re.search(rf'"{key}"\s*=\s*"{re.escape(VERSION)}";', metadata)
+        for key in ("CFBundleVersion", "CFBundleShortVersionString")
+    )
+
+
 def swift_build() -> Path:
+    source_metadata = plistlib.loads(
+        (ROOT / "Sources" / "WhisperHotkeyLoginLauncher" / "Info.plist").read_bytes()
+    )
+    if any(
+        source_metadata.get(key) != VERSION
+        for key in ("CFBundleVersion", "CFBundleShortVersionString")
+    ):
+        raise RuntimeError("Login launcher source metadata must match VERSION")
+    products = ROOT / ".build" / "release"
+    launcher = products / "WhisperHotkeyLoginLauncher"
+    if launcher.exists() and not launcher_has_current_version(launcher):
+        # SwiftPM does not track the excluded plist passed through -sectcreate.
+        # Remove only this generated product so its native link step runs again.
+        launcher.unlink()
     module_cache = ROOT / ".build" / "module-cache"
     module_cache.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
     environment["CLANG_MODULE_CACHE_PATH"] = str(module_cache)
     environment["SWIFTPM_MODULECACHE_OVERRIDE"] = str(module_cache)
     run(["swift", "build", "-c", "release"], env=environment)
-    return ROOT / ".build" / "release"
+    if not launcher_has_current_version(launcher):
+        raise RuntimeError("Built login launcher metadata does not match VERSION")
+    return products
 
 
 def write_info_plist() -> None:
@@ -273,7 +299,29 @@ def bundled_dynamic_libraries() -> list[Path]:
             f"@rpath/{library.name}",
             str(library),
         ])
+        make_library_search_paths_relocatable(library, "@loader_path")
+    make_library_search_paths_relocatable(helper, "@executable_path/../Frameworks")
     return list(copied.values())
+
+
+def make_library_search_paths_relocatable(binary: Path, bundle_path: str) -> None:
+    result = subprocess.run(
+        ["/usr/bin/otool", "-l", str(binary)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    paths = re.findall(
+        r"cmd LC_RPATH\s+cmdsize \d+\s+path (.+?) \(offset \d+\)",
+        result.stdout,
+    )
+    # A packaged helper must not accidentally load the builder's Homebrew or
+    # temporary dependency tree instead of its own signed Frameworks.
+    for path in paths:
+        if path.startswith("/") and not path.startswith("/usr/lib/"):
+            run(["/usr/bin/install_name_tool", "-delete_rpath", path, str(binary)])
+    if bundle_path not in paths:
+        run(["/usr/bin/install_name_tool", "-add_rpath", bundle_path, str(binary)])
 
 
 def verify_bundled_dependencies(binaries: list[Path]) -> None:

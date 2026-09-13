@@ -271,6 +271,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private var controlServer: ControlServer?
     private var primedAudioCaptureToken: WhisperAudioCaptureToken?
     private var primedBadgeVisible = false
+    private var primedCaptureRequestedAt: UInt64?
+    private var recordingPresentationToken: WhisperAudioCaptureToken?
+    private var captureAdoptionTask: Task<Void, Never>?
     private var captureTimingTask: Task<Void, Never>?
     private var recognitionTask: Task<Void, Never>?
     private var maximumDurationTask: Task<Void, Never>?
@@ -716,6 +719,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false
+        if !isPauseMode && !processingMode.decodesWhileSpeaking {
+            return beginFullRecordingSession(generation: generation)
+        }
 
         // Model preparation belongs to its own actor and starts independently
         // of recorder adoption and badge/Accessibility work.
@@ -744,10 +750,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                         isPauseMode || processingMode.decodesWhileSpeaking
                 )
             }
-            // The fallback path also admits capture before any model task.
-            if !isPauseMode && !processingMode.decodesWhileSpeaking {
-                beginFullRecordingPipeline(generation: generation)
-            }
             primedBadgeVisible = false
             process(.captureStarted)
             startRecordingPresentation(
@@ -760,6 +762,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
 
+        scheduleMaximumDuration(generation: generation)
+        return true
+    }
+
+    private func scheduleMaximumDuration(generation: UInt64) {
         let maximumDuration = Duration.seconds(recordingLimit.seconds)
         maximumDurationTask = Task { @MainActor [weak self] in
             do {
@@ -782,7 +789,70 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
             process(.maximumDurationReached)
         }
+    }
+
+    private func beginFullRecordingSession(generation: UInt64) -> Bool {
+        let requestedAt = primedAudioCaptureToken == nil
+            ? DispatchTime.now().uptimeNanoseconds
+            : primedCaptureRequestedAt ?? DispatchTime.now().uptimeNanoseconds
+        let token = primedAudioCaptureToken ?? recorder.primeCapture(
+            requestedAtUptimeNanoseconds: requestedAt
+        )
+        primedAudioCaptureToken = nil
+        primedCaptureRequestedAt = nil
+        startFullCapturePresentation(token: token, requestedAt: requestedAt)
+        captureAdoptionTask = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            do {
+                try await recorder.adoptPrimedCaptureAsynchronously(token)
+                guard !Task.isCancelled, generation == sessionGeneration else { return }
+                captureAdoptionTask = nil
+                primedBadgeVisible = false
+                scheduleInitialBadgeAnchorResolution()
+                beginFullRecordingPipeline(generation: generation)
+                process(.captureStarted)
+                badgeFocusMonitor.start()
+                scheduleMaximumDuration(generation: generation)
+            } catch {
+                guard !Task.isCancelled, generation == sessionGeneration else { return }
+                captureAdoptionTask = nil
+                fail(error)
+            }
+        }
         return true
+    }
+
+    private func startFullCapturePresentation(
+        token: WhisperAudioCaptureToken,
+        requestedAt: UInt64
+    ) {
+        guard recordingPresentationToken != token else { return }
+        recordingPresentationTask?.cancel()
+        recordingPresentationToken = token
+        primedBadgeVisible = true
+        badge.present(.listening)
+        let startedAt = TimeInterval(requestedAt) / 1_000_000_000
+        let presentedAt = DispatchTime.now().uptimeNanoseconds
+        logger.info("Capture badge edge-to-visible=\((presentedAt - min(presentedAt, requestedAt)) / 1_000, privacy: .public)us")
+        scheduleCaptureTimingReport(for: token)
+        recordingPresentationTask = Task { @MainActor [weak self] in
+            var displayedLevel: Float = 0
+            while !Task.isCancelled {
+                guard let self, recordingPresentationToken == token else { return }
+                if machine.phase == .listening, let error = recorder.activeCaptureError {
+                    fail(error)
+                    return
+                }
+                displayedLevel = max(recorder.inputLevel(for: token), displayedLevel * 0.58)
+                badge.updateListening(
+                    elapsed: ProcessInfo.processInfo.systemUptime - startedAt,
+                    limit: TimeInterval(recordingLimit.seconds),
+                    level: displayedLevel
+                )
+                do { try await Task.sleep(for: .milliseconds(50)) }
+                catch { return }
+            }
+        }
     }
 
     private func beginFullRecordingPipeline(generation: UInt64) {
@@ -817,6 +887,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             else {
                 return
             }
+            primedCaptureRequestedAt = timestampNanoseconds
             primedAudioCaptureToken = recorder.primeCapture(
                 pauseSegmentation:
                     isPauseMode || processingMode.decodesWhileSpeaking,
@@ -826,6 +897,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         case .cancelPrimedCapture:
             guard let token = primedAudioCaptureToken else { return }
             primedAudioCaptureToken = nil
+            primedCaptureRequestedAt = nil
             recorder.cancelPrimedCapture(token)
 
         default:
@@ -841,6 +913,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         else {
             return
         }
+        if !isPauseMode && !processingMode.decodesWhileSpeaking,
+           let token = primedAudioCaptureToken {
+            startFullCapturePresentation(
+                token: token,
+                requestedAt: primedCaptureRequestedAt ?? DispatchTime.now().uptimeNanoseconds
+            )
+            return
+        }
         primedBadgeVisible = true
         badge.present(.listening)
         badge.updateListening(
@@ -853,6 +933,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private func dismissPrimedCapturePresentation() {
         guard primedBadgeVisible, !machine.phase.isBusy else { return }
         primedBadgeVisible = false
+        if recordingPresentationToken != nil {
+            stopRecordingPresentation()
+        }
         badge.hide()
     }
 
@@ -871,7 +954,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     .requestToFirstCommittedSampleNanoseconds
                 {
                     logger.info(
-                        "Capture timing admission=\(timing.requestToAdmissionNanoseconds / 1_000, privacy: .public)us first-buffer=\(firstBuffer / 1_000_000, privacy: .public)ms first-commit=\(firstCommit / 1_000_000, privacy: .public)ms"
+                        "Capture timing admission=\(timing.requestToAdmissionNanoseconds / 1_000, privacy: .public)us engine-started=\((timing.requestToEngineStartedNanoseconds ?? 0) / 1_000, privacy: .public)us first-buffer=\(firstBuffer / 1_000, privacy: .public)us first-commit=\(firstCommit / 1_000, privacy: .public)us"
                     )
                     self?.captureTimingTask = nil
                     return
@@ -1445,6 +1528,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if presentation == .listening {
+            if recordingPresentationToken != nil {
+                return
+            }
             // Order the panel immediately at the pointer fallback. Exact AX
             // geometry is advisory and may block for hundreds of
             // milliseconds, so resolve it on the next MainActor turn after
@@ -1571,6 +1657,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopRecordingPresentation() {
+        if recordingPresentationToken != nil {
+            captureTimingTask?.cancel()
+            captureTimingTask = nil
+        }
+        recordingPresentationToken = nil
+        captureAdoptionTask?.cancel()
+        captureAdoptionTask = nil
         badgeFocusMonitor.stop()
         recordingPresentationTask?.cancel()
         recordingPresentationTask = nil
@@ -1627,6 +1720,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             let generation = sessionGeneration
             completionCaptureGraceTask = Task { @MainActor [weak self] in
                 guard let self, !Task.isCancelled else { return }
+                if let adoption = captureAdoptionTask { await adoption.value }
+                guard !Task.isCancelled, generation == sessionGeneration else { return }
                 await recorder.finishCaptureOnSilence()
                 guard !Task.isCancelled,
                       generation == sessionGeneration,

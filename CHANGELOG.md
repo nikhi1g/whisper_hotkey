@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.3.1: 2026-09-12
+
+- Feed Model Ready and Decode After Speaking capture from an AVAudioEngine
+  sink node's render quanta instead of a coalescing input tap. The existing
+  bounded FIFO and private writer retain every admitted native sample.
+- Start provisional waveform/timer updates before gesture acceptance, and
+  adopt capture asynchronously so engine startup cannot freeze the main actor.
+- Preserve quick-tap and shortcut rejection, token ownership, cancellation,
+  audio cleanup, and the unchanged Decode While Speaking/Pause Mode paths.
+- Decode After Speaking now prepares its model only after the complete WAV
+  seals. Model Ready may warm after recorder admission and decodes only sealed
+  full-session audio.
+- Retain continued speech after finish input until cadence-aware silence or
+  the bounded rational cap, without replacing the captured destination.
+- Report badge visibility, queue admission, engine startup, first buffer, and
+  first committed samples separately.
+- Keep an already-correct full-recording microphone route instead of rebinding
+  the same Audio Unit device at each start.
+- Make packaged helper library search paths bundle-relative, so an installed
+  app cannot depend on the builder's Homebrew or temporary library tree.
+- Relink stale incremental login-launcher products when embedded version
+  metadata differs, and verify both embedded version fields before packaging.
+
 ## 4.2.9: 2026-09-12
 
 - Added an Automatic/manual microphone picker backed by stable Core Audio

@@ -63,7 +63,8 @@ and recognition form a pipeline while whisper.cpp performs its existing
 CPU-thread and Metal parallel work. The microphone remains off at idle and no
 choice adds idle polling.
 All four selectable models share the same key-edge capture runtime. Recording
-starts independently of model preparation; the tap copies native PCM into a
+starts independently of model preparation; native render callbacks in
+full-recording modes and the unchanged tap in streaming modes copy PCM into a
 bounded ordered queue, while conversion, speech detection, and private WAV
 writes run separately. Background decoding receives only closed immutable
 segments, so it cannot contend with or read ahead of the active recording.

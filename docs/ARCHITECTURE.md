@@ -38,13 +38,20 @@ directory; runtime teardown is skipped only when the processing mode
 deliberately keeps it warm.
 
 The physical hotkey edge only enqueues a token-scoped command. A dedicated
-user-interactive serial runtime owns AVAudioEngine start, stop, tap mutation,
-adoption, cancellation, and finalization. The engine starts before private
-WAV/converter preparation; early native buffers are retained in a bounded FIFO.
-The tap performs one bounded PCM copy and enqueue. A separate writer queue owns
+user-interactive serial runtime owns AVAudioEngine start, stop, input-graph
+mutation, adoption, cancellation, and finalization. The engine starts before
+private WAV/converter preparation; early native buffers are retained in a bounded
+FIFO. Full-recording modes use AVAudioSinkNode render callbacks to avoid the
+input tap's coalescing delay; streaming modes retain the existing tap.
+Either callback performs one bounded PCM copy and enqueue. A separate writer queue owns
 conversion, speech detection, metering, canonical/segment file writes, and
 ordered rotation barriers. Overflow or continuity loss invalidates capture
 explicitly instead of returning a silently truncated recording.
+The full-recording badge starts its existing 20 Hz waveform/timer task at the
+provisional edge, not at acceptance. Its token-local meter read never waits for
+the capture-control queue. Asynchronous adoption leaves AppKit free to draw
+through engine startup; accepting the gesture does not reset the waveform.
+No audio worker, microphone, or presentation task survives rejection or idle.
 
 For Model Ready and Decode After Speaking outside Pause Mode, finish input
 snapshots the destination before starting an event-driven recorder wait. An
@@ -57,8 +64,8 @@ or unconfirmed ongoing speech wait for audio or the cap. The capture queue stops
 the engine, and the normal finalization drains all admitted buffers before
 handing the sealed WAV to recognition. Cancellation and the recording limit
 override the wait, and stale callbacks cannot stop a replacement token.
-Content-free startup diagnostics report edge-to-queue admission in microseconds
-separately from first-buffer and first-committed-sample latency.
+Content-free startup diagnostics report edge-to-badge visibility, queue admission,
+engine startup, first-buffer, and first-committed-sample latency separately.
 
 Pause Mode retains one uninterrupted full-session WAV and writes a parallel
 current inference segment from the same writer-queue samples. Its pause

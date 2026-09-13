@@ -56,15 +56,22 @@ Option, or Control, Caps Lock, or Fn/Globe and persists that choice.
 Right Option is the default. A selected modifier remains usable in ordinary
 shortcuts: combining it with another key or a mouse click passes through and
 does not trigger dictation. Private provisional microphone capture starts on
-the physical key-down edge so the beginning of speech is never lost. That edge
-only enqueues a tokenized command to a dedicated capture runtime: the audio
-engine starts before private WAV/converter preparation, early native buffers
-wait in a bounded ordered queue, and conversion, speech detection, metering,
-and file writes run on a separate writer queue. Queue overflow fails visibly
-instead of silently truncating speech. A shortcut, modifier-click, or rejected
-quick tap cancels only its matching provisional token and discards that audio
-without recognition or insertion. A provisional listening badge may appear at
-the pointer fallback and is removed immediately when that gesture is rejected.
+the physical key-down edge. That edge only enqueues a tokenized command to a
+dedicated capture runtime: the audio engine starts before private WAV/converter
+preparation. Model Ready and Decode After Speaking receive native render quanta
+through an AVAudioEngine sink node rather than waiting for an input tap to
+coalesce buffers. Early native samples wait in a bounded ordered queue, and
+conversion, speech detection, metering, and file writes run on a separate writer
+queue. Every sample supplied by the microphone is retained; hardware activation
+latency is measured separately from command admission. Queue overflow fails
+visibly instead of silently truncating speech. A shortcut, modifier-click, or
+rejected quick tap cancels only its matching provisional token and discards that
+audio without recognition or insertion. In those two full-recording modes the
+pointer-fallback badge and its waveform/timer updates start provisionally,
+before dwell or toggle-release acceptance. Recorder adoption is asynchronous
+and cannot stall those updates behind engine startup. Rejection immediately
+removes the badge and stops its update task. Decode While Speaking and Pause
+Mode retain their existing tap and presentation paths.
 Hold-to-talk is the default: a one-shot 150 ms dwell, measured from physical
 key-down rather than deferred app delivery, accepts the provisional capture
 without polling. Releasing
