@@ -273,9 +273,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         microphoneDevicesByUID = Dictionary(
             uniqueKeysWithValues: state.devices.map { ($0.uid, $0) }
         )
-
+        let automaticTitle = state.devices.first(where: \.isSystemDefault).map {
+            "Automatic (\($0.name))"
+        } ?? "Automatic"
         let automatic = NSMenuItem(
-            title: "Automatic",
+            title: automaticTitle,
             action: #selector(selectMicrophone(_:)),
             keyEquivalent: ""
         )

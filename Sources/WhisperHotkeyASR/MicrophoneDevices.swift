@@ -121,6 +121,11 @@ public struct MicrophoneDeviceCatalog: Sendable {
         }
         return try ids.compactMap { id in
             guard try hasInputStreams(id) else { return nil }
+            let name = try stringProperty(
+                id,
+                selector: kAudioObjectPropertyName
+            )
+            guard Self.shouldExposeDevice(named: name) else { return nil }
             return ResolvedDevice(
                 id: id,
                 device: MicrophoneDevice(
@@ -128,14 +133,15 @@ public struct MicrophoneDeviceCatalog: Sendable {
                         id,
                         selector: kAudioDevicePropertyDeviceUID
                     ),
-                    name: try stringProperty(
-                        id,
-                        selector: kAudioObjectPropertyName
-                    ),
+                    name: name,
                     isSystemDefault: id == defaultID
                 )
             )
         }
+    }
+
+    static func shouldExposeDevice(named name: String) -> Bool {
+        !name.hasPrefix("CADefaultDeviceAggregate-")
     }
 
     private func defaultInputDeviceID() throws -> AudioDeviceID {

@@ -194,7 +194,7 @@ final class MenuBarControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.microphoneMenuItemTitlesForTesting,
             [
-                "Automatic",
+                "Automatic (MacBook Pro Microphone)",
                 "MacBook Pro Microphone (System Default)",
                 "Nikhil's AirPods",
             ]
@@ -203,7 +203,9 @@ final class MenuBarControllerTests: XCTestCase {
             titled: "Nikhil's AirPods"
         )
         XCTAssertEqual(selection.deviceUID, "airpods")
-        controller.activateMicrophoneItemForTesting(titled: "Automatic")
+        controller.activateMicrophoneItemForTesting(
+            titled: "Automatic (MacBook Pro Microphone)"
+        )
         XCTAssertTrue(selection.isAutomatic)
     }
 

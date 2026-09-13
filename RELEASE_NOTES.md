@@ -16,7 +16,7 @@ A bounded first-buffer watchdog handles the separate running-but-silent engine s
 
 ## Verification
 
-- The complete Swift suite passes: 396 tests, with three intentional opt-in integration tests skipped.
+- The complete Swift suite passes: 397 tests, with three intentional opt-in integration tests skipped.
 - All 16 bootstrap and release-tooling tests pass.
 - Menu and Settings coverage verifies Automatic, manual, disconnected, and busy-state microphone behavior.
 - Focused capture coverage verifies token-scoped watchdog and route-recovery behavior.
