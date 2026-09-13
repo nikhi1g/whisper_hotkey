@@ -241,6 +241,23 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             copyLastDictation: { [weak self] in
                 self?.copyLastDictation()
             },
+            selectMicrophone: { [weak self] selection in
+                self?.selectMicrophone(selection)
+            },
+            microphoneState: { [weak self] in
+                guard let self else {
+                    return MenuBarMicrophoneState(
+                        selection: .automatic,
+                        devices: [],
+                        configurationEnabled: false
+                    )
+                }
+                return MenuBarMicrophoneState(
+                    selection: self.selectedMicrophone,
+                    devices: self.recorder.availableMicrophones,
+                    configurationEnabled: !self.machine.phase.isBusy
+                )
+            },
             restart: { [weak self] in
                 self?.restartApplication()
             },

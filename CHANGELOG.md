@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.2.9: 2026-09-12
+
+- Added an Automatic/manual microphone picker backed by stable Core Audio
+  device UIDs. Manual routing affects only whisper_hotkey, survives reconnects,
+  and is reapplied after route recovery without changing the macOS default.
+- Added configured and active microphone names to terminal status, while a
+  disconnected manual choice now fails visibly instead of silently capturing
+  another source.
+- Removed duplicate Model Ready preparation and replaced the whisper.cpp
+  helper's 10 ms response polling with event-driven wake-up. Full-session audio,
+  prompts, decoding strategy, beam size, sanitization, and formatting remain
+  unchanged.
+- Added bounded first-buffer recovery so a running-but-silent microphone
+  restarts once and then fails visibly instead of remaining stuck on Listening.
+
+
 ## 4.2.8: 2026-08-31
 
 - Recovered active capture after AirPods or another input device changes its

@@ -1,4 +1,5 @@
 import AppKit
+import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 public enum MenuBarState: Equatable, Sendable {
@@ -77,12 +78,30 @@ public enum MenuBarState: Equatable, Sendable {
     }
 }
 
+public struct MenuBarMicrophoneState: Equatable, Sendable {
+    public let selection: MicrophoneSelection
+    public let devices: [MicrophoneDevice]
+    public let configurationEnabled: Bool
+
+    public init(
+        selection: MicrophoneSelection,
+        devices: [MicrophoneDevice],
+        configurationEnabled: Bool
+    ) {
+        self.selection = selection
+        self.devices = devices
+        self.configurationEnabled = configurationEnabled
+    }
+}
+
 @MainActor
 public struct MenuBarActions {
     public var showSetup: () -> Void
     public var showAdvancedSettings: () -> Void
     public var cancelDictation: () -> Void
     public var copyLastDictation: () -> Void
+    public var selectMicrophone: (MicrophoneSelection) -> Void
+    public var microphoneState: () -> MenuBarMicrophoneState
     public var restart: () -> Void
     public var quit: () -> Void
 
@@ -91,6 +110,14 @@ public struct MenuBarActions {
         showAdvancedSettings: @escaping () -> Void,
         cancelDictation: @escaping () -> Void,
         copyLastDictation: @escaping () -> Void,
+        selectMicrophone: @escaping (MicrophoneSelection) -> Void = { _ in },
+        microphoneState: @escaping () -> MenuBarMicrophoneState = {
+            MenuBarMicrophoneState(
+                selection: .automatic,
+                devices: [],
+                configurationEnabled: true
+            )
+        },
         restart: @escaping () -> Void,
         quit: @escaping () -> Void
     ) {
@@ -98,14 +125,17 @@ public struct MenuBarActions {
         self.showAdvancedSettings = showAdvancedSettings
         self.cancelDictation = cancelDictation
         self.copyLastDictation = copyLastDictation
+        self.selectMicrophone = selectMicrophone
+        self.microphoneState = microphoneState
         self.restart = restart
         self.quit = quit
     }
 }
 
 @MainActor
-public final class MenuBarController: NSObject {
+public final class MenuBarController: NSObject, NSMenuDelegate {
     private let actions: MenuBarActions
+    private var microphoneDevicesByUID: [String: MicrophoneDevice] = [:]
     private let statusItem: NSStatusItem
     private let stateItem = NSMenuItem(
         title: MenuBarState.starting.title,
@@ -132,6 +162,11 @@ public final class MenuBarController: NSObject {
         action: #selector(showAdvancedSettings),
         keyEquivalent: ","
     )
+    private let microphoneItem = NSMenuItem(
+        title: "Microphone",
+        action: nil,
+        keyEquivalent: ""
+    )
     private let restartItem = NSMenuItem(
         title: "Restart whisper_hotkey",
         action: #selector(restart),
@@ -149,6 +184,7 @@ public final class MenuBarController: NSObject {
         super.init()
 
         let menu = NSMenu()
+        menu.delegate = self
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(.separator())
@@ -167,6 +203,7 @@ public final class MenuBarController: NSObject {
 
         advancedSettingsItem.target = self
         menu.addItem(advancedSettingsItem)
+        menu.addItem(microphoneItem)
         menu.addItem(.separator())
 
         restartItem.target = self
@@ -206,6 +243,7 @@ public final class MenuBarController: NSObject {
         copyLastDictationItem.isHidden = !hasLastDictation
         setupItem.isEnabled = !state.canCancel
         advancedSettingsItem.isEnabled = !state.canCancel
+        microphoneItem.isEnabled = !state.canCancel
 
         guard let button = statusItem.button else {
             return
@@ -225,6 +263,57 @@ public final class MenuBarController: NSObject {
         button.setAccessibilityLabel(description)
     }
 
+    public func menuWillOpen(_ menu: NSMenu) {
+        rebuildMicrophoneMenu()
+    }
+
+    private func rebuildMicrophoneMenu() {
+        let state = actions.microphoneState()
+        let submenu = NSMenu(title: "Microphone")
+        microphoneDevicesByUID = Dictionary(
+            uniqueKeysWithValues: state.devices.map { ($0.uid, $0) }
+        )
+
+        let automatic = NSMenuItem(
+            title: "Automatic",
+            action: #selector(selectMicrophone(_:)),
+            keyEquivalent: ""
+        )
+        automatic.target = self
+        automatic.state = state.selection.isAutomatic ? .on : .off
+        submenu.addItem(automatic)
+
+        for device in state.devices {
+            let suffix = device.isSystemDefault ? " (System Default)" : ""
+            let item = NSMenuItem(
+                title: device.name + suffix,
+                action: #selector(selectMicrophone(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = device.uid
+            item.state = state.selection.deviceUID == device.uid ? .on : .off
+            submenu.addItem(item)
+        }
+
+        if let selectedUID = state.selection.deviceUID,
+           microphoneDevicesByUID[selectedUID] == nil
+        {
+            let unavailable = NSMenuItem(
+                title: (state.selection.displayName ?? "Selected Microphone")
+                    + " (Unavailable)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            unavailable.state = .on
+            unavailable.isEnabled = false
+            submenu.addItem(unavailable)
+        }
+
+        microphoneItem.submenu = submenu
+        microphoneItem.isEnabled = state.configurationEnabled
+    }
+
     @objc private func showSetup() {
         actions.showSetup()
     }
@@ -239,6 +328,21 @@ public final class MenuBarController: NSObject {
 
     @objc private func copyLastDictation() {
         actions.copyLastDictation()
+    }
+
+    @objc private func selectMicrophone(_ sender: NSMenuItem) {
+        guard let uid = sender.representedObject as? String else {
+            actions.selectMicrophone(.automatic)
+            rebuildMicrophoneMenu()
+            return
+        }
+        guard let device = microphoneDevicesByUID[uid] else {
+            return
+        }
+        actions.selectMicrophone(
+            MicrophoneSelection(deviceUID: device.uid, displayName: device.name)
+        )
+        rebuildMicrophoneMenu()
     }
 
     @objc private func quit() {
@@ -264,6 +368,21 @@ public final class MenuBarController: NSObject {
             return
         }
         menu.performActionForItem(at: index)
+    }
+
+    var microphoneMenuItemTitlesForTesting: [String] {
+        rebuildMicrophoneMenu()
+        return microphoneItem.submenu?.items.map(\.title) ?? []
+    }
+
+    func activateMicrophoneItemForTesting(titled title: String) {
+        rebuildMicrophoneMenu()
+        guard let submenu = microphoneItem.submenu,
+              let index = submenu.items.firstIndex(where: { $0.title == title })
+        else {
+            return
+        }
+        submenu.performActionForItem(at: index)
     }
 
     func menuItemIsEnabledForTesting(titled title: String) -> Bool? {

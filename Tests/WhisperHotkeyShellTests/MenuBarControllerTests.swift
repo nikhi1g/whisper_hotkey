@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import WhisperHotkeyShell
+import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 final class MenuBarControllerTests: XCTestCase {
@@ -130,6 +131,7 @@ final class MenuBarControllerTests: XCTestCase {
                 "",
                 "Open Setup…",
                 "Settings…",
+                "Microphone",
                 "",
                 "Restart whisper_hotkey",
                 "Quit whisper_hotkey",
@@ -150,6 +152,59 @@ final class MenuBarControllerTests: XCTestCase {
 
         controller.activateMenuItemForTesting(titled: "Settings…")
         XCTAssertEqual(advancedSettingsCount, 1)
+    }
+
+    @MainActor
+    func testMicrophoneSubmenuSelectsAutomaticAndSpecificDevice() {
+        var selection = MicrophoneSelection.automatic
+        let devices = [
+            MicrophoneDevice(
+                uid: "builtin",
+                name: "MacBook Pro Microphone",
+                isSystemDefault: true
+            ),
+            MicrophoneDevice(
+                uid: "airpods",
+                name: "Nikhil's AirPods",
+                isSystemDefault: false
+            ),
+        ]
+        let controller = MenuBarController(
+            toggleDictationEnabled: true,
+            selectedHotkey: .rightOption,
+            hasLastDictation: false,
+            actions: MenuBarActions(
+                showSetup: {},
+                showAdvancedSettings: {},
+                cancelDictation: {},
+                copyLastDictation: {},
+                selectMicrophone: { selection = $0 },
+                microphoneState: {
+                    MenuBarMicrophoneState(
+                        selection: selection,
+                        devices: devices,
+                        configurationEnabled: true
+                    )
+                },
+                restart: {},
+                quit: {}
+            )
+        )
+
+        XCTAssertEqual(
+            controller.microphoneMenuItemTitlesForTesting,
+            [
+                "Automatic",
+                "MacBook Pro Microphone (System Default)",
+                "Nikhil's AirPods",
+            ]
+        )
+        controller.activateMicrophoneItemForTesting(
+            titled: "Nikhil's AirPods"
+        )
+        XCTAssertEqual(selection.deviceUID, "airpods")
+        controller.activateMicrophoneItemForTesting(titled: "Automatic")
+        XCTAssertTrue(selection.isAutomatic)
     }
 
     @MainActor
@@ -189,6 +244,10 @@ final class MenuBarControllerTests: XCTestCase {
             controller.menuItemIsEnabledForTesting(
                 titled: "Settings…"
             ),
+            false
+        )
+        XCTAssertEqual(
+            controller.menuItemIsEnabledForTesting(titled: "Microphone"),
             false
         )
         controller.activateMenuItemForTesting(titled: "Cancel Dictation")

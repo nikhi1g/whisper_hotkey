@@ -1148,7 +1148,7 @@ public final class AdvancedSettingsWindowController:
         let automaticTitle = state.availableMicrophones.first(where: {
             $0.isSystemDefault
         }).map {
-            "Automatic — \($0.name)"
+            "Automatic (\($0.name))"
         } ?? "Automatic"
         microphonePopup.addItem(withTitle: automaticTitle)
         microphonePopup.lastItem?.isEnabled = state.configurationEnabled
@@ -1168,7 +1168,7 @@ public final class AdvancedSettingsWindowController:
                 let storedName = state.selectedMicrophone.displayName
                     ?? selectedUID
                 microphonePopup.addItem(
-                    withTitle: "Unavailable — \(storedName)"
+                    withTitle: "\(storedName) (Unavailable)"
                 )
                 microphonePopup.lastItem?.representedObject = selectedUID
                 microphonePopup.lastItem?.isEnabled = false

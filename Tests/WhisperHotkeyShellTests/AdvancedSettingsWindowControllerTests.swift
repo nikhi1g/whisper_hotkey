@@ -401,7 +401,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.microphoneOptionTitlesForTesting,
             [
-                "Automatic — MacBook Microphone",
+                "Automatic (MacBook Microphone)",
                 "MacBook Microphone",
                 "Desk Microphone",
             ]
@@ -478,7 +478,7 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
 
         XCTAssertEqual(
             controller.microphoneOptionTitlesForTesting,
-            ["Automatic — MacBook Microphone", "MacBook Microphone",
+            ["Automatic (MacBook Microphone)", "MacBook Microphone",
              "Desk Microphone"]
         )
         XCTAssertEqual(controller.selectedMicrophoneForTesting, selected)
@@ -532,10 +532,10 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.microphoneOptionTitlesForTesting,
             [
-                "Automatic — MacBook Microphone",
+                "Automatic (MacBook Microphone)",
                 "MacBook Microphone",
                 "Desk Microphone",
-                "Unavailable — Travel Microphone",
+                "Travel Microphone (Unavailable)",
             ]
         )
         XCTAssertEqual(

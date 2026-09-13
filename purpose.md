@@ -44,8 +44,8 @@ Command-M minimizes, and Control-Command-F or the green title-bar control
 toggles full screen. Its document scrolls vertically when its content exceeds
 the available window height.
 
-Settings includes a **Microphone** picker. **Automatic** follows the current
-macOS default input; a manual choice persists the device's stable Core Audio UID
+The menu bar includes a **Microphone** submenu. **Automatic** follows the
+current macOS default input; a manual choice persists the device's stable Core Audio UID
 and routes only whisper_hotkey's owned engine without changing the system
 default. A disconnected manual device remains selected and fails visibly rather
 than silently recording another microphone. Route recovery reapplies the choice.
