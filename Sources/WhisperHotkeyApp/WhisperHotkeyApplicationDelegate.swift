@@ -255,6 +255,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 return MenuBarMicrophoneState(
                     selection: self.selectedMicrophone,
                     devices: self.recorder.availableMicrophones,
+                    automaticDeviceName: self.recorder.effectiveMicrophone?.name,
                     configurationEnabled: !self.machine.phase.isBusy
                 )
             },

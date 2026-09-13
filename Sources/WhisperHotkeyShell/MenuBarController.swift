@@ -81,15 +81,18 @@ public enum MenuBarState: Equatable, Sendable {
 public struct MenuBarMicrophoneState: Equatable, Sendable {
     public let selection: MicrophoneSelection
     public let devices: [MicrophoneDevice]
+    public let automaticDeviceName: String?
     public let configurationEnabled: Bool
 
     public init(
         selection: MicrophoneSelection,
         devices: [MicrophoneDevice],
+        automaticDeviceName: String? = nil,
         configurationEnabled: Bool
     ) {
         self.selection = selection
         self.devices = devices
+        self.automaticDeviceName = automaticDeviceName
         self.configurationEnabled = configurationEnabled
     }
 }
@@ -273,8 +276,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         microphoneDevicesByUID = Dictionary(
             uniqueKeysWithValues: state.devices.map { ($0.uid, $0) }
         )
-        let automaticTitle = state.devices.first(where: \.isSystemDefault).map {
-            "Automatic (\($0.name))"
+        let automaticName = state.automaticDeviceName
+            ?? state.devices.first(where: \.isSystemDefault)?.name
+        let automaticTitle = automaticName.map {
+            "Automatic (\($0))"
         } ?? "Automatic"
         let automatic = NSMenuItem(
             title: automaticTitle,

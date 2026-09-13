@@ -16,6 +16,16 @@ Finish input captures the destination immediately. Continued speech is retained 
 
 Decode While Speaking and Pause Mode retain their existing input tap, segmentation, recognition, reconciliation, prompts, and completion behavior.
 
+## AirPods playback coexistence
+
+When music is playing through AirPods and macOS also makes the AirPods input the
+default, Automatic now captures through the built-in Mac microphone. The app
+changes only its owned input Audio Unit and never pauses playback or changes the
+macOS input or output defaults. USB and other independent default microphones
+remain selected normally. An explicit manual microphone choice is always
+honored, including AirPods, where macOS may switch Bluetooth into its lower
+quality duplex profile.
+
 ## Distribution
 
 The packaged helper now resolves its signed libraries from the application's

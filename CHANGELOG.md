@@ -22,6 +22,9 @@
   app cannot depend on the builder's Homebrew or temporary library tree.
 - Relink stale incremental login-launcher products when embedded version
   metadata differs, and verify both embedded version fields before packaging.
+- Keep AirPods playback on the existing output route during Automatic capture
+  by using the built-in microphone when macOS would otherwise activate the
+  Bluetooth headset input. Manual microphone choices remain exact.
 
 ## 4.2.9: 2026-09-12
 

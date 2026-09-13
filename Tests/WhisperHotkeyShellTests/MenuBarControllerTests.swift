@@ -161,12 +161,12 @@ final class MenuBarControllerTests: XCTestCase {
             MicrophoneDevice(
                 uid: "builtin",
                 name: "MacBook Pro Microphone",
-                isSystemDefault: true
+                isSystemDefault: false
             ),
             MicrophoneDevice(
                 uid: "airpods",
                 name: "Nikhil's AirPods",
-                isSystemDefault: false
+                isSystemDefault: true
             ),
         ]
         let controller = MenuBarController(
@@ -183,6 +183,7 @@ final class MenuBarControllerTests: XCTestCase {
                     MenuBarMicrophoneState(
                         selection: selection,
                         devices: devices,
+                        automaticDeviceName: "MacBook Pro Microphone",
                         configurationEnabled: true
                     )
                 },
@@ -195,12 +196,12 @@ final class MenuBarControllerTests: XCTestCase {
             controller.microphoneMenuItemTitlesForTesting,
             [
                 "Automatic (MacBook Pro Microphone)",
-                "MacBook Pro Microphone (System Default)",
-                "Nikhil's AirPods",
+                "MacBook Pro Microphone",
+                "Nikhil's AirPods (System Default)",
             ]
         )
         controller.activateMicrophoneItemForTesting(
-            titled: "Nikhil's AirPods"
+            titled: "Nikhil's AirPods (System Default)"
         )
         XCTAssertEqual(selection.deviceUID, "airpods")
         controller.activateMicrophoneItemForTesting(

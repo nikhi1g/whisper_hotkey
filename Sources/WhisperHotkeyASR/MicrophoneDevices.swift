@@ -13,6 +13,7 @@ public enum MicrophoneDeviceError: Error, Equatable {
 public struct MicrophoneDeviceCatalog: Sendable {
     private struct ResolvedDevice {
         let id: AudioDeviceID
+        let transportType: UInt32
         let device: MicrophoneDevice
     }
 
@@ -21,6 +22,7 @@ public struct MicrophoneDeviceCatalog: Sendable {
     public func availableDevices() throws -> [MicrophoneDevice] {
         let defaultID = try defaultInputDeviceID()
         return try resolvedInputDevices(defaultID: defaultID)
+            .filter { Self.shouldExposeDevice(named: $0.device.name) }
             .map(\.device)
             .sorted {
                 let comparison = $0.name.localizedCaseInsensitiveCompare($1.name)
@@ -43,10 +45,10 @@ public struct MicrophoneDeviceCatalog: Sendable {
             }
             return match.device
         }
-        guard let match = devices.first(where: { $0.id == defaultID }) else {
-            throw MicrophoneDeviceError.unavailable("System default microphone")
-        }
-        return match.device
+        return try automaticInputDevice(
+            from: devices,
+            defaultInputID: defaultID
+        ).device
     }
 
     func apply(
@@ -60,7 +62,10 @@ public struct MicrophoneDeviceCatalog: Sendable {
         if let uid = selection.deviceUID {
             resolved = devices.first(where: { $0.device.uid == uid })
         } else {
-            resolved = devices.first(where: { $0.id == defaultID })
+            resolved = try automaticInputDevice(
+                from: devices,
+                defaultInputID: defaultID
+            )
         }
         guard let resolved else {
             throw MicrophoneDeviceError.unavailable(
@@ -137,9 +142,12 @@ public struct MicrophoneDeviceCatalog: Sendable {
                 id,
                 selector: kAudioObjectPropertyName
             )
-            guard Self.shouldExposeDevice(named: name) else { return nil }
             return ResolvedDevice(
                 id: id,
+                transportType: try uint32Property(
+                    id,
+                    selector: kAudioDevicePropertyTransportType
+                ),
                 device: MicrophoneDevice(
                     uid: try stringProperty(
                         id,
@@ -156,9 +164,62 @@ public struct MicrophoneDeviceCatalog: Sendable {
         !name.hasPrefix("CADefaultDeviceAggregate-")
     }
 
+    static func shouldUseBuiltInFallback(
+        defaultInputName: String,
+        defaultInputTransport: UInt32,
+        defaultOutputTransport: UInt32
+    ) -> Bool {
+        let bluetoothTransports: Set<UInt32> = [
+            kAudioDeviceTransportTypeBluetooth,
+            kAudioDeviceTransportTypeBluetoothLE,
+        ]
+        guard bluetoothTransports.contains(defaultOutputTransport) else {
+            return false
+        }
+        return bluetoothTransports.contains(defaultInputTransport)
+            || !shouldExposeDevice(named: defaultInputName)
+    }
+
+    private func automaticInputDevice(
+        from devices: [ResolvedDevice],
+        defaultInputID: AudioDeviceID
+    ) throws -> ResolvedDevice {
+        guard let defaultInput = devices.first(where: { $0.id == defaultInputID }) else {
+            throw MicrophoneDeviceError.unavailable("System default microphone")
+        }
+        guard let outputID = try? defaultOutputDeviceID(),
+              let outputTransport = try? uint32Property(
+                outputID,
+                selector: kAudioDevicePropertyTransportType
+              ),
+              Self.shouldUseBuiltInFallback(
+                defaultInputName: defaultInput.device.name,
+                defaultInputTransport: defaultInput.transportType,
+                defaultOutputTransport: outputTransport
+              ),
+              let builtIn = devices.first(where: {
+                $0.transportType == kAudioDeviceTransportTypeBuiltIn
+                    && Self.shouldExposeDevice(named: $0.device.name)
+              })
+        else {
+            return defaultInput
+        }
+        return builtIn
+    }
+
+    private func defaultOutputDeviceID() throws -> AudioDeviceID {
+        try defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
+    }
+
     private func defaultInputDeviceID() throws -> AudioDeviceID {
+        try defaultDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice)
+    }
+
+    private func defaultDeviceID(
+        selector: AudioObjectPropertySelector
+    ) throws -> AudioDeviceID {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -196,6 +257,31 @@ public struct MicrophoneDeviceCatalog: Sendable {
             throw MicrophoneDeviceError.queryFailed(status)
         }
         return size >= MemoryLayout<AudioStreamID>.size
+    }
+
+    private func uint32Property(
+        _ id: AudioDeviceID,
+        selector: AudioObjectPropertySelector
+    ) throws -> UInt32 {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(
+            id,
+            &address,
+            0,
+            nil,
+            &size,
+            &value
+        )
+        guard status == noErr else {
+            throw MicrophoneDeviceError.queryFailed(status)
+        }
+        return value
     }
 
     private func stringProperty(

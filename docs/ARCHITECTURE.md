@@ -67,6 +67,14 @@ override the wait, and stale callbacks cannot stop a replacement token.
 Content-free startup diagnostics report edge-to-badge visibility, queue admission,
 engine startup, first-buffer, and first-committed-sample latency separately.
 
+Automatic microphone resolution is playback-safe. If the current default output
+uses Bluetooth and the default input is that Bluetooth endpoint or macOS's
+generated default aggregate, the recorder selects an available built-in input
+for its owned Audio Unit. It does not write either system default or control the
+output player. USB and other independent default inputs remain unchanged, and
+manual selection always resolves its exact stable UID. Generated aggregates are
+internally resolvable for route correctness but remain hidden from user choices.
+
 Pause Mode retains one uninterrupted full-session WAV and writes a parallel
 current inference segment from the same writer-queue samples. Its pause
 threshold begins at 450 milliseconds and adapts within 300–750 milliseconds
