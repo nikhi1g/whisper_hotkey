@@ -138,6 +138,42 @@ Keep tests only for durable behavior:
 
 Use a fake Core Audio property client; tests must not change the developer machine's default input.
 
+## Delegation and scoped commits
+
+The main agent owns the complex backend and integration contract:
+
+- event-driven helper response delivery,
+- Model Ready preparation ownership,
+- microphone preference and device value types,
+- Core Audio enumeration, UID resolution, AUHAL routing, and recovery,
+- application state/action wiring, status output, backend tests, integration,
+- full verification, signed build, installation, and physical checks.
+
+One isolated Luna Worker Max owns only the simple Settings presentation after
+the main agent defines the shared state/action contract. Its write scope is:
+
+- `Sources/WhisperHotkeyShell/AdvancedSettingsWindowController.swift`,
+- `Tests/WhisperHotkeyShellTests/AdvancedSettingsWindowControllerTests.swift`.
+
+The worker adds the Microphone popup, renders Automatic/available/unavailable
+choices supplied by application state, dispatches one selection action, follows
+the existing busy-state and theme conventions, and adds focused UI tests. It
+must not define preferences, enumerate hardware, call Core Audio, change
+application wiring, edit shared schemas, run broad suites, or install the app.
+It returns one isolated commit for cherry-pick.
+
+Commit boundaries:
+
+1. `docs: assign model latency and microphone work` — this revised plan only.
+2. `perf: remove warm recognition polling` — helper wake-up, preparation
+   ownership, timings, and focused recognition tests.
+3. `feat: add selectable microphone routing` — core preference, Core Audio
+   backend, application/status wiring, and focused backend tests.
+4. `feat: add microphone settings picker` — the delegated UI commit,
+   cherry-picked without rewriting.
+5. A separate documentation commit updates the product contract, architecture,
+   guide, and release notes after the installed behavior is proven.
+
 ## Implementation order
 
 1. Add latency measurements and baseline focused Model Ready runs.
