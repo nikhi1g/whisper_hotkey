@@ -63,8 +63,12 @@ inserted once after the final segment. The complete session WAV remains
 available for one ordinary fallback decode if a background chunk fails.
 
 The status menu contains only immediate actions. A lazy native Settings
-window owns the key, input behavior, model, recording-limit, and Open at Login
-controls; AppDelegate remains the preference source of truth. The window is
+window owns the key, microphone source, input behavior, model, recording-limit,
+and Open at Login controls; AppDelegate remains the preference source of truth.
+Microphone choices use stable Core Audio UIDs. Automatic resolves the system
+default at capture time; a manual choice configures only the recorder's AUHAL
+input and is reapplied after graph recovery. Device enumeration occurs when
+Settings or status state is requested and adds no polling. The window is
 created on first use, refreshes through application/state events, and never
 polls. Behavior and model choices use one-click segmented chips; longer option
 sets retain native pop-up controls. Setup remains a separate

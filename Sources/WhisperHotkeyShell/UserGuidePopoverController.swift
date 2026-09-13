@@ -45,6 +45,12 @@ enum UserGuideContent {
             for: state.activationMode
         )
         let model = engineModelName(for: state)
+        let microphoneTitle = state.selectedMicrophone.isAutomatic
+            ? "Automatic Microphone"
+            : state.selectedMicrophone.displayName ?? "Selected Microphone"
+        let microphoneDetail = state.selectedMicrophone.isAutomatic
+            ? "Follows the current macOS default input."
+            : "Uses only this microphone and reports if it is unavailable."
         var rows = [
             UserGuideRow(
                 key: "active",
@@ -56,6 +62,11 @@ enum UserGuideContent {
                 title: hotkey,
                 detail:
                     "\(hotkey) controls dictation alone and still passes through in ordinary shortcuts."
+            ),
+            UserGuideRow(
+                key: "microphone",
+                title: microphoneTitle,
+                detail: microphoneDetail
             ),
             UserGuideRow(
                 key: "behavior",
