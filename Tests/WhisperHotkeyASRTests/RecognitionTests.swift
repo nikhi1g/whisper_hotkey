@@ -5,6 +5,33 @@ import XCTest
 import WhisperHotkeyCore
 
 final class RecognitionTests: XCTestCase {
+    func testJSONLineBufferWakesWhenACompleteLineArrives() async {
+        let buffer = JSONLineBuffer()
+        let producer = Task.detached {
+            try? await Task.sleep(for: .milliseconds(10))
+            buffer.consume(Data("{\"event\":\"ready\"}\n".utf8))
+        }
+        let clock = ContinuousClock()
+        let elapsed = await clock.measure {
+            await buffer.waitForChange(maximumDelay: .seconds(5))
+        }
+        await producer.value
+
+        XCTAssertLessThan(elapsed, .milliseconds(500))
+        XCTAssertEqual(buffer.pop(), "{\"event\":\"ready\"}")
+    }
+
+    func testJSONLineBufferEOFReleasesAWaiter() async {
+        let buffer = JSONLineBuffer()
+        let waiter = Task {
+            await buffer.waitForChange(maximumDelay: .seconds(5))
+        }
+        buffer.consume(Data())
+        await waiter.value
+
+        XCTAssertTrue(buffer.isFinished)
+    }
+
     func testHelperArgumentsUseAccuracyFirstDefaults() {
         let options = WhisperRecognitionOptions()
         let arguments = WhisperHelperInvocation.arguments(
