@@ -11,6 +11,8 @@ public enum WhisperHotkeyPreferenceKeys {
     public static let modelProcessingMode = "modelProcessingMode"
     public static let keepModelReady = "keepModelReady"
     public static let internalDictionary = "internalDictionary"
+    public static let microphoneDeviceUID = "microphoneDeviceUID"
+    public static let microphoneDeviceName = "microphoneDeviceName"
     public static let dictationMode = "dictationMode"
     public static let recordingLimit = "recordingLimit"
     public static let badgeTheme = "badgeTheme"
@@ -555,6 +557,69 @@ public enum RecognitionEngine: String, CaseIterable, Codable, Sendable {
             return engine
         }
         return retiredRawValues[rawValue] ?? .defaultPreference
+    }
+}
+
+public struct MicrophoneSelection: Equatable, Sendable {
+    public let deviceUID: String?
+    public let displayName: String?
+
+    public static let automatic = Self(deviceUID: nil, displayName: nil)
+
+    public init(deviceUID: String?, displayName: String?) {
+        let trimmedUID = deviceUID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.deviceUID = trimmedUID?.isEmpty == false ? trimmedUID : nil
+        let trimmedName = displayName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.displayName = trimmedName?.isEmpty == false ? trimmedName : nil
+    }
+
+    public var isAutomatic: Bool { deviceUID == nil }
+
+    public static func selected(
+        defaults: UserDefaults = .standard
+    ) -> Self {
+        Self(
+            deviceUID: defaults.string(
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceUID
+            ),
+            displayName: defaults.string(
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceName
+            )
+        )
+    }
+
+    public func persist(defaults: UserDefaults = .standard) {
+        if let deviceUID {
+            defaults.set(
+                deviceUID,
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceUID
+            )
+            defaults.set(
+                displayName,
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceName
+            )
+        } else {
+            defaults.removeObject(
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceUID
+            )
+            defaults.removeObject(
+                forKey: WhisperHotkeyPreferenceKeys.microphoneDeviceName
+            )
+        }
+    }
+}
+
+public struct MicrophoneDevice: Equatable, Hashable, Sendable {
+    public let uid: String
+    public let name: String
+    public let isSystemDefault: Bool
+
+    public init(uid: String, name: String, isSystemDefault: Bool) {
+        self.uid = uid
+        self.name = name
+        self.isSystemDefault = isSystemDefault
     }
 }
 

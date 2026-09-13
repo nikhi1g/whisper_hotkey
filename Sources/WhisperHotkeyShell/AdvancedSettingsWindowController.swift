@@ -5,6 +5,8 @@ import WhisperHotkeySystem
 public struct AdvancedSettingsState: Equatable, Sendable {
     public let selectedHotkey: HotkeyKey
     public let activationMode: HotkeyActivationMode
+    public let selectedMicrophone: MicrophoneSelection
+    public let availableMicrophones: [MicrophoneDevice]
     public let selectedModel: DictationModel
     /// Parakeet's own selection, kept beside the whisper one so switching
     /// engines never overwrites the other engine's choice.
@@ -35,6 +37,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
     public init(
         selectedHotkey: HotkeyKey,
         activationMode: HotkeyActivationMode,
+        selectedMicrophone: MicrophoneSelection = .automatic,
+        availableMicrophones: [MicrophoneDevice] = [],
         selectedModel: DictationModel,
         selectedParakeetVariant: ParakeetVariant = .defaultVariant,
         selectedEngine: RecognitionEngine = .defaultEngine,
@@ -52,6 +56,8 @@ public struct AdvancedSettingsState: Equatable, Sendable {
         softwareUpdateStatus: SoftwareUpdateStatus = .idle
     ) {
         self.selectedHotkey = selectedHotkey
+        self.selectedMicrophone = selectedMicrophone
+        self.availableMicrophones = availableMicrophones
         self.activationMode = activationMode
         self.selectedModel = selectedModel
         self.selectedParakeetVariant = selectedParakeetVariant
@@ -75,6 +81,7 @@ public struct AdvancedSettingsState: Equatable, Sendable {
 public struct AdvancedSettingsActions {
     public var selectDictationMode: (HotkeyActivationMode) -> Void
     public var selectHotkey: (HotkeyKey) -> Void
+    public var selectMicrophone: (MicrophoneSelection) -> Void
     public var selectModel: (DictationModel) -> Void
     public var selectParakeetVariant: (ParakeetVariant) -> Void
     public var selectRecognitionPreset: (RecognitionPreset) -> Void
@@ -98,6 +105,7 @@ public struct AdvancedSettingsActions {
     public init(
         selectDictationMode: @escaping (HotkeyActivationMode) -> Void,
         selectHotkey: @escaping (HotkeyKey) -> Void,
+        selectMicrophone: @escaping (MicrophoneSelection) -> Void = { _ in },
         selectModel: @escaping (DictationModel) -> Void,
         selectParakeetVariant: @escaping (ParakeetVariant) -> Void = { _ in },
         selectRecognitionPreset: @escaping (RecognitionPreset) -> Void = { _ in },
@@ -118,6 +126,7 @@ public struct AdvancedSettingsActions {
         cancelModelInstall: @escaping () -> Void = {}
     ) {
         self.selectDictationMode = selectDictationMode
+        self.selectMicrophone = selectMicrophone
         self.selectHotkey = selectHotkey
         self.selectModel = selectModel
         self.selectParakeetVariant = selectParakeetVariant

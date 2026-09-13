@@ -222,6 +222,12 @@ private struct Controller {
             "Model file: \(available(status.modelAvailable))",
             "Helper: \(available(status.helperAvailable))",
         ]
+        if let configured = status.configuredMicrophone, !configured.isEmpty {
+            lines.append("Microphone source: \(configured)")
+        }
+        if let active = status.activeMicrophone, !active.isEmpty {
+            lines.append("Active microphone: \(active)")
+        }
         if let model = status.model, !model.isEmpty {
             lines.append("Selected model: \(model)")
         }

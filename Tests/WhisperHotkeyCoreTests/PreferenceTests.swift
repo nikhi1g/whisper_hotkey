@@ -260,6 +260,33 @@ final class PreferenceTests: XCTestCase {
         )
     }
 
+    func testMicrophoneSelectionDefaultsAndPersistsStableIdentity() {
+        let suite = "whisper-hotkey-microphone-\(UUID().uuidString)"
+        let defaults = try! XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(
+            MicrophoneSelection.selected(defaults: defaults),
+            .automatic
+        )
+
+        let selected = MicrophoneSelection(
+            deviceUID: "AppleUSBAudioEngine:example",
+            displayName: "Studio Microphone"
+        )
+        selected.persist(defaults: defaults)
+        XCTAssertEqual(
+            MicrophoneSelection.selected(defaults: defaults),
+            selected
+        )
+
+        MicrophoneSelection.automatic.persist(defaults: defaults)
+        XCTAssertEqual(
+            MicrophoneSelection.selected(defaults: defaults),
+            .automatic
+        )
+    }
+
     func testRetiredModelSelectionsMigrateToTurbo() {
         // Small and Medium were retired in 3.4.0. A saved selection must land
         // on Turbo, which is more accurate than either and is bundled, rather

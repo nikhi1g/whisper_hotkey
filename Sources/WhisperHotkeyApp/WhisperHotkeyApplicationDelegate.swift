@@ -86,7 +86,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     private struct PendingRecognizerWork {
         let precedingCleanup: Task<Void, Never>?
         let modelConfiguration: Task<Void, Never>?
-        let preload: Task<Void, Never>?
         let recognition: Task<Void, Never>?
         let pipeline: Task<Void, Never>?
     }
@@ -95,7 +94,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         subsystem: WhisperHotkeyPaths.bundleIdentifier,
         category: "lifecycle"
     )
-    private let recorder = WhisperAudioRecorder()
+    private let recorder = WhisperAudioRecorder(
+        microphoneSelection: MicrophoneSelection.selected(
+            defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+        )
+    )
     private let recognizer = WhisperRecognizer()
     private let contextProvider = AccessibilityContextProvider()
     private lazy var badgeFocusMonitor = AccessibilityFocusMonitor {
@@ -124,6 +127,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         WhisperHotkeyApplicationDelegate.loadDictationMode(
             defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
         )
+    private var selectedMicrophone = MicrophoneSelection.selected(
+        defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
+    )
     private var selectedModel = DictationModel.selected(
         defaults: WhisperHotkeyApplicationDelegate.preparedDefaults
     )
@@ -246,7 +252,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private var machine = DictationStateMachine()
     private var controlServer: ControlServer?
-    private var preloadTask: Task<Void, Never>?
     private var primedAudioCaptureToken: WhisperAudioCaptureToken?
     private var primedBadgeVisible = false
     private var captureTimingTask: Task<Void, Never>?
@@ -350,9 +355,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             await recognizer.shutdown()
             if let modelConfiguration = pendingWork.modelConfiguration {
                 await modelConfiguration.value
-            }
-            if let preload = pendingWork.preload {
-                await preload.value
             }
             if let recognition = pendingWork.recognition {
                 await recognition.value
@@ -726,22 +728,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let precedingCleanup = recognizerCleanupTask
-        if processingMode.keepsModelReady {
-            preloadTask = Task.detached(
-                priority: .userInitiated
-            ) { [recognizer] in
-                if let precedingCleanup {
-                    await precedingCleanup.value
-                }
-                guard !Task.isCancelled else {
-                    return
-                }
-                try? await recognizer.preload()
-            }
-        } else {
-            preloadTask = nil
-        }
 
         let maximumDuration = Duration.seconds(recordingLimit.seconds)
         maximumDurationTask = Task { @MainActor [weak self] in
@@ -895,7 +881,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         let generation = sessionGeneration
         let precedingRecognition = recognitionTask
-        let sessionPreload = preloadTask
         let pipelineBegin = pipelineBeginTask
         let coordinator = pipelineCoordinator
         let recognitionPrompt = RecognitionPrompt.combined(
@@ -922,7 +907,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     // A coordinator delivery can transition a non-pause
                     // session to idle before finish() returns. Cleanup must
                     // not depend on the old transcribing-phase guard.
-                    self.preloadTask = nil
                     self.recognitionTask = nil
                     self.pipelineBeginTask = nil
                 }
@@ -930,9 +914,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             do {
                 if let precedingRecognition {
                     await precedingRecognition.value
-                }
-                if let sessionPreload {
-                    await sessionPreload.value
                 }
                 if let pipelineBegin {
                     await pipelineBegin.value
@@ -1323,9 +1304,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false
-        let cancelledPreload = preloadTask
-        cancelledPreload?.cancel()
-        preloadTask = nil
         let cancelledRecognition = recognitionTask
         cancelledRecognition?.cancel()
         recognitionTask = nil
@@ -1343,9 +1321,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             }
             await pipelineCoordinator.cancel()
             await recognizer.cancel()
-            if let cancelledPreload {
-                await cancelledPreload.value
-            }
             if let cancelledRecognition {
                 await cancelledRecognition.value
             }
@@ -1714,6 +1689,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         AdvancedSettingsState(
             selectedHotkey: selectedHotkey,
             activationMode: hotkeyActivationMode,
+            selectedMicrophone: selectedMicrophone,
+            availableMicrophones: recorder.availableMicrophones,
             selectedModel: selectedModel,
             selectedParakeetVariant: selectedParakeetVariant,
             selectedEngine: selectedEngine,
@@ -1768,6 +1745,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     },
                     selectHotkey: { [weak self] hotkey in
                         self?.selectHotkey(hotkey)
+                    },
+                    selectMicrophone: { [weak self] selection in
+                        self?.selectMicrophone(selection)
                     },
                     selectModel: { [weak self] model in
                         self?.selectModel(model)
@@ -2056,6 +2036,20 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         hotkeyMonitor.setHotkey(hotkey)
         hotkeyMonitor.setActivationMode(hotkeyActivationMode)
         updateMenuBar()
+    }
+
+    private func selectMicrophone(_ selection: MicrophoneSelection) {
+        guard !machine.phase.isBusy, selectedMicrophone != selection else {
+            return
+        }
+        do {
+            try recorder.setMicrophoneSelection(selection)
+            selectedMicrophone = selection
+            selection.persist()
+            advancedSettingsWindowController?.refreshIfVisible()
+        } catch {
+            fail(error)
+        }
     }
 
     private func selectModel(_ model: DictationModel) {
@@ -2565,7 +2559,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         let pendingWork = PendingRecognizerWork(
             precedingCleanup: recognizerCleanupTask,
             modelConfiguration: modelConfigurationTask,
-            preload: preloadTask,
             recognition: recognitionTask,
             pipeline: Task.detached { [pipelineCoordinator] in
                 await pipelineCoordinator.cancel()
@@ -2600,8 +2593,6 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         predecodeAccumulator.reset()
         predecodeBoundaryInProgress = false
         predecodeFailed = false
-        preloadTask?.cancel()
-        preloadTask = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         recognizerCleanupTask = nil
@@ -2647,7 +2638,11 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             model: activeModelSummary,
             recordingLimit: recordingLimit.displayName,
             threadCount: WhisperRuntimeDiscovery.recommendedThreadCount(),
-            lastError: machine.lastError ?? startupError
+            lastError: machine.lastError ?? startupError,
+            configuredMicrophone: selectedMicrophone.isAutomatic
+                ? "Automatic"
+                : selectedMicrophone.displayName ?? "Selected device",
+            activeMicrophone: recorder.effectiveMicrophone?.name
         )
     }
 

@@ -2088,7 +2088,7 @@ private final class WhisperHelperSession: @unchecked Sendable {
                     throw WhisperASRError.helperFailed("process exited")
                 }
             }
-            try await Task.sleep(for: .milliseconds(10))
+            await lines.waitForChange(maximumDelay: .milliseconds(100))
         }
         if process.isRunning {
             OwnedProcessTermination.terminate(process, wait: false)

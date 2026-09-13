@@ -56,6 +56,8 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
     public var recordingLimit: String?
     public var threadCount: Int?
     public var lastError: String?
+    public var configuredMicrophone: String?
+    public var activeMicrophone: String?
 
     public init(
         running: Bool,
@@ -71,7 +73,9 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         model: String? = nil,
         recordingLimit: String? = nil,
         threadCount: Int? = nil,
-        lastError: String? = nil
+        lastError: String? = nil,
+        configuredMicrophone: String? = nil,
+        activeMicrophone: String? = nil
     ) {
         self.running = running
         self.phase = phase
@@ -87,6 +91,8 @@ public struct RuntimeStatus: Codable, Equatable, Sendable {
         self.recordingLimit = recordingLimit
         self.threadCount = threadCount
         self.lastError = lastError
+        self.configuredMicrophone = configuredMicrophone
+        self.activeMicrophone = activeMicrophone
     }
 
     /// Input Monitoring is required, matching `SetupReadiness.isReady`. A tap

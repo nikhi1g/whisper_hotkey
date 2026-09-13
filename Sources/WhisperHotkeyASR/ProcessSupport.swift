@@ -153,12 +153,21 @@ final class JSONLineBuffer: @unchecked Sendable {
     private var pending = Data()
     private var lines: [String] = []
     private var reachedEOF = false
+    private let changeStream: AsyncStream<Void>
+    private let changeContinuation: AsyncStream<Void>.Continuation
 
+    init() {
+        var continuation: AsyncStream<Void>.Continuation?
+        changeStream = AsyncStream(bufferingPolicy: .bufferingNewest(1)) {
+            continuation = $0
+        }
+        changeContinuation = continuation!
+    }
     func consume(_ data: Data) {
-        lock.withLock {
+        let reachedTerminalState = lock.withLock {
             guard !data.isEmpty else {
                 reachedEOF = true
-                return
+                return true
             }
             pending.append(data)
             while let newline = pending.firstIndex(of: 0x0A) {
@@ -175,6 +184,11 @@ final class JSONLineBuffer: @unchecked Sendable {
                 pending.removeAll(keepingCapacity: false)
                 reachedEOF = true
             }
+            return reachedEOF
+        }
+        changeContinuation.yield()
+        if reachedTerminalState {
+            changeContinuation.finish()
         }
     }
 
@@ -187,6 +201,21 @@ final class JSONLineBuffer: @unchecked Sendable {
 
     var isFinished: Bool {
         lock.withLock { reachedEOF && lines.isEmpty }
+    }
+
+    func waitForChange(maximumDelay: Duration) async {
+        let stream = changeStream
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var iterator = stream.makeAsyncIterator()
+                _ = await iterator.next()
+            }
+            group.addTask {
+                try? await Task.sleep(for: maximumDelay)
+            }
+            _ = await group.next()
+            group.cancelAll()
+        }
     }
 }
 

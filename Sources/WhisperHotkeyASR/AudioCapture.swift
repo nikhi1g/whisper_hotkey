@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import WhisperHotkeyCore
 
 public enum WhisperSpeechPresence: Equatable, Sendable {
     case unknown
@@ -236,12 +237,14 @@ public final class WhisperAudioRecorder {
     public init(
         audioEngine: AVAudioEngine = AVAudioEngine(),
         fileManager: FileManager = .default,
-        temporaryDirectory: URL = FileManager.default.temporaryDirectory
+        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+        microphoneSelection: MicrophoneSelection = .automatic
     ) {
         backend = WhisperAudioRecorderBackend(
             audioEngine: audioEngine,
             fileManager: fileManager,
-            temporaryDirectory: temporaryDirectory
+            temporaryDirectory: temporaryDirectory,
+            microphoneSelection: microphoneSelection
         )
     }
 
@@ -254,6 +257,20 @@ public final class WhisperAudioRecorder {
     /// fail visibly without invoking UI work from the recorder queue.
     public var activeCaptureError: WhisperASRError? {
         backend.activeCaptureError
+    }
+
+    public var availableMicrophones: [MicrophoneDevice] {
+        (try? backend.availableMicrophones()) ?? []
+    }
+
+    public var effectiveMicrophone: MicrophoneDevice? {
+        backend.effectiveMicrophone
+    }
+
+    public func setMicrophoneSelection(
+        _ selection: MicrophoneSelection
+    ) throws {
+        try backend.setMicrophoneSelection(selection)
     }
 
     /// A normalized 0...1 microphone level for lightweight presentation.
@@ -384,6 +401,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private let engineBox: WhisperAudioEngineBox
     private let fileManager: FileManager
     private let temporaryDirectory: URL
+    private let microphoneCatalog = MicrophoneDeviceCatalog()
     private let controlQueue = DispatchQueue(
         label: "whisper_hotkey.audio.capture-control",
         qos: .userInteractive
@@ -410,17 +428,21 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private var writer: WhisperWAVWriter?
     private var sink: WhisperBufferedAudioSink?
     private var audioFile: WhisperAudioFile?
+    private var microphoneSelection: MicrophoneSelection
+    private var currentMicrophone: MicrophoneDevice?
     private var audioLease: WhisperAudioLease?
     private var inputTapInstalled = false
 
     init(
         audioEngine: AVAudioEngine,
         fileManager: FileManager,
-        temporaryDirectory: URL
+        temporaryDirectory: URL,
+        microphoneSelection: MicrophoneSelection
     ) {
         engineBox = WhisperAudioEngineBox(audioEngine)
         self.fileManager = fileManager
         self.temporaryDirectory = temporaryDirectory
+        self.microphoneSelection = microphoneSelection
         configurationObserver = WhisperAudioConfigurationObserver(
             engine: audioEngine
         ) { [weak self] in
@@ -465,6 +487,33 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         }
     }
 
+
+    func availableMicrophones() throws -> [MicrophoneDevice] {
+        try microphoneCatalog.availableDevices()
+    }
+
+    var effectiveMicrophone: MicrophoneDevice? {
+        controlQueue.sync {
+            currentMicrophone
+                ?? (try? microphoneCatalog.effectiveDevice(
+                    for: microphoneSelection
+                ))
+        }
+    }
+
+    func setMicrophoneSelection(
+        _ selection: MicrophoneSelection
+    ) throws {
+        try controlQueue.sync {
+            guard phase == nil else {
+                throw WhisperASRError.captureFailed(
+                    "The microphone cannot change during dictation."
+                )
+            }
+            microphoneSelection = selection
+            currentMicrophone = nil
+        }
+    }
     func prime(
         pauseSegmentation: Bool,
         requestedAtUptimeNanoseconds: UInt64
@@ -734,6 +783,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         pauseSegmentation: Bool,
         timing: WhisperAudioCaptureTimingTracker
     ) throws {
+        try applySelectedMicrophone()
         let inputNode = engineBox.engine.inputNode
         let reportedInputFormat = inputNode.outputFormat(forBus: 0)
         guard reportedInputFormat.sampleRate > 0,
@@ -960,6 +1010,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         }
         removeInputTap()
         engineBox.engine.reset()
+        try applySelectedMicrophone()
 
         let inputNode = engineBox.engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -971,6 +1022,26 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         installInputTap(on: inputNode, sink: sink)
         engineBox.engine.prepare()
         try engineBox.engine.start()
+    }
+
+    private func applySelectedMicrophone() throws {
+        do {
+            currentMicrophone = try microphoneCatalog.apply(
+                microphoneSelection,
+                to: engineBox.engine
+            )
+        } catch let error as MicrophoneDeviceError {
+            switch error {
+            case .unavailable(let name):
+                throw WhisperASRError.captureFailed(
+                    "Selected microphone “\(name)” is unavailable."
+                )
+            case .queryFailed, .routingFailed:
+                throw WhisperASRError.captureFailed(
+                    "The selected microphone could not be activated."
+                )
+            }
+        }
     }
 
     private func scheduleFirstBufferWatchdog(
