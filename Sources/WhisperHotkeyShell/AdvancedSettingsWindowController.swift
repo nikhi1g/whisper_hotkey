@@ -186,6 +186,7 @@ public final class AdvancedSettingsWindowController:
     private let actions: AdvancedSettingsActions
     private let loginItemManager: LoginItemManager
     private let hotkeyPopup = NSPopUpButton()
+    private let microphonePopup = NSPopUpButton()
     private let modeControl = NSSegmentedControl()
     /// One grouped list in place of the engine and model rows. Those two
     /// described a matrix whose cells are not all valid; this names the real
@@ -242,6 +243,9 @@ public final class AdvancedSettingsWindowController:
     private static let settingsContentInsets: CGFloat = 26 + 24
     /// Breathing room kept between the window and the edges of the display.
     private static let settingsScreenMargin: CGFloat = 40
+    private static let microphoneHelpText =
+        "Automatic follows the macOS default microphone. " +
+        "Manual selection affects only whisper_hotkey."
 
     private let internalDictionaryExistingScrollView = NSScrollView()
     private lazy var internalDictionaryControl = makeInternalDictionaryControl()
@@ -501,6 +505,7 @@ public final class AdvancedSettingsWindowController:
     public func refresh() {
         let state = stateProvider()
         select(rawValue: state.selectedHotkey.rawValue, in: hotkeyPopup)
+        rebuildMicrophonePopup(using: state)
         select(mode: state.activationMode)
         // The Model row has to carry the right family's chips before a
         // selection is applied to it. Selecting first meant returning from
@@ -541,6 +546,7 @@ public final class AdvancedSettingsWindowController:
         select(rawValue: state.selectedTheme.identifier, in: themePopup)
 
         hotkeyPopup.isEnabled = state.configurationEnabled
+        microphonePopup.isEnabled = state.configurationEnabled
         modeControl.isEnabled = state.configurationEnabled
         decodingControl.isEnabled = state.configurationEnabled
         // Hidden rather than greyed: an engine with no beam search has no
@@ -608,6 +614,34 @@ public final class AdvancedSettingsWindowController:
             return
         }
         actions.selectHotkey(hotkey)
+        refresh()
+    }
+
+    @objc private func selectMicrophone(_ sender: NSPopUpButton) {
+        let state = stateProvider()
+        guard state.configurationEnabled,
+              let item = sender.selectedItem,
+              item.isEnabled
+        else {
+            refresh()
+            return
+        }
+        if sender.indexOfSelectedItem == 0 {
+            actions.selectMicrophone(.automatic)
+        } else if let uid = item.representedObject as? String,
+                  let device = state.availableMicrophones.first(where: {
+                      $0.uid == uid
+                  }) {
+            actions.selectMicrophone(
+                MicrophoneSelection(
+                    deviceUID: device.uid,
+                    displayName: device.name
+                )
+            )
+        } else {
+            refresh()
+            return
+        }
         refresh()
     }
 
@@ -941,6 +975,7 @@ public final class AdvancedSettingsWindowController:
             },
             action: #selector(selectHotkey(_:))
         )
+        configureMicrophonePopup()
         configure(
             modeControl,
             labels: dictationModes.map(DictationModePresentation.optionTitle),
@@ -1013,6 +1048,15 @@ public final class AdvancedSettingsWindowController:
             action: #selector(selectRecordingLimit(_:))
         )
         configureThemePopup()
+    }
+
+    private func configureMicrophonePopup() {
+        microphonePopup.target = self
+        microphonePopup.action = #selector(selectMicrophone(_:))
+        microphonePopup.controlSize = .regular
+        microphonePopup.setAccessibilityLabel("Microphone")
+        microphonePopup.toolTip = Self.microphoneHelpText
+        microphonePopup.setAccessibilityHelp(Self.microphoneHelpText)
     }
 
     private func configureThemePopup() {
@@ -1094,6 +1138,48 @@ public final class AdvancedSettingsWindowController:
             themePopup.lastItem?.representedObject =
                 BadgeThemeSelection.custom(theme).identifier
             themePopup.lastItem?.indentationLevel = 1
+        }
+    }
+
+    private func rebuildMicrophonePopup(using state: AdvancedSettingsState) {
+        microphonePopup.removeAllItems()
+        microphonePopup.menu?.autoenablesItems = false
+
+        let automaticTitle = state.availableMicrophones.first(where: {
+            $0.isSystemDefault
+        }).map {
+            "Automatic — \($0.name)"
+        } ?? "Automatic"
+        microphonePopup.addItem(withTitle: automaticTitle)
+        microphonePopup.lastItem?.isEnabled = state.configurationEnabled
+
+        for device in state.availableMicrophones {
+            microphonePopup.addItem(withTitle: device.name)
+            microphonePopup.lastItem?.representedObject = device.uid
+            microphonePopup.lastItem?.isEnabled = state.configurationEnabled
+        }
+
+        if let selectedUID = state.selectedMicrophone.deviceUID {
+            if let selectedIndex = microphonePopup.itemArray.firstIndex(where: {
+                $0.representedObject as? String == selectedUID
+            }) {
+                microphonePopup.selectItem(at: selectedIndex)
+            } else {
+                let storedName = state.selectedMicrophone.displayName
+                    ?? selectedUID
+                microphonePopup.addItem(
+                    withTitle: "Unavailable — \(storedName)"
+                )
+                microphonePopup.lastItem?.representedObject = selectedUID
+                microphonePopup.lastItem?.isEnabled = false
+                microphonePopup.lastItem?.toolTip =
+                    "This microphone is not currently available."
+                microphonePopup.selectItem(
+                    at: microphonePopup.numberOfItems - 1
+                )
+            }
+        } else {
+            microphonePopup.selectItem(at: 0)
         }
     }
 
@@ -1586,6 +1672,7 @@ public final class AdvancedSettingsWindowController:
         stack.addArrangedSubview(inputTitle)
         let inputGrid = makeGrid()
         addRow(to: inputGrid, title: "Dictation key", control: hotkeyPopup)
+        addRow(to: inputGrid, title: "Microphone", control: microphonePopup)
         addRow(to: inputGrid, title: "Behavior", control: modeControl)
         addRow(
             to: inputGrid,
@@ -1807,6 +1894,41 @@ public final class AdvancedSettingsWindowController:
         selectedValue(in: hotkeyPopup)
     }
 
+    var microphoneOptionTitlesForTesting: [String] {
+        microphonePopup.itemArray.map(\.title)
+    }
+
+    var microphoneOptionUIDsForTesting: [String?] {
+        microphonePopup.itemArray.map {
+            $0.representedObject as? String
+        }
+    }
+
+    var selectedMicrophoneForTesting: MicrophoneSelection? {
+        guard let item = microphonePopup.selectedItem else {
+            return nil
+        }
+        if microphonePopup.indexOfSelectedItem == 0 {
+            return .automatic
+        }
+        guard let uid = item.representedObject as? String else {
+            return nil
+        }
+        let state = stateProvider()
+        let name = state.availableMicrophones.first(where: {
+            $0.uid == uid
+        })?.name ?? state.selectedMicrophone.displayName ?? item.title
+        return MicrophoneSelection(deviceUID: uid, displayName: name)
+    }
+
+    var microphoneControlEnabledForTesting: Bool {
+        microphonePopup.isEnabled
+    }
+
+    var microphoneHelpTextForTesting: String? {
+        microphonePopup.toolTip
+    }
+
     var selectedModeForTesting: HotkeyActivationMode? {
         guard dictationModes.indices.contains(modeControl.selectedSegment) else {
             return nil
@@ -1926,6 +2048,7 @@ public final class AdvancedSettingsWindowController:
 
     var configurationControlsEnabledForTesting: Bool {
         hotkeyPopup.isEnabled
+            && microphonePopup.isEnabled
             && recognitionChoicePopup.isEnabled
             && decodingControl.isEnabled
             && processingModeControl.isEnabled
@@ -2036,6 +2159,7 @@ public final class AdvancedSettingsWindowController:
         contentView.layoutSubtreeIfNeeded()
         let controls: [(String, NSView)] = [
             ("hotkey", hotkeyPopup),
+            ("microphone", microphonePopup),
             ("mode", modeControl),
             ("decoding", decodingControl),
             ("processing", processingModeControl),
@@ -2079,6 +2203,7 @@ public final class AdvancedSettingsWindowController:
             processingModeControl.segmentCount,
             recordingLimitPopup.numberOfItems,
             themePopup.numberOfItems,
+            microphonePopup.numberOfItems,
         ]
     }
 
@@ -2147,6 +2272,22 @@ public final class AdvancedSettingsWindowController:
     func selectHotkeyForTesting(_ hotkey: HotkeyKey) {
         select(rawValue: hotkey.rawValue, in: hotkeyPopup)
         selectHotkey(hotkeyPopup)
+    }
+
+    func selectMicrophoneForTesting(_ selection: MicrophoneSelection) {
+        let index: Int?
+        if selection.isAutomatic {
+            index = 0
+        } else {
+            index = microphonePopup.itemArray.firstIndex(where: {
+                $0.representedObject as? String == selection.deviceUID
+            })
+        }
+        guard let index else {
+            return
+        }
+        microphonePopup.selectItem(at: index)
+        selectMicrophone(microphonePopup)
     }
 
     func selectModeForTesting(_ mode: HotkeyActivationMode) {

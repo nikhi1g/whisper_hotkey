@@ -369,6 +369,222 @@ final class AdvancedSettingsWindowControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testMicrophoneAutomaticRendersDefaultAndDispatchesExactlyOnce() {
+        let builtIn = MicrophoneDevice(
+            uid: "built-in",
+            name: "MacBook Microphone",
+            isSystemDefault: true
+        )
+        let usb = MicrophoneDevice(
+            uid: "usb",
+            name: "Desk Microphone",
+            isSystemDefault: false
+        )
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                availableMicrophones: [builtIn, usb]
+            )
+        )
+        var selections: [MicrophoneSelection] = []
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: { box.value },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectMicrophone: { selections.append($0) },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        XCTAssertEqual(
+            controller.microphoneOptionTitlesForTesting,
+            [
+                "Automatic — MacBook Microphone",
+                "MacBook Microphone",
+                "Desk Microphone",
+            ]
+        )
+        XCTAssertEqual(
+            controller.microphoneOptionUIDsForTesting,
+            [nil, "built-in", "usb"]
+        )
+        XCTAssertEqual(
+            controller.selectedMicrophoneForTesting,
+            .automatic
+        )
+        XCTAssertEqual(
+            controller.microphoneHelpTextForTesting,
+            "Automatic follows the macOS default microphone. " +
+                "Manual selection affects only whisper_hotkey."
+        )
+
+        controller.selectMicrophoneForTesting(.automatic)
+
+        XCTAssertEqual(selections, [.automatic])
+
+        box.value = makeAdvancedSettingsState(
+            availableMicrophones: [
+                MicrophoneDevice(
+                    uid: "usb",
+                    name: "Desk Microphone",
+                    isSystemDefault: false
+                )
+            ]
+        )
+        controller.refresh()
+        XCTAssertEqual(
+            controller.microphoneOptionTitlesForTesting,
+            ["Automatic", "Desk Microphone"]
+        )
+        controller.close()
+    }
+
+    @MainActor
+    func testMicrophoneManualSelectionRendersInOrderAndDispatchesStableIdentity() {
+        let builtIn = MicrophoneDevice(
+            uid: "built-in",
+            name: "MacBook Microphone",
+            isSystemDefault: true
+        )
+        let usb = MicrophoneDevice(
+            uid: "usb",
+            name: "Desk Microphone",
+            isSystemDefault: false
+        )
+        let selected = MicrophoneSelection(
+            deviceUID: usb.uid,
+            displayName: usb.name
+        )
+        let box = AdvancedSettingsStateBox(
+            makeAdvancedSettingsState(
+                selectedMicrophone: selected,
+                availableMicrophones: [builtIn, usb]
+            )
+        )
+        var selections: [MicrophoneSelection] = []
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: { box.value },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectMicrophone: { selections.append($0) },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        XCTAssertEqual(
+            controller.microphoneOptionTitlesForTesting,
+            ["Automatic — MacBook Microphone", "MacBook Microphone",
+             "Desk Microphone"]
+        )
+        XCTAssertEqual(controller.selectedMicrophoneForTesting, selected)
+
+        controller.selectMicrophoneForTesting(
+            MicrophoneSelection(deviceUID: builtIn.uid, displayName: "ignored")
+        )
+
+        XCTAssertEqual(
+            selections,
+            [
+                MicrophoneSelection(
+                    deviceUID: builtIn.uid,
+                    displayName: builtIn.name
+                )
+            ]
+        )
+        XCTAssertEqual(
+            controller.microphoneOptionUIDsForTesting,
+            [nil, builtIn.uid, usb.uid]
+        )
+        controller.close()
+    }
+
+    @MainActor
+    func testMicrophoneKeepsDisconnectedSelectionVisible() {
+        let builtIn = MicrophoneDevice(
+            uid: "built-in",
+            name: "MacBook Microphone",
+            isSystemDefault: true
+        )
+        let usb = MicrophoneDevice(
+            uid: "usb",
+            name: "Desk Microphone",
+            isSystemDefault: false
+        )
+        let selected = MicrophoneSelection(
+            deviceUID: "disconnected",
+            displayName: "Travel Microphone"
+        )
+        let controller = makeController(
+            box: AdvancedSettingsStateBox(
+                makeAdvancedSettingsState(
+                    selectedMicrophone: selected,
+                    availableMicrophones: [builtIn, usb]
+                )
+            ),
+            service: AdvancedSettingsFakeLoginItemService()
+        )
+
+        XCTAssertEqual(
+            controller.microphoneOptionTitlesForTesting,
+            [
+                "Automatic — MacBook Microphone",
+                "MacBook Microphone",
+                "Desk Microphone",
+                "Unavailable — Travel Microphone",
+            ]
+        )
+        XCTAssertEqual(
+            controller.microphoneOptionUIDsForTesting,
+            [nil, builtIn.uid, usb.uid, selected.deviceUID]
+        )
+        XCTAssertEqual(controller.selectedMicrophoneForTesting, selected)
+        controller.close()
+    }
+
+    @MainActor
+    func testMicrophoneBusyStateDisablesAndRejectsSelection() {
+        let builtIn = MicrophoneDevice(
+            uid: "built-in",
+            name: "MacBook Microphone",
+            isSystemDefault: true
+        )
+        let usb = MicrophoneDevice(
+            uid: "usb",
+            name: "Desk Microphone",
+            isSystemDefault: false
+        )
+        var selectionCount = 0
+        let controller = AdvancedSettingsWindowController(
+            stateProvider: {
+                makeAdvancedSettingsState(
+                    availableMicrophones: [builtIn, usb],
+                    configurationEnabled: false
+                )
+            },
+            actions: AdvancedSettingsActions(
+                selectDictationMode: { _ in },
+                selectHotkey: { _ in },
+                selectMicrophone: { _ in selectionCount += 1 },
+                selectModel: { _ in },
+                selectRecordingLimit: { _ in }
+            ),
+            loginItemManager: makeLoginItemManager()
+        )
+
+        XCTAssertFalse(controller.microphoneControlEnabledForTesting)
+        controller.selectMicrophoneForTesting(
+            MicrophoneSelection(deviceUID: usb.uid, displayName: usb.name)
+        )
+        XCTAssertEqual(selectionCount, 0)
+        controller.close()
+    }
+
+    @MainActor
     func testCustomThemeEditorExpandsInlineWithoutOpeningASheet() {
         let box = AdvancedSettingsStateBox(makeAdvancedSettingsState())
         let controller = makeController(
@@ -1006,6 +1222,8 @@ private final class AdvancedSettingsStateBox {
 private func makeAdvancedSettingsState(
     hotkey: HotkeyKey = .rightCommand,
     mode: HotkeyActivationMode = .hold,
+    selectedMicrophone: MicrophoneSelection = .automatic,
+    availableMicrophones: [MicrophoneDevice] = [],
     model: DictationModel = .baseEnglish,
     selectedParakeetVariant: ParakeetVariant = .defaultVariant,
     engine: RecognitionEngine = .whisperCppMetal,
@@ -1026,6 +1244,8 @@ private func makeAdvancedSettingsState(
     AdvancedSettingsState(
         selectedHotkey: hotkey,
         activationMode: mode,
+        selectedMicrophone: selectedMicrophone,
+        availableMicrophones: availableMicrophones,
         selectedModel: model,
         selectedParakeetVariant: selectedParakeetVariant,
         selectedEngine: engine,
