@@ -30,10 +30,10 @@ remain active. Whether a runtime stays resident depends on processing mode:
 Decode After Speaking keeps no loaded model or helper, while Model Ready and
 Decode While Speaking may keep the selected recognition runtime resident (helper
 for whisper.cpp, in-process runtime for Parakeet) with audio capture stopped and
-no polling task added. Once a gesture is accepted, every processing mode may
-prepare the selected model concurrently with ongoing capture; Decode After
-Speaking still performs no decode and retains no model at idle. Release, Stop,
-or Send finalizes a normal dictation, inserts it, and clears the private audio
+no polling task added. Model Ready may prepare the selected model concurrently
+after capture admission; Decode After Speaking does not prepare it until the
+complete WAV has sealed. Pause Mode retains its existing streaming precedence.
+Release, Stop, or Send finishes a normal dictation, inserts it, and clears the private audio
 directory; runtime teardown is skipped only when the processing mode
 deliberately keeps it warm.
 
@@ -45,6 +45,20 @@ The tap performs one bounded PCM copy and enqueue. A separate writer queue owns
 conversion, speech detection, metering, canonical/segment file writes, and
 ordered rotation barriers. Overflow or continuity loss invalidates capture
 explicitly instead of returning a silently truncated recording.
+
+For Model Ready and Decode After Speaking outside Pause Mode, finish input
+snapshots the destination before starting an event-driven recorder wait. An
+ordered writer barrier observes all earlier buffers and freezes the learned
+300–750 ms cadence silence target. Each committed buffer updates that decision;
+resumed speech resets trailing silence. A token-scoped one-shot deadline bounds
+the wait to `0.25 + 0.75 * d / (d + 10)` seconds of confirmed speaking duration.
+Confirmed no-speech and already-silent input stop immediately; missing buffers
+or unconfirmed ongoing speech wait for audio or the cap. The capture queue stops
+the engine, and the normal finalization drains all admitted buffers before
+handing the sealed WAV to recognition. Cancellation and the recording limit
+override the wait, and stale callbacks cannot stop a replacement token.
+Content-free startup diagnostics report edge-to-queue admission in microseconds
+separately from first-buffer and first-committed-sample latency.
 
 Pause Mode retains one uninterrupted full-session WAV and writes a parallel
 current inference segment from the same writer-queue samples. Its pause

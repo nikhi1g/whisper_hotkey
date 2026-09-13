@@ -604,6 +604,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             dismissPrimedCapturePresentation()
 
         case .pressed:
+            if !isPauseMode && !processingMode.decodesWhileSpeaking,
+               completionCaptureGraceTask != nil { return }
             if !machine.phase.isBusy, machine.phase != .failed {
                 badgeCaretRect = nil
                 badgeFieldRect = nil
@@ -615,7 +617,13 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             process(.hotkeyPressed(at: eventTime))
 
         case .released:
+            if !isPauseMode && !processingMode.decodesWhileSpeaking,
+               completionCaptureGraceTask != nil { return }
             if isPauseMode {
+                finishFromKeyboard(.insert, insertionContext: suppliedContext)
+            } else if !processingMode.decodesWhileSpeaking,
+                      let pressedAt = machine.pressedAt,
+                      eventTime - pressedAt >= machine.minimumHoldDuration {
                 finishFromKeyboard(.insert, insertionContext: suppliedContext)
             } else {
                 if machine.phase == .preparing || machine.phase == .listening {
@@ -711,6 +719,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
 
         // Model preparation belongs to its own actor and starts independently
         // of recorder adoption and badge/Accessibility work.
+        if isPauseMode || processingMode.decodesWhileSpeaking {
         let pipelineCoordinator = pipelineCoordinator
         let activationMode = hotkeyActivationMode
         let sessionProcessingMode = processingMode
@@ -721,6 +730,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                 activationMode: activationMode,
                 processingMode: sessionProcessingMode
             )
+        }
         }
 
         do {
@@ -733,6 +743,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     pauseSegmentation:
                         isPauseMode || processingMode.decodesWhileSpeaking
                 )
+            }
+            // The fallback path also admits capture before any model task.
+            if !isPauseMode && !processingMode.decodesWhileSpeaking {
+                beginFullRecordingPipeline(generation: generation)
             }
             primedBadgeVisible = false
             process(.captureStarted)
@@ -761,11 +775,30 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
             else {
                 return
             }
-            captureInsertionContext(contextProvider.captureInsertionContext())
-            completionBehavior = .insert
+            if completionCaptureGraceTask == nil
+                || isPauseMode || processingMode.decodesWhileSpeaking {
+                captureInsertionContext(contextProvider.captureInsertionContext())
+                completionBehavior = .insert
+            }
             process(.maximumDurationReached)
         }
         return true
+    }
+
+    private func beginFullRecordingPipeline(generation: UInt64) {
+        let coordinator = pipelineCoordinator
+        let activation = hotkeyActivationMode
+        let precedingCleanup = recognizerCleanupTask
+        let processing = processingMode
+        pipelineBeginTask = Task.detached(priority: .userInitiated) {
+            if let precedingCleanup { await precedingCleanup.value }
+            guard !Task.isCancelled else { return }
+            await coordinator.beginSession(
+                generation: generation,
+                activationMode: activation,
+                processingMode: processing
+            )
+        }
     }
 
     /// Called synchronously by the event monitor. This method only creates a
@@ -838,7 +871,7 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
                     .requestToFirstCommittedSampleNanoseconds
                 {
                     logger.info(
-                        "Capture timing first-buffer=\(firstBuffer / 1_000_000, privacy: .public)ms first-commit=\(firstCommit / 1_000_000, privacy: .public)ms"
+                        "Capture timing admission=\(timing.requestToAdmissionNanoseconds / 1_000, privacy: .public)us first-buffer=\(firstBuffer / 1_000_000, privacy: .public)ms first-commit=\(firstCommit / 1_000_000, privacy: .public)ms"
                     )
                     self?.captureTimingTask = nil
                     return
@@ -850,6 +883,10 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finalizeRecording() -> Bool {
+        if !isPauseMode && !processingMode.decodesWhileSpeaking {
+            completionCaptureGraceTask?.cancel()
+            completionCaptureGraceTask = nil
+        }
         stopRecordingPresentation()
         maximumDurationTask?.cancel()
         maximumDurationTask = nil
@@ -1309,6 +1346,8 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         submitAfterPasteTask = nil
         completionCaptureGraceTask?.cancel()
         completionCaptureGraceTask = nil
+        let cancelledFullRecordingBegin = !isPauseMode && !processingMode.decodesWhileSpeaking
+            ? pipelineBeginTask : nil
         pipelineBeginTask?.cancel()
         pipelineBeginTask = nil
         completionBehavior = .insert
@@ -1335,6 +1374,9 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         recognizerCleanupTask = Task.detached(priority: .userInitiated) {
             if let precedingCleanup {
                 await precedingCleanup.value
+            }
+            if let cancelledFullRecordingBegin {
+                await cancelledFullRecordingBegin.value
             }
             await pipelineCoordinator.cancel()
             await recognizer.cancel()
@@ -1581,6 +1623,21 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         completionBehavior = behavior
         captureInsertionContext(suppliedContext)
+        if !isPauseMode && !processingMode.decodesWhileSpeaking {
+            let generation = sessionGeneration
+            completionCaptureGraceTask = Task { @MainActor [weak self] in
+                guard let self, !Task.isCancelled else { return }
+                await recorder.finishCaptureOnSilence()
+                guard !Task.isCancelled,
+                      generation == sessionGeneration,
+                      !isTerminating,
+                      machine.phase == .preparing || machine.phase == .listening
+                else { return }
+                completionCaptureGraceTask = nil
+                process(.maximumDurationReached)
+            }
+            return
+        }
         guard let grace = recorder.completionCaptureGrace else {
             process(.maximumDurationReached)
             return
@@ -2573,11 +2630,14 @@ final class WhisperHotkeyApplicationDelegate: NSObject, NSApplicationDelegate {
         softwareUpdateTask = nil
         softwareUpdateInstallationTask?.cancel()
         softwareUpdateInstallationTask = nil
+        let fullRecordingBegin = !isPauseMode && !processingMode.decodesWhileSpeaking
+            ? pipelineBeginTask : nil
         let pendingWork = PendingRecognizerWork(
             precedingCleanup: recognizerCleanupTask,
             modelConfiguration: modelConfigurationTask,
             recognition: recognitionTask,
             pipeline: Task.detached { [pipelineCoordinator] in
+                if let fullRecordingBegin { await fullRecordingBegin.value }
                 await pipelineCoordinator.cancel()
             }
         )

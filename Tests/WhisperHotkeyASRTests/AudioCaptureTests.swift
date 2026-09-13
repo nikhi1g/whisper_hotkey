@@ -158,10 +158,12 @@ final class AudioCaptureTests: XCTestCase {
     func testCaptureTimingUsesIntegerUptimeDeltas() {
         let timing = WhisperAudioCaptureTiming(
             requestedAtUptimeNanoseconds: 100,
+            admittedAtUptimeNanoseconds: 105,
             firstBufferAtUptimeNanoseconds: 145,
             firstCommittedSampleAtUptimeNanoseconds: 210
         )
 
+        XCTAssertEqual(timing.requestToAdmissionNanoseconds, 5)
         XCTAssertEqual(timing.requestToFirstBufferNanoseconds, 45)
         XCTAssertEqual(
             timing.requestToFirstCommittedSampleNanoseconds,
@@ -316,6 +318,90 @@ final class AudioCaptureTests: XCTestCase {
 
         XCTAssertFalse(gate.begin(for: 1))
         XCTAssertNil(gate.scheduledToken)
+    }
+
+    func testFinishingMaximumWaitIsMonotonicAndBounded() {
+        let durations: [TimeInterval] = [0, 1, 10, 20, 60, 3600]
+        let waits = durations.map {
+            CompletionCaptureSilencePolicy.maximumWait(speakingDuration: $0)
+        }
+        XCTAssertEqual(waits[0], 0.25, accuracy: 0.000001)
+        XCTAssertEqual(waits[3], 0.75, accuracy: 0.000001)
+        XCTAssertEqual(waits[4], 0.892857142857, accuracy: 0.000001)
+        XCTAssertEqual(waits, waits.sorted())
+        XCTAssertTrue(waits.allSatisfy { $0 >= 0.25 && $0 < 1 })
+    }
+
+    func testFinishingDistinguishesUnknownFromConfirmedSilence() {
+        var detector = WhisperSpeechActivityDetector()
+        XCTAssertFalse(CompletionCaptureSilencePolicy.shouldSeal(
+            speechPresence: detector.completionPresence,
+            trailingSilence: 0,
+            silenceTarget: detector.pauseBoundarySilence
+        ))
+        detector.observe(decibels: -40, frameCount: 320, sampleRate: 16_000)
+        XCTAssertEqual(detector.completionPresence, .unknown)
+        detector.observe(decibels: -70, frameCount: 320, sampleRate: 16_000)
+        XCTAssertTrue(CompletionCaptureSilencePolicy.shouldSeal(
+            speechPresence: detector.completionPresence,
+            trailingSilence: 0,
+            silenceTarget: detector.pauseBoundarySilence
+        ))
+        XCTAssertEqual(detector.confirmedSpeakingDuration, 0)
+        detector.observe(decibels: -40, frameCount: 3200, sampleRate: 16_000)
+        detector.observe(decibels: -70, frameCount: 16_000, sampleRate: 16_000)
+        XCTAssertEqual(detector.confirmedSpeakingDuration, 0.2, accuracy: 0.000001)
+        XCTAssertTrue(CompletionCaptureSilencePolicy.shouldSeal(
+            speechPresence: detector.completionPresence,
+            trailingSilence: detector.trailingSilenceDuration,
+            silenceTarget: detector.pauseBoundarySilence
+        ))
+    }
+
+    func testFinishingWriterRetainsResumedSpeechAndSignalsSilenceOnce() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisper_hotkey-finishing-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("audio.wav")
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
+            channels: 1, interleaved: false
+        ))
+        var file: AVAudioFile? = try AVAudioFile(forWriting: url, settings: format.settings)
+        let writer = WhisperWAVWriter(
+            file: try XCTUnwrap(file), segmentFile: nil, segmentAudioFile: nil,
+            outputFormat: format
+        )
+        let speech = try makeConstantBuffer(format: format, value: 0.1)
+        let silence = try makeConstantBuffer(format: format, value: 0)
+        let completions = LockedCounter()
+        for _ in 0..<5 { writer.consume(speech) }
+        _ = writer.beginFinishing { completions.increment() }
+        for _ in 0..<10 { writer.consume(silence) }
+        XCTAssertEqual(completions.value, 0)
+        for _ in 0..<10 { writer.consume(speech) }
+        for _ in 0..<10 { writer.consume(silence) }
+        XCTAssertEqual(completions.value, 0, "Resumed speech must reset the silence clock.")
+        for _ in 0..<13 { writer.consume(silence) }
+        XCTAssertEqual(completions.value, 1)
+        for _ in 0..<10 { writer.consume(silence) }
+        XCTAssertEqual(completions.value, 1)
+        XCTAssertNil(writer.finish())
+        file = nil
+        let sealed = try AVAudioFile(forReading: url)
+        XCTAssertEqual(sealed.length, 58 * 320, "All admitted samples must remain in the canonical WAV.")
+        let samples = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: sealed.processingFormat,
+            frameCapacity: AVAudioFrameCount(sealed.length)
+        ))
+        try sealed.read(into: samples)
+        let channel = try XCTUnwrap(samples.floatChannelData?[0])
+        XCTAssertGreaterThan(channel[0], 0.09)
+        XCTAssertGreaterThan(channel[25 * 320 - 1], 0.09)
     }
 
     func testCompletionGraceAppliesOnlyToConfirmedRecentSpeech() {

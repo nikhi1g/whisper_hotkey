@@ -131,13 +131,21 @@ The status should report Microphone, Accessibility, and Input Monitoring as
 Click into any editable text field, hold **Right Option**, speak, then release
 it. A fresh install on a Mac with at least 8 GB selects **Model Ready** by
 default to keep the selected model hot between dictations. Lower-memory Macs
-select **Decode After Speaking** to preserve idle memory; after a gesture is
-accepted, it prepares the selected model while recording and decodes only when
-you stop. Recording itself begins at physical key-down on a dedicated runtime,
+select **Decode After Speaking** to preserve idle memory; it loads the selected
+model only after the complete recording is sealed, then decodes once.
+Recording itself begins at physical key-down on a dedicated runtime,
 before model preparation, badge placement, audio conversion, or WAV creation.
 Early microphone buffers are retained in order, so speaking immediately does
 not sacrifice the first words. Very quick taps are ignored, and ordinary Option
 shortcuts continue to work.
+
+For these two full-recording modes, release, Return, Stop, and Send capture the
+destination immediately, then retain continued speech until a cadence-aware
+silence boundary. The maximum additional wait is
+`0.25 + 0.75 * d / (d + 10)` seconds, where `d` is confirmed speaking duration;
+it approaches one second. Silence stops immediately, Escape cancels immediately,
+and the recording limit always wins. Pause Mode and Decode While Speaking retain
+their existing completion behavior.
 
 For source installations, if `~/bin` is already on your `PATH`, the controller can be called simply as
 `whisper_hotkey`. Its commands are:

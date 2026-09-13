@@ -106,11 +106,17 @@ queued or active recognition, deletes the private audio, and inserts nothing.
 It cannot be selected as the dictation trigger; a legacy stored Escape choice
 migrates to Right Option. Return and keypad Enter act exactly like Send: they
 capture the release-time destination immediately, then finalize, insert, and
-post one unmodified Return. When confirmed speech reaches the completion
-gesture with less than 180 milliseconds of trailing silence, capture remains
-open for one bounded 240-millisecond post-roll before finalization. Silence,
-unknown speech state, and an already-paused speaker finalize immediately. These
-keys are consumed only for an active dictation; ordinary Escape and Return
+post one unmodified Return. For Model Ready and Decode After Speaking outside
+Pause Mode, every completion gesture retains continued speech until confirmed
+trailing silence reaches the learned 300–750 ms cadence target. Resumed speech
+resets trailing silence. The maximum additional wait is
+`0.25 + 0.75 * d / (d + 10)` seconds for confirmed speaking duration `d`,
+approaching one second. Confirmed no-speech and already-silent recordings stop
+immediately; unknown or unconfirmed ongoing speech waits for audio or that cap.
+Cancellation is immediate and the recording limit remains authoritative.
+Pause Mode and Decode While Speaking retain their existing conditional 240 ms
+grace for confirmed speech with less than 180 ms trailing silence.
+These keys are consumed only for active dictation; ordinary Escape and Return
 remain untouched.
 Cancellation and audio discard are also available from the menu.
 Settings and Setup controls are disabled during active dictation so
@@ -170,11 +176,12 @@ arguments.
 The persistent **Processing** selector sits directly below the model picker.
 On a fresh first launch, Macs with at least 8 GB select **Decode While
 Speaking** for the shortest completion latency; lower-memory Macs select
-**After Recording**. Existing preferences are never replaced. **After
-Recording** prepares the selected model after capture is accepted, while the
-user is speaking, but performs no decode until capture finishes. It still keeps
-no model at idle. **Model Ready** keeps the selected helper
-and model loaded between dictations. **Decode While Speaking** also keeps one
+**Decode After Speaking**. Existing preferences are never replaced. **Decode
+After Speaking** prepares the selected model only after the complete recording
+is sealed, then decodes once. It keeps no model at idle. **Model Ready** keeps
+the selected helper and model loaded between dictations and may warm concurrently
+after capture admission, but also decodes only the sealed complete recording.
+Pause Mode retains its existing streaming precedence. **Decode While Speaking** also keeps one
 model loaded, then privately decodes bounded inference segments concurrently
 with ongoing capture. It prefers a detected pause after five seconds and rotates
 at an eight-second hard bound so release leaves only a small final segment. Segment

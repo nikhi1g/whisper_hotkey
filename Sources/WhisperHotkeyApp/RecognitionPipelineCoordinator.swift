@@ -423,17 +423,19 @@ public actor RecognitionPipelineCoordinator {
     public var deliveredEventCount: Int { deliveryCount }
     public var pendingChunkCountForTesting: Int { pendingChunkCount }
 
-    /// Invalidates any prior generation before accepting a new session, then
-    /// prepares the selected primary while capture is already running. This
-    /// keeps zero idle model cost for after-recording without paying cold-load
-    /// latency after the user finishes speaking.
+    /// Establishes session ownership independently of recording. Warm modes
+    /// prepare concurrently; deferred full-recording mode waits for sealing.
     public func beginSession(
         sessionID: UUID = UUID(),
         generation: UInt64? = nil,
         activationMode: HotkeyActivationMode? = nil,
         processingMode: ModelProcessingMode? = nil
     ) async {
+        let fullRecording = (processingMode ?? configuration.processingMode) != .decodeWhileSpeaking
+            && (activationMode ?? configuration.activationMode) != .pause
+        if fullRecording && Task.isCancelled { return }
         await invalidateCurrent()
+        if fullRecording && Task.isCancelled { return }
         cleanedAudioIDs.removeAll(keepingCapacity: true)
         cleanedAudioObjects.removeAll(keepingCapacity: true)
         let nextGeneration: UInt64
@@ -475,6 +477,9 @@ public actor RecognitionPipelineCoordinator {
             generation: nextGeneration
         )
 
+        guard resolvedProcessing != .afterRecording || resolvedActivation == .pause else {
+            return
+        }
         try? await withPipelineTimeout(
             30,
             stage: .primary,
@@ -662,6 +667,16 @@ public actor RecognitionPipelineCoordinator {
             try ensureCurrent(sessionID: sessionID, generation: generation)
             await waitForChildren()
             try ensureCurrent(sessionID: sessionID, generation: generation)
+            if activeProcessingMode == .afterRecording,
+               activeActivationMode != .pause,
+               audio.speechPresence != .absent {
+                try? await withPipelineTimeout(
+                    30,
+                    stage: .primary,
+                    operation: providers.preparePrimary
+                )
+                try ensureCurrent(sessionID: sessionID, generation: generation)
+            }
 
             var primary: RecognitionResult?
             var source: RecognitionPipelineFinalizationSource = .primary

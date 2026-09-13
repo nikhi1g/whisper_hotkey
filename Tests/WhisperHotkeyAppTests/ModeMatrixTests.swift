@@ -6,12 +6,14 @@ import WhisperHotkeyCore
 import WhisperHotkeySystem
 
 final class ModeMatrixTests: XCTestCase {
-    func testEveryProcessingModePreparesSelectedModelDuringCapture() async {
-        for mode in ModelProcessingMode.allCases {
+    func testProcessingModeControlsPreparationBoundary() async throws {
+        for (index, mode) in ModelProcessingMode.allCases.enumerated() {
             let counter = PreparationCounter()
+            let decodes = PreparationCounter()
             let providers = RecognitionPipelineProviders(
                 primary: { _, request in
-                    RecognitionResult(
+                    await decodes.increment()
+                    return RecognitionResult(
                         sessionID: request.sessionID,
                         generation: request.generation,
                         engine: .parakeetUnifiedCoreML,
@@ -30,7 +32,7 @@ final class ModeMatrixTests: XCTestCase {
             )
 
             await coordinator.beginSession(
-                generation: UInt64(mode.hashValue.magnitude + 1),
+                generation: UInt64(index + 1),
                 activationMode: .toggle,
                 processingMode: mode
             )
@@ -38,11 +40,43 @@ final class ModeMatrixTests: XCTestCase {
             let preparationCount = await counter.value()
             XCTAssertEqual(
                 preparationCount,
-                1,
-                "\(mode) must hide model cold-start behind recording time."
+                mode == .afterRecording ? 0 : 1
             )
+            let decodesDuringCapture = await decodes.value()
+            XCTAssertEqual(decodesDuringCapture, 0)
+            let outcome = try await coordinator.finish(audio: try makeAudioFile())
+            XCTAssertEqual(outcome.deliveryCount, 1)
+            let finalPreparationCount = await counter.value()
+            XCTAssertEqual(finalPreparationCount, 1)
+            let finalDecodeCount = await decodes.value()
+            XCTAssertEqual(finalDecodeCount, 1)
             await coordinator.cancel()
         }
+    }
+
+    func testCancelledDeferredBeginCannotInvalidateReplacementSession() async throws {
+        let coordinator = RecognitionPipelineCoordinator(
+            providers: RecognitionPipelineProviders(primary: { _, request in
+                RecognitionResult(
+                    sessionID: request.sessionID,
+                    generation: request.generation,
+                    engine: .parakeetUnifiedCoreML,
+                    text: "replacement"
+                )
+            })
+        )
+        await coordinator.beginSession(generation: 2, processingMode: .modelReady)
+        let staleBegin = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            await coordinator.beginSession(generation: 1, processingMode: .afterRecording)
+        }
+        await staleBegin.value
+        let audio = try makeAudioFile()
+        let directory = audio.url.deletingLastPathComponent()
+        let outcome = try await coordinator.finish(audio: audio)
+        XCTAssertEqual(outcome.generation, 2)
+        XCTAssertEqual(outcome.deliveryCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
     }
 
     @MainActor

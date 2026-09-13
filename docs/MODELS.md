@@ -51,9 +51,10 @@ may still restore presentation without changing words.
 
 Settings provides three processing chips directly below the model picker:
 
-- **Decode After Speaking** prepares the selected model while you speak,
-  decodes only after you stop, and retains no model at idle.
-- **Model Ready** keeps one selected model loaded between dictations.
+- **Decode After Speaking** prepares the selected model only after the complete
+  recording is sealed, then decodes once and retains no model at idle.
+- **Model Ready** keeps one selected model loaded between dictations, may warm
+  concurrently with admitted capture, and decodes only the sealed recording.
 - **Decode While Speaking** keeps that model loaded and decodes private bounded
   chunks concurrently with capture, then inserts the assembled transcript once.
 

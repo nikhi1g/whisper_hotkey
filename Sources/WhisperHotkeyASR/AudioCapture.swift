@@ -26,6 +26,24 @@ public enum CompletionCaptureGracePolicy {
     }
 }
 
+/// Full-recording finishing policy; streaming and Pause Mode retain their
+/// existing completion policy.
+public enum CompletionCaptureSilencePolicy {
+    public static func maximumWait(speakingDuration: TimeInterval) -> TimeInterval {
+        let duration = max(0, speakingDuration)
+        return 0.25 + 0.75 * duration / (duration + 10)
+    }
+
+    public static func shouldSeal(
+        speechPresence: WhisperSpeechPresence,
+        trailingSilence: TimeInterval,
+        silenceTarget: TimeInterval
+    ) -> Bool {
+        speechPresence == .absent
+            || (speechPresence == .present && trailingSilence >= silenceTarget)
+    }
+}
+
 public final class WhisperAudioFile: @unchecked Sendable {
     public let url: URL
 
@@ -204,8 +222,14 @@ public struct WhisperAudioCaptureToken: Hashable, Sendable {
 
 public struct WhisperAudioCaptureTiming: Equatable, Sendable {
     public let requestedAtUptimeNanoseconds: UInt64
+    public let admittedAtUptimeNanoseconds: UInt64
     public let firstBufferAtUptimeNanoseconds: UInt64?
     public let firstCommittedSampleAtUptimeNanoseconds: UInt64?
+
+    public var requestToAdmissionNanoseconds: UInt64 {
+        admittedAtUptimeNanoseconds >= requestedAtUptimeNanoseconds
+            ? admittedAtUptimeNanoseconds - requestedAtUptimeNanoseconds : 0
+    }
 
     public var requestToFirstBufferNanoseconds: UInt64? {
         guard let firstBufferAtUptimeNanoseconds,
@@ -366,6 +390,14 @@ public final class WhisperAudioRecorder {
         try backend.stop()
     }
 
+    /// The recorder owns this event-driven wait and stops input before returning.
+    /// stop() subsequently drains all admitted buffers and seals the WAV.
+    public func finishCaptureOnSilence() async {
+        await withCheckedContinuation { continuation in
+            backend.finishOnSilence { continuation.resume() }
+        }
+    }
+
     /// Rotates only the inference segment while the uninterrupted private
     /// session recording and microphone engine continue running.
     public func rotatePauseSegment() throws -> WhisperAudioFile {
@@ -390,6 +422,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private enum Phase {
         case provisional
         case adopted
+        case inputStopped
     }
     private static let configurationRecoveryRetryDelay: TimeInterval = 0.1
     private static let maximumConfigurationRecoveryFailures = 2
@@ -432,6 +465,8 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     private var currentMicrophone: MicrophoneDevice?
     private var audioLease: WhisperAudioLease?
     private var inputTapInstalled = false
+    private var finishingCompletion: (@Sendable () -> Void)?
+    private var finishingDeadline: DispatchWorkItem?
 
     init(
         audioEngine: AVAudioEngine,
@@ -522,9 +557,11 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
             nextToken &+= 1
             return WhisperAudioCaptureToken(rawValue: nextToken)
         }
+        let admittedAt = DispatchTime.now().uptimeNanoseconds
         controlQueue.async { [self] in
             let timing = WhisperAudioCaptureTimingTracker(
-                requestedAtUptimeNanoseconds: requestedAtUptimeNanoseconds
+                requestedAtUptimeNanoseconds: requestedAtUptimeNanoseconds,
+                admittedAtUptimeNanoseconds: admittedAt
             )
             rememberTiming(timing, for: token)
             beginProvisionalCapture(
@@ -593,9 +630,59 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         }
     }
 
+    func finishOnSilence(completion: @escaping @Sendable () -> Void) {
+        let requestedAt = DispatchTime.now()
+        controlQueue.async { [self] in
+            guard phase == .adopted, let token = activeToken,
+                  writer != nil, let sink, finishingCompletion == nil else {
+                completion()
+                return
+            }
+            finishingCompletion = completion
+            do {
+                let maximumWait = try sink.performWriterAction { writer in
+                    writer.beginFinishing { [weak self] in
+                        guard let self else { return }
+                        self.controlQueue.async { [self] in
+                            completeFinishing(for: token)
+                        }
+                    }
+                }
+                let deadline = DispatchWorkItem { [weak self] in
+                    self?.completeFinishing(for: token)
+                }
+                finishingDeadline = deadline
+                controlQueue.asyncAfter(deadline: requestedAt + maximumWait, execute: deadline)
+            } catch {
+                completeFinishing(for: token)
+            }
+        }
+    }
+
+    private func completeFinishing(for token: WhisperAudioCaptureToken) {
+        guard activeToken == token, let completion = finishingCompletion else { return }
+        finishingCompletion = nil
+        finishingDeadline?.cancel()
+        finishingDeadline = nil
+        phase = .inputStopped
+        resetRecoveryState()
+        stopEngineAndTap()
+        completion()
+    }
+
+    private func cancelFinishingWait() {
+        finishingDeadline?.cancel()
+        finishingDeadline = nil
+        let completion = finishingCompletion
+        finishingCompletion = nil
+        completion?()
+    }
+
     func stop() throws -> WhisperAudioFile {
         try controlQueue.sync {
-            guard phase == .adopted, let audioFile, let writer else {
+            cancelFinishingWait()
+            guard phase == .adopted || phase == .inputStopped,
+                  let audioFile, let writer else {
                 throw WhisperASRError.noActiveRecording
             }
             if let captureError {
@@ -946,6 +1033,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     ) {
         guard activeToken == token,
               phase != nil,
+              phase != .inputStopped,
               startupError == nil,
               captureError == nil,
               configurationRecoveryGate.schedule(for: token)
@@ -963,6 +1051,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         guard configurationRecoveryGate.begin(for: token),
               activeToken == token,
               phase != nil,
+              phase != .inputStopped,
               startupError == nil,
               captureError == nil
         else {
@@ -1059,7 +1148,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
         timing: WhisperAudioCaptureTimingTracker
     ) {
         let action = firstBufferWatchdog.evaluate(
-            isCurrentCapture: activeToken == token && phase != nil,
+            isCurrentCapture: activeToken == token && phase != nil && phase != .inputStopped,
             isHealthy: startupError == nil && captureError == nil,
             hasReceivedFirstBuffer: timing.hasReceivedFirstBuffer,
             maximumRecoveries: Self.maximumFirstBufferRecoveries
@@ -1106,6 +1195,7 @@ private final class WhisperAudioRecorderBackend: @unchecked Sendable {
     }
 
     private func cleanupCapture() {
+        cancelFinishingWait()
         let lease = audioLease
         stopEngineAndTap()
         sink?.cancelAndWait()
@@ -1157,11 +1247,16 @@ func activateWhisperCaptureFastPath<Prepared>(
 private final class WhisperAudioCaptureTimingTracker: @unchecked Sendable {
     private let lock = NSLock()
     private let requestedAtUptimeNanoseconds: UInt64
+    private let admittedAtUptimeNanoseconds: UInt64
     private var firstBufferAtUptimeNanoseconds: UInt64?
     private var firstCommittedSampleAtUptimeNanoseconds: UInt64?
 
-    init(requestedAtUptimeNanoseconds: UInt64) {
+    init(
+        requestedAtUptimeNanoseconds: UInt64,
+        admittedAtUptimeNanoseconds: UInt64
+    ) {
         self.requestedAtUptimeNanoseconds = requestedAtUptimeNanoseconds
+        self.admittedAtUptimeNanoseconds = admittedAtUptimeNanoseconds
     }
 
     var snapshot: WhisperAudioCaptureTiming {
@@ -1169,6 +1264,7 @@ private final class WhisperAudioCaptureTimingTracker: @unchecked Sendable {
             WhisperAudioCaptureTiming(
                 requestedAtUptimeNanoseconds:
                     requestedAtUptimeNanoseconds,
+                admittedAtUptimeNanoseconds: admittedAtUptimeNanoseconds,
                 firstBufferAtUptimeNanoseconds:
                     firstBufferAtUptimeNanoseconds,
                 firstCommittedSampleAtUptimeNanoseconds:
@@ -1608,6 +1704,33 @@ final class WhisperWAVWriter: @unchecked Sendable {
     private var segmentSpeechDetector = WhisperSpeechActivityDetector()
     private let onFirstSamplesCommitted: @Sendable (UInt64) -> Void
     private var committedSamples = false
+    private var finishingSilenceTarget: TimeInterval?
+    private var onFinishingSilence: (@Sendable () -> Void)?
+
+    func beginFinishing(
+        onSilence: @escaping @Sendable () -> Void
+    ) -> TimeInterval {
+        lock.withLock {
+            finishingSilenceTarget = sessionSpeechDetector.pauseBoundarySilence
+            onFinishingSilence = onSilence
+            notifyFinishingSilenceIfReady()
+            return CompletionCaptureSilencePolicy.maximumWait(
+                speakingDuration: sessionSpeechDetector.confirmedSpeakingDuration
+            )
+        }
+    }
+
+    private func notifyFinishingSilenceIfReady() {
+        guard let target = finishingSilenceTarget,
+              let callback = onFinishingSilence,
+              CompletionCaptureSilencePolicy.shouldSeal(
+                speechPresence: sessionSpeechDetector.completionPresence,
+                trailingSilence: sessionSpeechDetector.trailingSilenceDuration,
+                silenceTarget: target
+              ) else { return }
+        onFinishingSilence = nil
+        callback()
+    }
 
     init(
         file: AVAudioFile,
@@ -1729,6 +1852,7 @@ final class WhisperWAVWriter: @unchecked Sendable {
                     if segmentFile != nil {
                         segmentFrameCount += Int64(output.frameLength)
                     }
+                    notifyFinishingSilenceIfReady()
                 } catch {
                     firstError = error
                 }
@@ -1883,6 +2007,7 @@ struct WhisperSpeechActivityDetector: Equatable {
 
     private var currentSpeechDuration = 0.0
     private var longestSpeechDuration = 0.0
+    private(set) var confirmedSpeakingDuration = 0.0
     private(set) var trailingSilenceDuration = 0.0
     private var typicalPauseDuration: TimeInterval?
     private var observedAudio = false
@@ -1900,6 +2025,10 @@ struct WhisperSpeechActivityDetector: Equatable {
         if decibels >= Self.minimumSpeechDecibels {
             learnFromCompletedPause()
             currentSpeechDuration += duration
+            if currentSpeechDuration >= Self.minimumSpeechDuration {
+                confirmedSpeakingDuration += currentSpeechDuration - duration
+                    < Self.minimumSpeechDuration ? currentSpeechDuration : duration
+            }
             longestSpeechDuration = max(
                 longestSpeechDuration,
                 currentSpeechDuration
@@ -1924,6 +2053,13 @@ struct WhisperSpeechActivityDetector: Equatable {
                 typicalPauseDuration + Self.pauseMargin
             )
         )
+    }
+
+    var completionPresence: WhisperSpeechPresence {
+        if !observedAudio || (currentSpeechDuration > 0 && presence != .present) {
+            return .unknown
+        }
+        return presence
     }
 
     var presence: WhisperSpeechPresence {
